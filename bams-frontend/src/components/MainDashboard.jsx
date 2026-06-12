@@ -1,13 +1,27 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Spinner, Table } from "@radix-ui/themes";
 import { useEmailStore } from "../store/emailStore";
 import { FileSpreadsheet, MailPlus, RotateCcw, TriangleAlert } from "lucide-react";
 import CustomTable from "./ui/CustomTable";
 import { cleanText, getStatusColor } from "../lib/helper";
 import { EmptyMails } from "../utils/EmptyStates";
+import Pagination from "./Pagination";
 
 export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDashboard }) {
   const { syncedEmails, loadingSynced: loadingEmails, syncedError, } = useEmailStore();
+  const [emailPage, setEmailPage] = useState(1);
+  const [emailPageSize, setEmailPageSize] = useState(10);
+
+  const totalEmailPages = Math.max(Math.ceil((syncedEmails?.length || 0) / emailPageSize), 1);
+
+  useEffect(() => {
+    setEmailPage((page) => Math.min(page, totalEmailPages));
+  }, [totalEmailPages]);
+
+  const paginatedEmails = useMemo(() => {
+    const start = (emailPage - 1) * emailPageSize;
+    return syncedEmails.slice(start, start + emailPageSize);
+  }, [emailPage, emailPageSize, syncedEmails]);
 
   const emailColumns = [
     {
@@ -76,6 +90,23 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
         );
       },
     },
+    {
+      key: "body",
+      header: "Email Body",
+      cellClassName: "max-w-[420px]",
+      render: (email) => {
+        const body = cleanText(email?.body);
+
+        return (
+          <p
+            className="max-w-120 truncate text-sm leading-6 text-gray-800"
+            title={body}
+          >
+            {body || "No body available"}
+          </p>
+        );
+      },
+    },
   ];
 
   return (
@@ -102,7 +133,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto mt-2 lg:mt-0">
             <Badge
               size="2"
               color="gray"
@@ -119,6 +150,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
                 color="green"
                 radius="400"
                 variant="outline"
+                className="w-full md:w-auto"
                 onClick={() => {
                   window.open(
                     `https://docs.google.com/spreadsheets/d/${user?.spreadsheet_id}`,
@@ -201,13 +233,27 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
               <EmptyMails heading="No synced mails found" description="Once the required emails are synced, they will appear here." />
           ) : (
             // The main table to show the parsed data
-            <CustomTable
-              columns={emailColumns}
-              data={syncedEmails}
-              minWidth="900px"
-              getRowKey={(email, idx) => email.id || idx}
-              emptyMessage="No synced emails found"
-            />
+            <>
+              <CustomTable
+                columns={emailColumns}
+                data={paginatedEmails}
+                minWidth="900px"
+                getRowKey={(email, idx) => email.id || email.message_id || email.subject || idx}
+                emptyMessage="No synced emails found"
+              />
+
+              <Pagination
+                currentPage={emailPage}
+                totalItems={syncedEmails.length}
+                pageSize={emailPageSize}
+                itemLabel="alerts"
+                onPageChange={setEmailPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setEmailPageSize(nextPageSize);
+                  setEmailPage(1);
+                }}
+              />
+            </>
           )}
         </div>
       </div>

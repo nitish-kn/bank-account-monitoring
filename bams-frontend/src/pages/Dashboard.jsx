@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuthStore } from "../store/authStore";
 import { useSetupStore } from "../store/setupStore";
 import { useGoogleLogin } from "@react-oauth/google";
@@ -8,11 +8,10 @@ import { SetupFlowOverlay } from "../components/SetupFlowOverlay";
 
 export function Dashboard() {
   const { user, accessToken, setUser } = useAuthStore();
-  const { initializeSetup, isLoading, error: setupError, message, stepHistory, emailsCount, rowsWritten, isSetupComplete, retrySetup, isSyncing, syncMessage, lastSyncAt, syncDashboard, hasAutoSyncedDashboard, setHasAutoSyncedDashboard,} = useSetupStore();
+  const { initializeSetup, isLoading, error: setupError, message, stepHistory, emailsCount, rowsWritten, isSetupComplete, hasDismissedSetup, dismissSetupSuccess, retrySetup, isSyncing, syncMessage, lastSyncAt, syncDashboard, hasAutoSyncedDashboard, setHasAutoSyncedDashboard,} = useSetupStore();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [dismissedSetup, setDismissedSetup] = useState(false);
 
   // Determine which permissions are missing
   const hasEmailPermissions = user?.has_email_permissions === true || user?.has_email_permissions === "true";
@@ -82,7 +81,9 @@ export function Dashboard() {
 
 
   // Check if user is new or hasn't completed setup yet
-  const showSetupOverlay = Boolean( user && (!hasCompletedSetup || (isSetupComplete && !dismissedSetup)) );
+  const showSetupOverlay = Boolean(
+    user && (!hasCompletedSetup || (isSetupComplete && !hasDismissedSetup)),
+  );
 
 
   
@@ -113,7 +114,7 @@ export function Dashboard() {
           isSetupComplete={isSetupComplete}
           emailsCount={emailsCount}
           rowsWritten={rowsWritten}
-          onClose={() => setDismissedSetup(true)}
+          onClose={() => dismissSetupSuccess()}
         />
       )}
     </>

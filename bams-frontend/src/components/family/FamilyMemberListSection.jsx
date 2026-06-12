@@ -7,7 +7,7 @@ const FamilyMemberListSection = ({ members = [], loading = false }) => {
       <div className="mb-2 flex items-center justify-between">
         <p className="flex items-center gap-2 text-sm font-bold text-gray-800">
           <UsersRound className="h-4 w-4 text-blue-700" />
-          Family Members
+          All accounts
         </p>
         <Badge color="green" variant="soft" radius="full">
           {members.length}
@@ -17,11 +17,11 @@ const FamilyMemberListSection = ({ members = [], loading = false }) => {
       {loading ? (
         <div className="flex items-center gap-2 rounded-md border border-gray-100 p-3 text-sm text-gray-500">
           <Spinner size="1" />
-          Loading members...
+          Loading accounts...
         </div>
       ) : members.length === 0 ? (
         <div className="rounded-md border border-gray-100 p-3 text-sm font-medium text-gray-400">
-          No family members yet.
+          No accounts added yet.
         </div>
       ) : (
         <div className="max-h-40 space-y-2 overflow-y-auto pr-1">

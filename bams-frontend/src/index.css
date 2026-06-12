@@ -6,6 +6,7 @@
 
 @theme {
   --font-sans: 'Inter', sans-serif;
+  --text-mid: 13px;
 }
 
 :root, .radix-themes {
@@ -90,4 +91,73 @@ body {
 
 .animate-slide-fade-in {
   animation: slide-fade-in 220ms ease-out both;
+}
+
+@media (min-width: 950px) and (max-width: 1400px) {
+  #pie-chart {
+    width: 200px;
+  }
+}
+@media (max-width: 1023px) {
+  .bams-date-picker .rdrCalendarWrapper {
+    width: 100%;
+    max-width: 100%;
+    font-size: 12px;
+  }
+
+  .bams-date-picker .rdrDateDisplayWrapper {
+    width: 100%;
+  }
+
+  .bams-date-picker .rdrDateDisplay {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    margin: 0;
+    padding: 12px;
+    background-color: #f8fafc;
+  }
+
+  .bams-date-picker .rdrDateDisplayItem {
+    min-width: 0;
+    margin: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background-color: #ffffff;
+    box-shadow: none;
+    overflow: hidden;
+  }
+
+  .bams-date-picker .rdrDateDisplayItemActive {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px #3b82f6;
+  }
+
+  .bams-date-picker .rdrDateDisplayItem input {
+    width: 100%;
+    height: 40px;
+    color: #111827;
+    background-color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 1;
+    text-align: center;
+    pointer-events: auto;
+    cursor: text;
+  }
+
+  .bams-date-picker .rdrMonthAndYearWrapper {
+    height: 48px;
+    padding-top: 4px;
+  }
+
+  .bams-date-picker .rdrMonth {
+    width: 100%;
+    padding: 0 10px 12px;
+  }
+
+  .bams-date-picker .rdrWeekDay,
+  .bams-date-picker .rdrDay {
+    line-height: 2.8em;
+  }
 }

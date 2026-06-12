@@ -4,7 +4,7 @@ import { Logout } from "./Logout";
 import { Landmark, } from "lucide-react";
 import { NavLinks } from "../utils/constants";
 
-const Sidebar = ({ picture, name }) => {
+const Sidebar = ({ picture, name, onClose }) => {
   const pathname = useLocation().pathname;
 
   return (
@@ -24,6 +24,7 @@ const Sidebar = ({ picture, name }) => {
           <Link
             to={item.route}
             key={item.name}
+            onClick={onClose}
             className={`${pathname === item.route ? "bg-blue-600/90 text-white" : ""} flex items-center font-medium gap-2 px-4 py-2.5 hover:bg-blue-600/90 hover:text-white transition-all duration-200 rounded-md`}
           >
             {item.icon}

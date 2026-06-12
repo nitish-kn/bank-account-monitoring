@@ -7,6 +7,7 @@ import { useEmailStore } from "./emailStore";
 export const useSetupStore = create((set, get) => ({
   // State
   isSetupComplete: false,
+  hasDismissedSetup: false,
   isLoading: false,
   error: null,
   progress: "idle", // Step name from backend
@@ -137,6 +138,7 @@ export const useSetupStore = create((set, get) => ({
 
               set({
                 isSetupComplete: true,
+                hasDismissedSetup: false,
                 isLoading: false,
                 lastSyncAt: data?.data?.last_synced_at || new Date().toISOString(),
                 lastSyncStatus: data?.data?.last_synced_status || "success",
@@ -183,7 +185,7 @@ export const useSetupStore = create((set, get) => ({
 
   // Retry setup if it failed
   retrySetup: async () => {
-    set({ isSetupComplete: false });
+    set({ isSetupComplete: false, hasDismissedSetup: false });
     await get().initializeSetup();
   },
 
@@ -196,6 +198,7 @@ export const useSetupStore = create((set, get) => ({
 
     set({
       isSetupComplete: false,
+      hasDismissedSetup: false,
       isLoading: false,
       error: null,
       progress: "idle",
@@ -213,6 +216,7 @@ export const useSetupStore = create((set, get) => ({
     });
   },
 
+  dismissSetupSuccess: () => set({ hasDismissedSetup: true }),
   setHasAutoSyncedDashboard: (value) => set({ hasAutoSyncedDashboard: value }),
 
   // Perform incremental sync for returning users, fetch emails from sheets to global state

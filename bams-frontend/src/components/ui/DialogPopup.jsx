@@ -18,26 +18,25 @@ const DialogPopup = ({
     <main>
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Content maxWidth={maxWidth}>
-          <Dialog.Title>{heading}</Dialog.Title>
-          <Dialog.Description size="2" mb="4" className="text-gray-500">
-            {subheading}
-          </Dialog.Description>
+
+          <Dialog.Title> {heading} </Dialog.Title>
+
+          <Dialog.Description size="2" mb="4" className="text-gray-500"> {subheading} </Dialog.Description>
 
           {children}
 
           {showButtons && (
             <Flex gap="3" mt="4" justify="end">
+              
               <Dialog.Close>
-                <Button variant="soft" color="gray">
-                  Cancel
-                </Button>
+                <Button variant="soft" color="gray"> Cancel </Button>
               </Dialog.Close>
+              
               {onConfirm ? (
                 <Button disabled={confirmDisabled || isConfirming} onClick={onConfirm}>
                   {isConfirming ? (
                     <span className="flex items-center gap-2">
-                      <Spinner size="1" />
-                      Sending...
+                      <Spinner size="1" /> Sending...
                     </span>
                   ) : (
                     successbtntxt
@@ -50,6 +49,7 @@ const DialogPopup = ({
               )}
             </Flex>
           )}
+          
         </Dialog.Content>
       </Dialog.Root>
     </main>

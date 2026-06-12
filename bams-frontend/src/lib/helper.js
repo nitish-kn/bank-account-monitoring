@@ -71,3 +71,74 @@ export const isValidEmail = (email) => {
   return EMAIL_REGEX.test(email);
 };
 
+export const formatAmount = (amount) => {
+  return Number(amount || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
+const trimDecimals = (value) => {
+  return Number(value.toFixed(2)).toString();
+};
+
+export const formatCompactINR = (amount) => {
+  const value = Number(amount || 0);
+  const absValue = Math.abs(value);
+
+  let formatted;
+
+  if (absValue >= 10000000) {
+    formatted = `${trimDecimals(value / 10000000)}Cr`;
+  } else if (absValue >= 100000) {
+    formatted = `${trimDecimals(value / 100000)}L`;
+  } else if (absValue >= 1000) {
+    formatted = `${trimDecimals(value / 1000)}K`;
+  } else {
+    formatted = trimDecimals(value);
+  }
+
+  return `₹${formatted}`;
+};
+
+export const isValidDate = (dateValue) => {
+  if (!dateValue) return false;
+
+  const date = new Date(dateValue);
+  return !Number.isNaN(date.getTime());
+};
+
+export const formatDate = (dateValue) => {
+  if (!isValidDate(dateValue)) return "-";
+
+  return new Date(dateValue).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+export const formatTime = (dateValue) => {
+  if (!isValidDate(dateValue)) return "-";
+
+  return new Date(dateValue).toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+export const formatDateAndTime = (dateValue) => {
+  if (!isValidDate(dateValue)) {
+    return {
+      date: "-",
+      time: null,
+    };
+  }
+
+  const hasTime = String(dateValue).includes("T");
+
+  return {
+    date: formatDate(dateValue),
+    time: hasTime ? formatTime(dateValue) : null,
+  };
+};

@@ -101,7 +101,7 @@ export function SetupProgress({ message, stepHistory = [] }) {
           <div className="flex flex-col items-center justify-center gap-3 rounded-xl bg-gray-50 py-8 text-center">
             <Spinner size="2" />
             <Text size="2" color="gray">
-              Waiting for first setup response...
+              Starting setup...
             </Text>
           </div>
         )}

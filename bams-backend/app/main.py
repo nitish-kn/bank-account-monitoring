@@ -13,7 +13,7 @@ app = FastAPI()
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # frontend URL
+    allow_origins=["*"],  # frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,6 +29,16 @@ app.include_router(setup.router)
 @app.get("/")
 def root():
     return {
-        "message": "root endpoint working correctly",
+        "message": "Root endpoint working correctly",
         "status": "success"
     }
+
+
+@app.get("/health")
+def health_check():
+    return {
+        "message": "Health check endpoint working correctly",
+        "status": "success"
+    }
+
+

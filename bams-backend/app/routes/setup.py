@@ -101,10 +101,10 @@ def get_synced_emails(
     
     try:
         sheet_title = _get_sheet_title(sheets_service, current_user.spreadsheet_id)
-        # Read the values from A2 to E (all rows except header)
+        # Read the values from A2 to F (all rows except header)
         result = sheets_service.spreadsheets().values().get(
             spreadsheetId=current_user.spreadsheet_id,
-            range=f"'{sheet_title}'!A2:E"
+            range=f"'{sheet_title}'!A2:F"
         ).execute()
         
         rows = result.get("values", [])
@@ -113,14 +113,15 @@ def get_synced_emails(
         for row in rows:
             if not row:
                 continue
-            # Pad-fill to ensure 5 elements
-            row_padded = row + [""] * (5 - len(row))
+            # Pad-fill to ensure 6 elements
+            row_padded = row + [""] * (6 - len(row))
             emails.append({
                 "id": row_padded[0],
                 "subject": row_padded[1],
                 "date": row_padded[2],
                 "status": row_padded[3],
-                "snippet": row_padded[4]
+                "snippet": row_padded[4],
+                "body": row_padded[5],
             })
 
         emails.sort(key=_email_timestamp, reverse=True)

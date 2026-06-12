@@ -5,14 +5,13 @@ const CustomTableCell = ({
   className = "",
   title,
   width,
-  align = "top",
+  align = "center",
 }) => {
+  const itemsClass = align === "top" ? "items-start" : align === "bottom" ? "items-end" : "items-center";
+
   return (
-    <Table.Cell
-      className={`p-4 align-${align} ${width || ""} ${className}`}
-      title={title}
-    >
-      {children}
+    <Table.Cell className={`p-4 ${width || ""} ${className}`} title={title}>
+      <div className={`flex ${itemsClass} h-full`}>{children}</div>
     </Table.Cell>
   );
 };
@@ -38,9 +37,7 @@ const CustomTableRow = ({ row, columns = [], rowIndex, getRowKey }) => {
                 : undefined
             }
           >
-            {column.render
-              ? column.render(row, rowIndex)
-              : rawValue || column.fallback || "-"}
+            {column.render ? column.render(row, rowIndex) : rawValue || column.fallback || "-"}
           </CustomTableCell>
         );
       })}

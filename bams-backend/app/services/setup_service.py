@@ -10,7 +10,7 @@ from ..models.user import User
 from .credentials import build_credentials
 from .gmail_service import DEFAULT_EMAIL_FETCH_LIMIT, fetch_user_emails
 
-REQUIRED_SCHEMA = ["Email ID", "Subject", "Date Received", "Status", "Parsed Content"]
+REQUIRED_SCHEMA = ["Email ID", "Subject", "Date Received", "Status", "Parsed Content", "Email Body"]
 SHEET_NAME = "Dashboard Data Sheet"
 
 CACHED_EMAILS: list[dict] = []
@@ -132,7 +132,7 @@ async def create_sheets_and_fill_schema(user: User) -> dict:
             try:
                 result = sheets_service.spreadsheets().values().get(
                     spreadsheetId=spreadsheet_id,
-                    range=f"'{sheet_title}'!A1:E1"
+                    range=f"'{sheet_title}'!A1:F1"
                 ).execute()
                 existing_header = result.get("values", [[]])[0]
                 if existing_header != REQUIRED_SCHEMA:
@@ -153,7 +153,7 @@ async def create_sheets_and_fill_schema(user: User) -> dict:
         if should_write_schema:
             sheets_service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
-                range=f"'{sheet_title}'!A1:E1",
+                range=f"'{sheet_title}'!A1:F1",
                 valueInputOption="RAW",
                 body={"values": [REQUIRED_SCHEMA]}
             ).execute()
@@ -172,7 +172,7 @@ async def create_sheets_and_fill_schema(user: User) -> dict:
 def parse_emails_for_sheet(emails: list[dict]) -> list[list[str]]:
     """Convert parsed Gmail message data into rows that match REQUIRED_SCHEMA."""
     rows: list[list[str]] = []
-
+    
     for email in emails:
         rows.append([
             email.get("id", ""),
@@ -180,7 +180,9 @@ def parse_emails_for_sheet(emails: list[dict]) -> list[list[str]]:
             email.get("date", ""),
             email.get("status", "New"),
             email.get("snippet", ""),
+            email.get("body", ""),
         ])
+
     return rows
 
 
@@ -195,7 +197,7 @@ async def fill_sheet_with_emails(user: User, spreadsheet_id: str, sheet_title: s
     credentials = build_credentials(user)
     sheets_service = build("sheets", "v4", credentials=credentials)
     end_row = len(rows) + 1
-    range_name = f"'{sheet_title}'!A2:E{end_row}"
+    range_name = f"'{sheet_title}'!A2:F{end_row}"
 
     try:
         # Write the email data rows into the sheet starting from row 2 (below the header)
@@ -217,6 +219,7 @@ async def start_email_fetching_process(user: User, spreadsheet_id: str, sheet_ti
     # Fetch the user's emails from Gmail using the stored access token. Cache the raw email data in memory for quick access.
     fetch_result = fetch_user_emails(user, max_results=DEFAULT_EMAIL_FETCH_LIMIT)
     emails = fetch_result.get("emails", [])
+
     CACHED_EMAILS = emails
 
     if not emails:
@@ -361,6 +364,7 @@ async def perform_incremental_sync(user: User, db: Session):
         # 1. Fetch recent emails from Gmail
         fetch_result = fetch_user_emails(user, max_results=DEFAULT_EMAIL_FETCH_LIMIT)
         emails = fetch_result.get("emails", [])
+
         if not emails:
             sync_metadata = _mark_sync_success(user, db)
             return {

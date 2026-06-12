@@ -4,7 +4,7 @@ import { useAuthStore } from "../store/authStore";
 // Global state for token refresh management
 let isRefreshing = false;
 let failedQueue = [];
-let lastRefreshTime = 0;
+let lastRefreshTime = Date.now();
 const TOKEN_REFRESH_INTERVAL = 270 * 60 * 1000; // Refresh every 4.5 hours (token expires in 5 hours)
 let refreshPromise = null;
 
@@ -23,11 +23,16 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+const isRefreshRequest = (config = {}) => {
+  const url = config.url || "";
+  return url.includes("/auth/refresh") || url.includes("/api/auth/refresh");
+};
+
 /**
  * Proactively refresh the access token before expiry.
  * Uses stored credentials to get a new JWT token from the backend.
  */
-const performTokenRefresh = async () => {
+const performTokenRefresh = async (axiosInstance) => {
   const expiredToken = useAuthStore.getState().accessToken;
   if (!expiredToken) {
     useAuthStore.getState().logout();
@@ -35,8 +40,7 @@ const performTokenRefresh = async () => {
   }
 
   try {
-    const response = await axios.post(
-      "http://localhost:8000/api/auth/refresh",
+    const response = await axiosInstance.post("/auth/refresh",
       { token: expiredToken },
       { _skipInterceptor: true } // Skip interceptors to avoid infinite loops
     );
@@ -54,6 +58,7 @@ const performTokenRefresh = async () => {
     return access_token;
   } catch (error) {
     console.error("Proactive token refresh failed:", error);
+    lastRefreshTime = Date.now();
     // Don't logout here - let the 401 interceptor handle it
     return null;
   }
@@ -63,7 +68,7 @@ const performTokenRefresh = async () => {
  * Request interceptor for proactive token refresh.
  * Checks if token should be refreshed before making API calls.
  */
-const requestInterceptor = async (config) => {
+const createRequestInterceptor = (axiosInstance) => async (config) => {
   // Skip interceptor if marked
   if (config._skipInterceptor) {
     delete config._skipInterceptor;
@@ -84,7 +89,7 @@ const requestInterceptor = async (config) => {
           await refreshPromise;
         } else {
           // Start refresh and store the promise
-          refreshPromise = performTokenRefresh().finally(() => {
+          refreshPromise = performTokenRefresh(axiosInstance).finally(() => {
             refreshPromise = null;
           });
           await refreshPromise;
@@ -109,8 +114,12 @@ const requestInterceptor = async (config) => {
  * Response interceptor for handling 401 Unauthorized errors.
  * Attempts token refresh and retries failed requests.
  */
-const responseInterceptor = async (error) => {
+const createResponseInterceptor = (axiosInstance) => async (error) => {
   const originalRequest = error.config;
+
+  if (!originalRequest || originalRequest._skipInterceptor) {
+    return Promise.reject(error);
+  }
 
   // Check if error status is 401 Unauthorized and request hasn't been retried yet
   if (
@@ -120,8 +129,7 @@ const responseInterceptor = async (error) => {
   ) {
     // Avoid infinite refresh loops if the refresh endpoint itself returns 401
     if (
-      originalRequest.url &&
-      originalRequest.url.includes("/api/auth/refresh")
+      isRefreshRequest(originalRequest)
     ) {
       useAuthStore.getState().logout();
       return Promise.reject(error);
@@ -134,7 +142,7 @@ const responseInterceptor = async (error) => {
       })
         .then((token) => {
           originalRequest.headers["Authorization"] = `Bearer ${token}`;
-          return axios(originalRequest);
+          return axiosInstance(originalRequest);
         })
         .catch((err) => {
           return Promise.reject(err);
@@ -154,8 +162,8 @@ const responseInterceptor = async (error) => {
     }
 
     try {
-      const response = await axios.post(
-        "http://localhost:8000/api/auth/refresh",
+      const response = await axiosInstance.post(
+        "/auth/refresh",
         {
           token: expiredToken,
         },
@@ -181,7 +189,7 @@ const responseInterceptor = async (error) => {
 
       // Re-attempt original request with the fresh token
       originalRequest.headers["Authorization"] = `Bearer ${access_token}`;
-      return axios(originalRequest);
+      return axiosInstance(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError, null);
       isRefreshing = false;
@@ -200,13 +208,13 @@ const responseInterceptor = async (error) => {
 export const setupAxiosInterceptors = (axiosInstance = axios) => {
   // Add request interceptor for proactive token refresh
   axiosInstance.interceptors.request.use(
-    requestInterceptor,
+    createRequestInterceptor(axiosInstance),
     (error) => Promise.reject(error)
   );
 
   // Add response interceptor for 401 error handling
   axiosInstance.interceptors.response.use(
     (response) => response,
-    responseInterceptor
+    createResponseInterceptor(axiosInstance)
   );
 };

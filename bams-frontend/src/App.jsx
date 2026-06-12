@@ -5,7 +5,8 @@ import { Dashboard } from "./pages/Dashboard";
 import { ProtectedRoute, PublicRoute } from "./components/RouteGuards";
 import { useAuthStore } from "./store/authStore";
 import Layout from "./components/Layout";
-import FamilyView from "./pages/FamilyView";
+import ConsolidatedView from "./pages/ConsolidatedView";
+import NewPage from "./pages/NewPage";
 
 function App() {
   const { isAuthenticated, accessToken } = useAuthStore();
@@ -17,7 +18,8 @@ function App() {
       
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/family-view" element={<FamilyView />} />
+        <Route path="/consolidated-view" element={<ConsolidatedView />} />
+        <Route path="/new" element={<NewPage />} />
       </Route>
       
       <Route

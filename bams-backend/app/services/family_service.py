@@ -58,8 +58,8 @@ def _parse_sheet_row_to_email(row: list[str], member: User) -> dict | None:
     if not row:
         return None
     
-    # Pad-fill to ensure 5 elements
-    row_padded = row + [""] * (5 - len(row))
+    # Pad-fill to ensure 6 elements
+    row_padded = row + [""] * (6 - len(row))
     
     return {
         "id": row_padded[0],
@@ -67,6 +67,7 @@ def _parse_sheet_row_to_email(row: list[str], member: User) -> dict | None:
         "date": row_padded[2],
         "status": row_padded[3],
         "snippet": row_padded[4],
+        "body": row_padded[5],
         "member_id": member.id,
         "member_name": member.name or member.email,
         "member_email": member.email,
@@ -87,7 +88,7 @@ def _read_member_sheet_data(member: User) -> list[dict]:
         
         result = sheets_service.spreadsheets().values().get(
             spreadsheetId=member.spreadsheet_id,
-            range=f"'{sheet_title}'!A2:E"
+            range=f"'{sheet_title}'!A2:F"
         ).execute()
         
         rows = result.get("values", [])

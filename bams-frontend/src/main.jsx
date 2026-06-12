@@ -6,10 +6,6 @@ import App from "./App.jsx";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { BrowserRouter } from "react-router-dom";
 import { Theme } from "@radix-ui/themes";
-import { setupAxiosInterceptors } from "./lib/axiosInterceptors";
-
-// Setup axios interceptors for authentication and token refresh
-setupAxiosInterceptors();
 
 const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 

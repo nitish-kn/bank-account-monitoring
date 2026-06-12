@@ -9,9 +9,12 @@ const CustomButton = ({
   radius = "large",
   onClick,
   disabled = false,
+  type = "button",
+  ...props
 }) => {
   return (
     <Button
+      type={type}
       variant={variant}
       size={size}
       color={color}
@@ -19,6 +22,7 @@ const CustomButton = ({
       className={className}
       onClick={onClick}
       disabled={disabled}
+      {...props}
     >
       {children}
     </Button>

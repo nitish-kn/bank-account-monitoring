@@ -11,21 +11,12 @@ import { getPendingInvites } from '../lib/inviteApi';
 import { cleanText, getStatusColor } from '../lib/helper';
 import CustomTable from '../components/ui/CustomTable';
 
-const FamilyView = () => {
+const ConsolidatedView = () => {
   const [isSendInviteDialogOpen, setIsSendInviteDialogOpen] = useState(false);
   const [isCheckInviteDialogOpen, setIsCheckInviteDialogOpen] = useState(false);
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
 
-  const {
-    fetchFamilyMembers,
-    fetchFamilyEmails,
-    familyEmails,
-    loadingFamilyEmails,
-    familyEmailsError,
-    failedMembers,
-    hasLoadedFamilyData,
-    markFamilyDataLoaded,
-  } = useFamilyStore();
+  const { fetchFamilyMembers, fetchFamilyEmails, familyEmails, loadingFamilyEmails, familyEmailsError, failedMembers, hasLoadedFamilyData, markFamilyDataLoaded, } = useFamilyStore();
 
   const { user } = useAuthStore();
 
@@ -163,25 +154,40 @@ const FamilyView = () => {
         );
       },
     },
+    {
+      key: "body",
+      header: "Email Body",
+      cellClassName: "max-w-[420px]",
+      render: (email) => {
+        const body = cleanText(email?.body);
+
+        return (
+          <p
+            className="max-w-120 truncate text-sm leading-6 text-gray-800"
+            title={body}
+          >
+            {body || "No body available"}
+          </p>
+        );
+      },
+    },
   ], []);
 
   return (
     <main className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-4 border-b border-gray-300 px-2 pb-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 border-b border-gray-300 px-2 pb-3 gap-4">
         <div>
           <div className="flex items-start gap-4">
             <p className="text-2xl font-bold text-black text-shadow-xs">
-              {" "}
-              Family Shared Alerts{" "}
+              Multiple Accounts View
             </p>
           </div>
           <p className="mt-1 text-xs font-medium text-gray-500 text-shadow-xs">
-            {" "}
-            Combined alert data from all family members{" "}
+            Combined alert data from all accounts
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 ml-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:ml-auto">
           {/* Total emails */}
           <div className="flex items-center gap-2">
             <Badge
@@ -198,21 +204,23 @@ const FamilyView = () => {
           {/* Pending Invites */}
           <CustomButton
             size="2"
-            className="relative bg-transparent! !border !border-transparent hover:!text-blue-800 hover:scale-110! transition-transform! duration-300! hover:!cursor-pointer !rounded-full !p-3 !text-gray-600 !shadow-none"
+            className="relative overflow-visible bg-transparent! !border !border-transparent hover:!text-blue-800 hover:scale-110! transition-transform! duration-300! hover:!cursor-pointer !rounded-full !p-3 !text-gray-600 !shadow-none"
             onClick={() => {
               setIsCheckInviteDialogOpen(true);
             }}
           >
-            <Bell className="h-5 w-5 " />
-            {pendingInviteCount > 0 && (
-              <Badge
-                color="red"
-                radius="full"
-                className="absolute -right-1 -top-1 min-w-5 justify-center px-1 text-[10px]!"
-              >
-                {pendingInviteCount}
-              </Badge>
-            )}
+            <div className="relative">
+              <Bell className="h-5 w-5 " />
+              {pendingInviteCount > 0 && (
+                <Badge
+                  color="red"
+                  radius="full"
+                  className="absolute left-2.5 -top-2.5  text-white! min-w-4 min-h-4 bg-red-400! font-bold! justify-center rounded-full! px-2! text-[10.5px]! z-10"
+                >
+                  {pendingInviteCount}
+                </Badge>
+              )}
+            </div>
           </CustomButton>
 
           {/* Manual refresh */}
@@ -240,7 +248,7 @@ const FamilyView = () => {
               setIsSendInviteDialogOpen(true);
             }}
           >
-            <UserPlus className="h-4 w-4" /> Invite People
+            <UserPlus className="h-4 w-4" /> Add accounts
           </CustomButton>
 
         </div>
@@ -309,5 +317,5 @@ const FamilyView = () => {
   );
 }
 
-export default FamilyView
+export default ConsolidatedView
 

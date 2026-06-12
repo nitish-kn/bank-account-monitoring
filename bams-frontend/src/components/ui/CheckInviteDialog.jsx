@@ -17,12 +17,7 @@ const CheckInviteDialog = ({ isCheckInviteDialogOpen, setIsCheckInviteDialogOpen
   const [loadingInvites, setLoadingInvites] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [inviteError, setInviteError] = useState("");
-  const {
-    familyMembers,
-    loadingFamilyMembers,
-    error: familyError,
-    fetchFamilyMembers,
-  } = useFamilyStore();
+  const { familyMembers, loadingFamilyMembers, error: familyError, fetchFamilyMembers, } = useFamilyStore();
 
   const fetchInvites = useCallback(async () => {
     setLoadingInvites(true);

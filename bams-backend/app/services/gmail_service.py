@@ -1,6 +1,10 @@
-import requests
+import base64
+import re
 from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
+from html import unescape
+
+import requests
 from ..models.user import User
 from .credentials import build_credentials, get_token_scopes_from_tokeninfo
 
@@ -64,6 +68,47 @@ def _format_email_date(date_header: str) -> str:
         return date_header
 
 
+def _decode_gmail_base64(raw_data: str) -> str:
+    if not raw_data:
+        return ""
+
+    raw_data = raw_data.replace("-", "+").replace("_", "/")
+    padding = len(raw_data) % 4
+    if padding:
+        raw_data += "=" * (4 - padding)
+
+    try:
+        decoded_bytes = base64.b64decode(raw_data)
+        return decoded_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _clean_html(html_content: str) -> str:
+    text = re.sub(r"<[^>]+>", "", html_content or "")
+    return unescape(text).strip()
+
+
+def _extract_message_body(payload: dict) -> str:
+    if not payload:
+        return ""
+
+    mime_type = payload.get("mimeType", "").lower()
+
+    if mime_type == "text/plain":
+        return _decode_gmail_base64(payload.get("body", {}).get("data", ""))
+
+    if mime_type == "text/html":
+        return _clean_html(_decode_gmail_base64(payload.get("body", {}).get("data", "")))
+
+    for part in payload.get("parts", []) or []:
+        text = _extract_message_body(part)
+        if text:
+            return text
+
+    return ""
+
+
 def verify_gmail_access(user: User, db=None) -> dict:
     """Verify if the user's access token has Gmail read permissions and return the scopes and access status."""
     creds = build_credentials(user)
@@ -87,6 +132,7 @@ def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) 
 
     headers = {"Authorization": f"Bearer {active_token}"}
     fetch_limit = max(1, min(max_results, 500))
+
     # Use Gmail's index search to fetch only emails from configured sender domains.
     params = {"maxResults": fetch_limit, "q": _build_sender_query()}
 
@@ -108,7 +154,7 @@ def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) 
             detail_response = requests.get(
                 GMAIL_MESSAGE_DETAIL_URL.format(message_id=message_id),
                 headers=headers,
-                params={"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]},
+                params={"format": "full"},
                 timeout=10,
             )
             if detail_response.status_code == 200:
@@ -141,7 +187,9 @@ def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) 
             "subject": headers_dict.get("Subject", "(No Subject)"),
             "date": _format_email_date(headers_dict.get("Date", "")),
             "snippet": detail.get("snippet", ""),
+            "body": _extract_message_body(detail.get("payload", {}))[:5000],
         })
 
     parsed_emails.sort(key=lambda email: email.get("internalDate", 0), reverse=True)
+
     return {"emails": parsed_emails}
