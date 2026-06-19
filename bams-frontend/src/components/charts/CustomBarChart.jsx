@@ -20,7 +20,7 @@ export const CustomBarChart = ({
         <BarChart
           layout="vertical"
           data={data}
-          margin={{ top: 10, right: 50, bottom: 10, left: -50 }}
+          margin={{ top: 10, right: 50, bottom: 10, left: -15 }}
         >
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis

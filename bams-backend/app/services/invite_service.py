@@ -1,92 +1,18 @@
-from datetime import datetime
-
 from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..models.family import Family
-from ..models.invites import Invite
+from ..models.invites import Invite, InviteType
 from ..models.user import User
+from ..utils.date_utils import utc_now
+from ..utils.email_utils import normalize_emails
+from ..utils.family_utils import ensure_family, move_user_to_family
+from ..utils.serializers import serialize_invite
 
 
-def _utc_now() -> datetime:
-    return datetime.utcnow()
-
-
-def _serialize_datetime(value: datetime | None) -> str | None:
-    if not value:
-        return None
-    return value.isoformat()
-
-
-def _serialize_user(user: User | None) -> dict | None:
-    if not user:
-        return None
-    return {
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "picture": user.picture,
-    }
-
-
-def _serialize_family(family: Family | None) -> dict | None:
-    if not family:
-        return None
-    return {
-        "id": family.id,
-        "name": family.name,
-        "owner_user_id": family.owner_user_id,
-    }
-
-
-def serialize_invite(invite: Invite) -> dict:
-    return {
-        "id": invite.id,
-        "family_id": invite.family_id,
-        "invited_email": invite.invited_email,
-        "status": invite.status,
-        "created_at": _serialize_datetime(invite.created_at),
-        "expires_at": _serialize_datetime(invite.expires_at),
-        "accepted_at": _serialize_datetime(invite.accepted_at),
-        "declined_at": _serialize_datetime(invite.declined_at),
-        "family": _serialize_family(invite.family),
-        "invited_by": _serialize_user(invite.invited_by),
-        "invited_user": _serialize_user(invite.invited_user),
-    }
-
-
-def _normalize_emails(emails: list[str]) -> list[str]:
-    normalized: list[str] = []
-    seen = set()
-
-    for email in emails:
-        cleaned = email.strip().lower()
-        if cleaned and cleaned not in seen:
-            seen.add(cleaned)
-            normalized.append(cleaned)
-
-    return normalized
-
-
-def _ensure_family(current_user: User, db: Session) -> Family:
-    if current_user.family_id:
-        family = db.query(Family).filter(Family.id == current_user.family_id).first()
-        if family:
-            return family
-
-    family = Family(
-        name=f"{current_user.name or current_user.email}'s Family",
-        owner_user_id=current_user.id,
-    )
-    db.add(family)
-    db.flush()
-
-    current_user.family_id = family.id
-    db.add(current_user)
-    db.flush()
-
-    return family
+FAMILY_INVITE = InviteType.FAMILY_INVITE.value
+JOIN_REQUEST = InviteType.JOIN_REQUEST.value
 
 
 def _get_accessible_pending_invite(invite_id: int, current_user: User, db: Session) -> Invite:
@@ -97,7 +23,7 @@ def _get_accessible_pending_invite(invite_id: int, current_user: User, db: Sessi
             Invite.status == "pending",
             or_(
                 Invite.invited_user_id == current_user.id,
-                Invite.invited_email == current_user.email,
+                Invite.invited_email == current_user.email.lower(),
             ),
         )
         .first()
@@ -106,7 +32,7 @@ def _get_accessible_pending_invite(invite_id: int, current_user: User, db: Sessi
     if not invite:
         raise HTTPException(status_code=404, detail="Pending invite not found")
 
-    if invite.expires_at and invite.expires_at < _utc_now():
+    if invite.expires_at and invite.expires_at < utc_now():
         invite.status = "expired"
         db.add(invite)
         db.commit()
@@ -116,7 +42,7 @@ def _get_accessible_pending_invite(invite_id: int, current_user: User, db: Sessi
 
 
 def create_invites_for_user(emails: list[str], current_user: User, db: Session) -> dict:
-    invited_emails = _normalize_emails(emails)
+    invited_emails = normalize_emails(emails)
 
     if not invited_emails:
         raise HTTPException(status_code=400, detail="At least one email is required")
@@ -130,10 +56,11 @@ def create_invites_for_user(emails: list[str], current_user: User, db: Session) 
         "users_not_found": [],
         "self_invites": [],
         "already_family_members": [],
-        "already_in_another_family": [],
         "already_pending": [],
+        "join_requests": [],
+        "receiver_will_leave_family": [],
     }
-    valid_users: list[User] = []
+    invite_specs: list[dict] = []
 
     for email in invited_emails:
         invited_user = users_by_email.get(email)
@@ -150,45 +77,72 @@ def create_invites_for_user(emails: list[str], current_user: User, db: Session) 
             warnings["already_family_members"].append(email)
             continue
 
-        if invited_user.family_id and invited_user.family_id != current_user.family_id:
-            warnings["already_in_another_family"].append(email)
-            continue
+        if not invited_user.family_id:
+            family = ensure_family(current_user, db)
+            invite_type = FAMILY_INVITE
+            target_family_id = family.id
+            notice_key = None
+        elif not current_user.family_id:
+            invite_type = JOIN_REQUEST
+            target_family_id = invited_user.family_id
+            notice_key = "join_requests"
+        else:
+            invite_type = FAMILY_INVITE
+            target_family_id = current_user.family_id
+            notice_key = "receiver_will_leave_family"
 
-        valid_users.append(invited_user)
+        invite_specs.append({
+            "invited_user": invited_user,
+            "invite_type": invite_type,
+            "target_family_id": target_family_id,
+            "notice_key": notice_key,
+        })
 
-    if not valid_users:
+    if not invite_specs:
         return {
             "message": "No invites were created.",
             "invites": [],
             "warnings": warnings,
         }
 
-    family = _ensure_family(current_user, db)
     created_invites: list[Invite] = []
 
-    for invited_user in valid_users:
-        pending_invite = (
-            db.query(Invite)
-            .filter(
-                Invite.family_id == family.id,
-                Invite.invited_user_id == invited_user.id,
-                Invite.status == "pending",
-            )
-            .first()
+    for invite_spec in invite_specs:
+        invited_user = invite_spec["invited_user"]
+        invite_type = invite_spec["invite_type"]
+        target_family_id = invite_spec["target_family_id"]
+        notice_key = invite_spec["notice_key"]
+
+        pending_query = db.query(Invite).filter(
+            Invite.family_id == target_family_id,
+            Invite.status == "pending",
+            Invite.invite_type == invite_type,
         )
+
+        if invite_type == FAMILY_INVITE:
+            pending_query = pending_query.filter(Invite.invited_user_id == invited_user.id)
+        else:
+            pending_query = pending_query.filter(Invite.invited_by_user_id == current_user.id)
+
+        pending_invite = pending_query.first()
+
         if pending_invite:
             warnings["already_pending"].append(invited_user.email.lower())
             continue
 
         invite = Invite(
-            family_id=family.id,
+            family_id=target_family_id,
             invited_by_user_id=current_user.id,
             invited_user_id=invited_user.id,
             invited_email=invited_user.email.lower(),
+            invite_type=invite_type,
             status="pending",
         )
         db.add(invite)
         created_invites.append(invite)
+
+        if notice_key:
+            warnings[notice_key].append(invited_user.email.lower())
 
     if not created_invites:
         return {
@@ -216,7 +170,7 @@ def get_pending_invites_for_user(current_user: User, db: Session) -> dict:
             Invite.status == "pending",
             or_(
                 Invite.invited_user_id == current_user.id,
-                Invite.invited_email == current_user.email,
+                Invite.invited_email == current_user.email.lower(),
             ),
         )
         .order_by(Invite.created_at.desc())
@@ -243,19 +197,37 @@ def get_sent_invites_for_user(current_user: User, db: Session) -> dict:
 
 def accept_invite_for_user(invite_id: int, current_user: User, db: Session) -> dict:
     invite = _get_accessible_pending_invite(invite_id, current_user, db)
+    invite_type = invite.invite_type or FAMILY_INVITE
 
-    if current_user.family_id and current_user.family_id != invite.family_id:
-        raise HTTPException(
-            status_code=400,
-            detail="You already belong to another family.",
-        )
+    target_family = db.query(Family).filter(Family.id == invite.family_id).first()
+    if not target_family:
+        raise HTTPException(status_code=400, detail="Invite target family no longer exists")
 
-    current_user.family_id = invite.family_id
+    if invite_type == FAMILY_INVITE:
+        inviter = invite.invited_by
+        if not inviter or inviter.family_id != invite.family_id:
+            raise HTTPException(
+                status_code=400,
+                detail="This invite is no longer valid because the sender is not in that family.",
+            )
+        move_user_to_family(current_user, invite.family_id, db)
+    elif invite_type == JOIN_REQUEST:
+        requester = invite.invited_by
+        if not requester:
+            raise HTTPException(status_code=400, detail="Invite requester no longer exists")
+        if current_user.family_id != invite.family_id:
+            raise HTTPException(
+                status_code=400,
+                detail="You can no longer approve this request because you are not in that family.",
+            )
+        move_user_to_family(requester, invite.family_id, db)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported invite type")
+
     invite.invited_user_id = current_user.id
     invite.status = "accepted"
-    invite.accepted_at = _utc_now()
+    invite.accepted_at = utc_now()
 
-    db.add(current_user)
     db.add(invite)
     db.commit()
     db.refresh(invite)
@@ -271,7 +243,7 @@ def decline_invite_for_user(invite_id: int, current_user: User, db: Session) -> 
 
     invite.invited_user_id = current_user.id
     invite.status = "declined"
-    invite.declined_at = _utc_now()
+    invite.declined_at = utc_now()
 
     db.add(invite)
     db.commit()

@@ -11,7 +11,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
   const { syncedEmails, loadingSynced: loadingEmails, syncedError, } = useEmailStore();
   const [emailPage, setEmailPage] = useState(1);
   const [emailPageSize, setEmailPageSize] = useState(10);
-
+  console.log(syncedEmails)
   const totalEmailPages = Math.max(Math.ceil((syncedEmails?.length || 0) / emailPageSize), 1);
 
   useEffect(() => {
@@ -170,6 +170,12 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
           </div>
         </div>
 
+        {isSyncing && (
+          <div className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-700">
+            {syncMessage || "Syncing your last 30 days of emails in the background. New rows may appear gradually."}
+          </div>
+        )}
+
         {/* Optional filter/search bar */}
         {/* <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50/60 px-6 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2 ml-auto">
@@ -187,8 +193,9 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
 
         {/* Content */}
         <div className="overflow-x-auto">
+          
           {/* Loading State */}
-          {loadingEmails || isSyncing ? (
+          {loadingEmails || (isSyncing && syncedEmails.length === 0) ? (
 
             <div className="flex w-full flex-col items-center justify-center gap-3 py-16">
               <Spinner size="3" />
@@ -199,7 +206,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
                     Loading new emails
                   </p>
                   <p className="mt-1 text-xs font-medium text-gray-400">
-                    Please wait while we fetch emails from your sheets...
+                    Please wait while we fetch latest emails from your sheets...
                   </p>
                 </div>
               ) : (
@@ -211,6 +218,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
             </div>
 
           ) : syncedError ? (
+            
             // If an error occured while loading new mails
             <div className="m-4 rounded-xl border border-red-100 bg-red-50 p-6 flex flex-col items-center justify-center gap-4 overflow-hidden">
               <TriangleAlert className="text-red-600 shrink-0" size={64} />
@@ -229,9 +237,11 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
               </pre>
             </div>
           ) : syncedEmails.length === 0 ? (
+              
             // No error but, no emails to show
-              <EmptyMails heading="No synced mails found" description="Once the required emails are synced, they will appear here." />
+            <EmptyMails heading="No synced mails found" description="Once the required emails are synced, they will appear here." />
           ) : (
+            
             // The main table to show the parsed data
             <>
               <CustomTable

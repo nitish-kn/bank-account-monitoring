@@ -5,11 +5,13 @@ import { useGoogleLogin } from "@react-oauth/google";
 import api from "../lib/api";
 import { MainDashboard } from "../components/MainDashboard";
 import { SetupFlowOverlay } from "../components/SetupFlowOverlay";
+import { useEmailStore } from "../store/emailStore";
 
 export function Dashboard() {
   const { user, accessToken, setUser } = useAuthStore();
-  const { initializeSetup, isLoading, error: setupError, message, stepHistory, emailsCount, rowsWritten, isSetupComplete, hasDismissedSetup, dismissSetupSuccess, retrySetup, isSyncing, syncMessage, lastSyncAt, syncDashboard, hasAutoSyncedDashboard, setHasAutoSyncedDashboard,} = useSetupStore();
-
+  const { initializeSetup, isLoading, error: setupError, message, stepHistory, isSetupComplete, hasDismissedSetup, dismissSetupSuccess, retrySetup, isSyncing, syncMessage, lastSyncAt, syncDashboard,} = useSetupStore();
+  const { fetchSyncedEmails } = useEmailStore();
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -19,14 +21,13 @@ export function Dashboard() {
   const needsEmail = !hasEmailPermissions;
   const needsSheets = !hasSheetsPermissions;
 
-
   const permissionsMissing = needsEmail || needsSheets;
   const hasCompletedSetup = user?.is_setup_completed === true || user?.is_setup_completed === "true";
   const effectiveLastSyncAt = lastSyncAt || user?.last_synced_at;
 
 
 
-  // Auto-start setup when permissions are granted and the user has not completed setup yet
+  // For the first time login - Auto-start setup when permissions are granted and the user has not completed setup yet
   useEffect(() => {
     if ( user && !hasCompletedSetup && !permissionsMissing && !isSetupComplete && !isLoading && !setupError ) {
       initializeSetup();
@@ -35,15 +36,14 @@ export function Dashboard() {
 
 
 
-  // Auto-trigger incremental sync once for returning users.
+  // Load already-synced sheet data whenever a completed user lands on the dashboard.
   useEffect(() => {
-    if ( !hasCompletedSetup || isSetupComplete || isLoading || isSyncing || hasAutoSyncedDashboard ) {
+    if (!hasCompletedSetup || !accessToken) {
       return;
     }
 
-    setHasAutoSyncedDashboard(true);
-    syncDashboard();
-  }, [hasCompletedSetup, isSetupComplete, isLoading, isSyncing, syncDashboard, hasAutoSyncedDashboard, setHasAutoSyncedDashboard]);
+    fetchSyncedEmails();
+  }, [hasCompletedSetup, accessToken, fetchSyncedEmails]);
 
 
 
@@ -112,8 +112,6 @@ export function Dashboard() {
           setupError={setupError}
           retrySetup={retrySetup}
           isSetupComplete={isSetupComplete}
-          emailsCount={emailsCount}
-          rowsWritten={rowsWritten}
           onClose={() => dismissSetupSuccess()}
         />
       )}

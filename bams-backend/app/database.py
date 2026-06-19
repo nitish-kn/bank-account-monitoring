@@ -36,5 +36,14 @@ def run_migrations():
                     conn.execute(text("ALTER TABLE users ADD COLUMN last_synced_status VARCHAR DEFAULT 'not_started' NOT NULL"))
                 if "last_synced_email_date" not in columns:
                     conn.execute(text("ALTER TABLE users ADD COLUMN last_synced_email_date DATETIME"))
+                if "sync_status" not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN sync_status VARCHAR DEFAULT 'not_started' NOT NULL"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_sync_status ON users (sync_status)"))
+        if inspector.has_table("invites"):
+            invite_columns = [col["name"] for col in inspector.get_columns("invites")]
+            with engine.begin() as conn:
+                if "invite_type" not in invite_columns:
+                    conn.execute(text("ALTER TABLE invites ADD COLUMN invite_type VARCHAR DEFAULT 'family_invite' NOT NULL"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_invites_invite_type ON invites (invite_type)"))
     except Exception as e:
         print(f"Migration error: {e}")

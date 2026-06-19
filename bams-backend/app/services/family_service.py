@@ -1,23 +1,12 @@
-from sqlalchemy.orm import Session
-from email.utils import parsedate_to_datetime
 from googleapiclient.discovery import build
-from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
 from ..models.family import Family
 from ..models.user import User
+from ..utils.email_utils import email_timestamp, parse_sheet_email_row
+from ..utils.serializers import serialize_family, serialize_family_member
 from .credentials import build_credentials
-from .setup_service import _get_sheet_title
-
-
-def _serialize_member(user: User) -> dict:
-    return {
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "picture": user.picture,
-        "spreadsheet_id": user.spreadsheet_id,
-        "is_owner": user.family and user.family.owner_user_id == user.id,
-    }
+from ..utils.sheets_utils import _get_sheet_title
 
 
 def get_family_members_for_user(current_user: User, db: Session) -> dict:
@@ -36,43 +25,19 @@ def get_family_members_for_user(current_user: User, db: Session) -> dict:
     )
 
     return {
-        "family": {
-            "id": family.id,
-            "name": family.name,
-            "owner_user_id": family.owner_user_id,
-        } if family else None,
-        "members": [_serialize_member(member) for member in members],
+        "family": serialize_family(family),
+        "members": [serialize_family_member(member) for member in members],
     }
-
-
-def _email_timestamp(email: dict) -> float:
-    """Return a sortable timestamp for sheet email rows."""
-    try:
-        return parsedate_to_datetime(email.get("date", "")).timestamp()
-    except (TypeError, ValueError, IndexError, AttributeError, OverflowError):
-        return 0
 
 
 def _parse_sheet_row_to_email(row: list[str], member: User) -> dict | None:
     """Parse a sheet row into email format and tag with member info."""
-    if not row:
-        return None
-    
-    # Pad-fill to ensure 6 elements
-    row_padded = row + [""] * (6 - len(row))
-    
-    return {
-        "id": row_padded[0],
-        "subject": row_padded[1],
-        "date": row_padded[2],
-        "status": row_padded[3],
-        "snippet": row_padded[4],
-        "body": row_padded[5],
+    return parse_sheet_email_row(row, {
         "member_id": member.id,
         "member_name": member.name or member.email,
         "member_email": member.email,
         "member_picture": member.picture,
-    }
+    })
 
 
 def _read_member_sheet_data(member: User) -> list[dict]:
@@ -148,7 +113,7 @@ def get_family_emails_for_user(current_user: User, db: Session) -> dict:
             })
     
     # Sort by date (most recent first)
-    all_emails.sort(key=_email_timestamp, reverse=True)
+    all_emails.sort(key=email_timestamp, reverse=True)
     
     return {
         "emails": all_emails,

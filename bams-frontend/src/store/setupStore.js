@@ -4,24 +4,33 @@ import { fetchEventSource } from "@microsoft/fetch-event-source";
 import api from "../lib/api";
 import { useEmailStore } from "./emailStore";
 
+const SYNC_STATUS_RUNNING = "running";
+const SYNC_STATUS_COMPLETED = "completed";
+const SYNC_STATUS_FAILED = "failed";
+const SYNC_POLL_INTERVAL_MS = 5000;
+const DASHBOARD_REFRESH_INTERVAL_MS = 15000;
+
 export const useSetupStore = create((set, get) => ({
-  // State
+  // States
   isSetupComplete: false,
   hasDismissedSetup: false,
   isLoading: false,
   error: null,
-  progress: "idle", // Step name from backend
-  message: "", // User-friendly progress message
-  stepHistory: [], // Track all steps that are completed
+  progress: "idle",               // Step name from backend
+  message: "",                    // User-friendly progress message
+  stepHistory: [],                // Track all steps that are completed
   emailsCount: 0,
   rowsWritten: 0,
-  isSyncing: false, // Track incremental sync status
-  syncMessage: "", // Incremental sync message
+  isSyncing: false,               // Track incremental sync status
+  syncMessage: "",                // Incremental sync message
   lastSyncAt: null,
   lastSyncStatus: null,
   lastSyncedEmailDate: null,
-  abortController: null, // Keep reference to AbortController for cleanup
-  hasAutoSyncedDashboard: false, // Track if we've auto-synced in this session
+  syncStatus: null,
+  abortController: null,          // Keep reference to AbortController for cleanup
+  syncPollIntervalId: null,
+  lastDashboardRefreshAt: 0,
+  hasAutoSyncedDashboard: false,  // Track if we've auto-synced in this session
 
   // Initialize setup via SSE
   initializeSetup: async () => {
@@ -133,20 +142,32 @@ export const useSetupStore = create((set, get) => ({
                   last_synced_at: data?.data?.last_synced_at || currentUser.last_synced_at,
                   last_synced_status: data?.data?.last_synced_status || currentUser.last_synced_status,
                   last_synced_email_date: data?.data?.last_synced_email_date || currentUser.last_synced_email_date,
+                  sync_status: data?.data?.sync_status || currentUser.sync_status,
                 });
               }
+
+              const syncStatus = data?.data?.sync_status || SYNC_STATUS_RUNNING;
+              const isBackgroundSyncRunning = syncStatus === SYNC_STATUS_RUNNING;
 
               set({
                 isSetupComplete: true,
                 hasDismissedSetup: false,
                 isLoading: false,
                 lastSyncAt: data?.data?.last_synced_at || new Date().toISOString(),
-                lastSyncStatus: data?.data?.last_synced_status || "success",
+                lastSyncStatus: data?.data?.last_synced_status || syncStatus,
                 lastSyncedEmailDate: data?.data?.last_synced_email_date || null,
+                syncStatus,
+                isSyncing: isBackgroundSyncRunning,
+                syncMessage: isBackgroundSyncRunning
+                  ? "Syncing your last 30 days of emails in the background..."
+                  : "Setup complete.",
                 abortController: null,
               });
-              // Load newly parsed emails into the global emailStore
-              useEmailStore.getState().fetchSyncedEmails();
+
+              useEmailStore.getState().fetchSyncedEmails({ force: true });
+              if (isBackgroundSyncRunning) {
+                get().startSyncStatusPolling();
+              }
               abortController.abort();
             }
 
@@ -195,6 +216,10 @@ export const useSetupStore = create((set, get) => ({
     if (existingController) {
       existingController.abort();
     }
+    const syncPollIntervalId = get().syncPollIntervalId;
+    if (syncPollIntervalId) {
+      window.clearInterval(syncPollIntervalId);
+    }
 
     set({
       isSetupComplete: false,
@@ -211,13 +236,92 @@ export const useSetupStore = create((set, get) => ({
       lastSyncAt: null,
       lastSyncStatus: null,
       lastSyncedEmailDate: null,
+      syncStatus: null,
       abortController: null,
+      syncPollIntervalId: null,
+      lastDashboardRefreshAt: 0,
       hasAutoSyncedDashboard: false,
     });
   },
 
   dismissSetupSuccess: () => set({ hasDismissedSetup: true }),
   setHasAutoSyncedDashboard: (value) => set({ hasAutoSyncedDashboard: value }),
+
+  stopSyncStatusPolling: () => {
+    const intervalId = get().syncPollIntervalId;
+    if (intervalId) {
+      window.clearInterval(intervalId);
+    }
+    set({ syncPollIntervalId: null });
+  },
+
+  fetchSyncStatus: async () => {
+    try {
+      const response = await api.get("/setup/sync-status");
+      const data = response.data || {};
+      const syncStatus = data.sync_status || "not_started";
+      const isRunning = syncStatus === SYNC_STATUS_RUNNING;
+      const isCompleted = syncStatus === SYNC_STATUS_COMPLETED;
+      const isFailed = syncStatus === SYNC_STATUS_FAILED;
+
+      set({
+        syncStatus,
+        isSyncing: isRunning,
+        syncMessage: isRunning
+          ? "Syncing your last 30 days of emails in the background..."
+          : isCompleted
+            ? "Sync complete."
+            : isFailed
+              ? "Sync failed."
+              : "",
+        lastSyncAt: data.last_synced_at || get().lastSyncAt,
+        lastSyncStatus: data.last_synced_status || get().lastSyncStatus,
+        lastSyncedEmailDate: data.last_synced_email_date || get().lastSyncedEmailDate,
+      });
+
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser) {
+        useAuthStore.getState().setUser({
+          ...currentUser,
+          sync_status: syncStatus,
+          last_synced_at: data.last_synced_at || currentUser.last_synced_at,
+          last_synced_status: data.last_synced_status || currentUser.last_synced_status,
+          last_synced_email_date: data.last_synced_email_date || currentUser.last_synced_email_date,
+        });
+      }
+
+      const now = Date.now();
+      if (isRunning && now - get().lastDashboardRefreshAt > DASHBOARD_REFRESH_INTERVAL_MS) {
+        set({ lastDashboardRefreshAt: now });
+        useEmailStore.getState().fetchSyncedEmails({ force: true });
+      }
+
+      if (isCompleted || isFailed) {
+        get().stopSyncStatusPolling();
+        if (isCompleted) {
+          useEmailStore.getState().fetchSyncedEmails({ force: true });
+        }
+      }
+
+      return data;
+    } catch (err) {
+      console.error("Failed to fetch sync status:", err);
+      return null;
+    }
+  },
+
+  startSyncStatusPolling: () => {
+    if (get().syncPollIntervalId) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      get().fetchSyncStatus();
+    }, SYNC_POLL_INTERVAL_MS);
+
+    set({ syncPollIntervalId: intervalId });
+    get().fetchSyncStatus();
+  },
 
   // Perform incremental sync for returning users, fetch emails from sheets to global state
   syncDashboard: async () => {
@@ -236,12 +340,15 @@ export const useSetupStore = create((set, get) => ({
 
     try {
       const response = await api.post("/setup/sync");
+      const syncStatus = response.data.sync_status || response.data.status;
+      const isRunning = syncStatus === SYNC_STATUS_RUNNING;
 
       set({
-        isSyncing: false,
-        syncMessage: response.data.message || "Sync completed!",
-        emailsCount: response.data.new_rows || 0,
-        lastSyncAt: response.data.last_synced_at || new Date().toISOString(),
+        isSyncing: isRunning,
+        syncStatus,
+        syncMessage: response.data.message || (isRunning ? "Background sync is already running..." : "Sync complete."),
+        emailsCount: 0,
+        lastSyncAt: response.data.last_synced_at || get().lastSyncAt,
         lastSyncStatus: response.data.last_synced_status || response.data.status,
         lastSyncedEmailDate: response.data.last_synced_email_date || null,
       });
@@ -253,11 +360,16 @@ export const useSetupStore = create((set, get) => ({
           last_synced_at: response.data.last_synced_at || currentUser.last_synced_at,
           last_synced_status: response.data.last_synced_status || currentUser.last_synced_status,
           last_synced_email_date: response.data.last_synced_email_date || currentUser.last_synced_email_date,
+          sync_status: syncStatus || currentUser.sync_status,
         });
       }
 
-      // Load newly synced emails from sheets
-      await useEmailStore.getState().fetchSyncedEmails();
+      if (isRunning) {
+        get().startSyncStatusPolling();
+      } else {
+        await useEmailStore.getState().fetchSyncedEmails({ force: true });
+      }
+
       return response.data;
     } catch (err) {
       console.error("Syncing latest emails failed:", err);

@@ -8,3 +8,6 @@ pydantic-settings==2.0.0
 python-dotenv==1.2.2
 google-auth==2.52.0
 google-api-python-client
+beautifulsoup4
+langsmith
+langchain-groq

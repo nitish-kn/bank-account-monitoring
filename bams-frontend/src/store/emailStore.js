@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { useAuthStore } from "./authStore";
 import api from "../lib/api";
 
-export const useEmailStore = create((set) => ({
+export const useEmailStore = create((set, get) => ({
   emailData: null,
   loadingEmailData: false,
   error: null,
@@ -11,6 +11,8 @@ export const useEmailStore = create((set) => ({
   syncedEmails: [],
   loadingSynced: false,
   syncedError: null,
+  hasFetchedSyncedEmails: false,
+  syncedEmailsOwnerKey: null,
 
   fetchEmailData: async () => {
     const { accessToken, isAuthenticated, user } = useAuthStore.getState();
@@ -32,12 +34,26 @@ export const useEmailStore = create((set) => ({
     }
   },
 
-  fetchSyncedEmails: async () => {
-    const { accessToken, isAuthenticated } = useAuthStore.getState();
+  fetchSyncedEmails: async ({ force = false } = {}) => {
+    const { accessToken, isAuthenticated, user } = useAuthStore.getState();
+    const ownerKey = user?.id || user?.google_id || user?.email || null;
 
     if (!isAuthenticated || !accessToken) {
       set({ syncedError: "User is not authenticated" });
       return;
+    }
+
+    const state = get();
+    if (
+      !force &&
+      state.hasFetchedSyncedEmails &&
+      state.syncedEmailsOwnerKey === ownerKey
+    ) {
+      return state.syncedEmails;
+    }
+
+    if (state.loadingSynced) {
+      return state.syncedEmails;
     }
 
     set({ loadingSynced: true, syncedError: null });
@@ -47,8 +63,11 @@ export const useEmailStore = create((set) => ({
 
       set({
         syncedEmails: response?.data?.emails || [],
+        hasFetchedSyncedEmails: true,
+        syncedEmailsOwnerKey: ownerKey,
         loadingSynced: false,
       });
+      return response?.data?.emails || [];
     } catch (err) {
       console.error("Failed to fetch synced emails:", err);
       const errMsg = err.response?.data?.detail || err.message || "Failed to fetch synced emails";
@@ -58,4 +77,15 @@ export const useEmailStore = create((set) => ({
       });
     }
   },
+
+  resetSyncedEmails: () => set({
+    emailData: null,
+    loadingEmailData: false,
+    error: null,
+    syncedEmails: [],
+    loadingSynced: false,
+    syncedError: null,
+    hasFetchedSyncedEmails: false,
+    syncedEmailsOwnerKey: null,
+  }),
 }));

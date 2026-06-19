@@ -4,12 +4,7 @@ import DialogPopup from './DialogPopup';
 import { useFamilyStore } from '../../store/familyStore';
 import InviteListSection from '../family/InviteListSection';
 import FamilyMemberListSection from '../family/FamilyMemberListSection';
-import {
-  acceptInvite,
-  declineInvite,
-  getPendingInvites,
-  getSentInvites,
-} from '../../lib/inviteApi';
+import { acceptInvite, declineInvite, getPendingInvites, getSentInvites, } from '../../lib/inviteApi';
 
 const CheckInviteDialog = ({ isCheckInviteDialogOpen, setIsCheckInviteDialogOpen, onInvitesChanged }) => {
   const [pendingInvites, setPendingInvites] = useState([]);

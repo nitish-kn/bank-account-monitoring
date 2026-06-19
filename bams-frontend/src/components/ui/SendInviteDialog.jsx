@@ -16,8 +16,14 @@ const SendInviteDialog = ({ isSendInviteDialogOpen, setIsSendInviteDialogOpen, o
     users_not_found: "Ask these users to login first",
     self_invites: "You cannot invite yourself",
     already_family_members: "Already in your family",
-    already_in_another_family: "Already part of another family",
     already_pending: "Already invited",
+    join_requests: "Request sent to join their family",
+    receiver_will_leave_family: "They are already in another family",
+  };
+
+  const warningDescriptions = {
+    join_requests: "If they approve, your account will join their family.",
+    receiver_will_leave_family: "If they accept, their account will move into your family.",
   };
 
   const visibleWarnings = Object.entries(inviteResult?.warnings || {}).filter(
@@ -53,9 +59,9 @@ const SendInviteDialog = ({ isSendInviteDialogOpen, setIsSendInviteDialogOpen, o
       showButtons={true}
       open={isSendInviteDialogOpen}
       setOpen={setIsSendInviteDialogOpen}
-      successbtntxt="Send Invites"
-      heading="Invite People"
-      subheading="Enter the email addresses of the people you want to invite to view their data."
+      successbtntxt="Add"
+      heading="Add accounts"
+      subheading="Enter the email addresses of the accounts you want to add to view their email transactions."
       onConfirm={handleSendInvites}
       confirmDisabled={tags.length === 0}
       isConfirming={sendingInvite}
@@ -97,17 +103,22 @@ const SendInviteDialog = ({ isSendInviteDialogOpen, setIsSendInviteDialogOpen, o
 
           {visibleWarnings.length > 0 && (
             <div className="rounded-md border border-amber-100 bg-amber-50 p-3">
-              <p className="flex items-center gap-2 text-xs font-semibold text-amber-700">
+              <p className="flex items-center gap-2 text-sm font-semibold text-amber-700">
                 <TriangleAlert className="h-4 w-4" />
                 Some emails need attention
               </p>
 
-              <div className="mt-2 space-y-2">
+              <div className="mt-2 space-y-2 pl-1">
                 {visibleWarnings.map(([key, emails]) => (
                   <div key={key}>
                     <p className="text-xs font-semibold text-amber-800">
                       {warningLabels[key] || key}
                     </p>
+                    {warningDescriptions[key] && (
+                      <p className="text-xs text-amber-700">
+                        {warningDescriptions[key]}
+                      </p>
+                    )}
                     <p className="text-xs text-amber-700 break-words">
                       {emails.join(", ")}
                     </p>

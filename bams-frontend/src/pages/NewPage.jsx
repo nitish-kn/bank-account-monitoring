@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DataCard from "../components/ui/DataCard";
 import ChartCard from "../components/charts/ChartCard";
 import { Flex } from "@radix-ui/themes";
 import { sampleMails } from "../assets/sample-mails";
-import { ArrowDown, ArrowUp, TrendingUp, ReceiptText, TrendingUpDown, TrendingDown, Calendar, ChevronDown, Filter, } from "lucide-react";
-import { DEFAULT_TRANSACTION_FILTERS, calculateTransactionSummary, filterTransactionsByDateRange, filterTransactions, formatTransactionDateRangeLabel, getDailyNetCashFlowTrend, getDefaultTransactionDateRange, getTopCategoryTotals, getTopTransactions, getTransactionFilterOptions, getTransactionTypeCountData, getTransactionsByModeData, hasActiveTransactionFilters, maxCreditAmount, maxDebitAmount, } from "../lib/transactional-helper";
+import { ArrowDown, ArrowUp, TrendingUp, ReceiptText, TrendingUpDown, TrendingDown, Calendar, ChevronDown, Filter, MailPlus, UserPlus, } from "lucide-react";
+import { calculateTransactionSummary, filterTransactionsByDateRange, filterTransactions, formatTransactionDateRangeLabel, getDailyNetCashFlowTrend, getTopCategoryTotals, getTopTransactions, getTransactionFilterOptions, getTransactionTypeCountData, getTransactionsByModeData, hasActiveTransactionFilters, maxCreditAmount, maxDebitAmount, } from "../lib/transactional-helper";
 import { formatCompactINR } from "../lib/helper";
 import CustomButton from "../components/ui/CustomButton";
 import CustomDonutChart from "../components/charts/CustomDonutChart";
@@ -15,22 +15,21 @@ import DashboardFilter from "../components/DashboardFilter";
 import CustomDatePicker from "../components/ui/CustomDatePicker"
 import CustomSelect from "../components/ui/CustomSelect";
 import TopItemList from "../components/ui/TopItemList";
+import { useDashboardFilterStore } from "../store/dashboardfilterStore";
+import SendInviteDialog from "../components/ui/SendInviteDialog";
+import CheckInviteDialog from "../components/ui/CheckInviteDialog";
 
 const NewPage = () => {
   const [data] = useState(sampleMails);
   const [openFilter, setOpenFilter] = useState(false);
-  const [appliedFilters, setAppliedFilters] = useState(DEFAULT_TRANSACTION_FILTERS);
   const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
-  const [dateRange, setDateRange] = useState(() => getDefaultTransactionDateRange(new Date(), 7));
   const [cashFlowPeriod, setCashFlowPeriod] = useState("daily");
   const dateRangePopoverRef = useRef(null);
+  const { filters: appliedFilters, dateRange, applyFilters, resetFilters, setDateRange, } = useDashboardFilterStore();
 
   const records = data?.records || [];
   const maxSelectableDate = useMemo(() => new Date(), []);
-  const dateRangeLabel = useMemo(
-    () => formatTransactionDateRangeLabel(dateRange),
-    [dateRange],
-  );
+  const dateRangeLabel = useMemo(() => formatTransactionDateRangeLabel(dateRange), [dateRange]);
 
   const filterOptions = useMemo(() => getTransactionFilterOptions(records), [records]);
   const filteredRecords = useMemo(
@@ -40,10 +39,8 @@ const NewPage = () => {
     ),
     [appliedFilters, dateRange, records],
   );
-  const hasActiveFilters = useMemo(
-    () => hasActiveTransactionFilters(appliedFilters),
-    [appliedFilters],
-  );
+  
+  const hasActiveFilters = useMemo(() => hasActiveTransactionFilters(appliedFilters), [appliedFilters]);
 
   const summaryData = useMemo(() => calculateTransactionSummary(filteredRecords), [filteredRecords]);
 
@@ -89,39 +86,15 @@ const NewPage = () => {
     [summaryData],
   );
 
-
   const MaxCreditAmount = formatCompactINR(maxCreditAmount(filteredRecords));
   const MaxDebitAmount = formatCompactINR(maxDebitAmount(filteredRecords));
 
-  const topTransactions = useMemo(
-    () => getTopTransactions(filteredRecords, 5),
-    [filteredRecords],
-  );
-
-  const transactionTypeData = useMemo(
-    () => getTransactionTypeCountData(filteredRecords),
-    [filteredRecords],
-  );
-
-  const topDebitCategories = useMemo(
-    () => getTopCategoryTotals(filteredRecords, "debit"),
-    [filteredRecords],
-  );
-
-  const topCreditCategories = useMemo(
-    () => getTopCategoryTotals(filteredRecords, "credit"),
-    [filteredRecords],
-  );
-
-  const cashFlowTrendData = useMemo(
-    () => getDailyNetCashFlowTrend(filteredRecords, dateRange),
-    [dateRange, filteredRecords],
-  );
-
-  const transactionsByModeData = useMemo(
-    () => getTransactionsByModeData(filteredRecords),
-    [filteredRecords],
-  );
+  const topTransactions = useMemo(() => getTopTransactions(filteredRecords, 5), [filteredRecords]);
+  const transactionTypeData = useMemo(() => getTransactionTypeCountData(filteredRecords), [filteredRecords]);
+  const topDebitCategories = useMemo(() => getTopCategoryTotals(filteredRecords, "debit"), [filteredRecords]);
+  const topCreditCategories = useMemo(() => getTopCategoryTotals(filteredRecords, "credit"), [filteredRecords]);
+  const cashFlowTrendData = useMemo(() => getDailyNetCashFlowTrend(filteredRecords, dateRange), [dateRange, filteredRecords]);
+  const transactionsByModeData = useMemo(() => getTransactionsByModeData(filteredRecords), [filteredRecords]);
 
   const cashFlowPeriodOptions = useMemo(
     () => [{ label: "Daily", value: "daily" }],
@@ -133,9 +106,7 @@ const NewPage = () => {
 
     const handleOutsideClick = (event) => {
       if (
-        dateRangePopoverRef.current &&
-        !dateRangePopoverRef.current.contains(event.target)
-      ) {
+        dateRangePopoverRef.current && !dateRangePopoverRef.current.contains(event.target)) {
         setOpenDateRangeFilter(false);
       }
     };
@@ -154,12 +125,15 @@ const NewPage = () => {
 
       {/* Dashboard Header */}
       <Flex direction={{initial:"column", sm: "row"}} align={{initial: "start", sm:"center"}}  position="relative" className="bg-white gap-4 p-4 rounded-xl shadow-md">
+        {/* Header text */}
         <div className="flex flex-col gap-1 px-2">
           <h1 className="text-2xl font-bold text-gray-800">Transaction Dashboard</h1>
           <p className="text-xs text-gray-600 ml-1">View your transaction summary efficiently</p>
         </div>
 
-        <div className="flex gap-2 relative ml-auto">
+        <div className="flex gap-2 items-center relative ml-auto">
+
+          {/* Date Range Filter */}
           <div ref={dateRangePopoverRef} className="relative">
             <CustomButton color="gray" radius="large" className="text-gray-800!" variant="outline" size="sm" onClick={() => setOpenDateRangeFilter((prev) => !prev)} >
               <Calendar className="mr-1 h-4 w-4" /> 
@@ -197,15 +171,17 @@ const NewPage = () => {
             )}
           </div>
 
+          {/* Filter Button */}
           <CustomButton
             color={hasActiveFilters ? "blue" : "gray"}
             radius="large"
             variant={hasActiveFilters ? "soft" : "outline"}
             size="sm"
-            className="ml-2"
+            className="ml-2 text-gray-900!"
             onClick={() =>setOpenFilter((prev) => !prev)}
           >
-            <Filter className="mr-1 h-4 w-4" /> Filter
+            <Filter className="sm:mr-1 h-4 w-4" /> 
+            <span className="hidden sm:flex">Filter</span>
           </CustomButton>
         </div>
       </Flex>
@@ -215,8 +191,8 @@ const NewPage = () => {
         <DashboardFilter
           filters={appliedFilters}
           filterOptions={filterOptions}
-          onApply={setAppliedFilters}
-          onReset={() => setAppliedFilters(DEFAULT_TRANSACTION_FILTERS)}
+          onApply={applyFilters}
+          onReset={resetFilters}
           onOpenChange={() => setOpenFilter(false)}
         />
       )}
@@ -240,7 +216,7 @@ const NewPage = () => {
 
       {/* Charts */}
       <Flex direction={{initial:"column", sm:"row"}} wrap="wrap" className="gap-3 md:gap-4">
-        <ChartCard id="pie-chart" className="xl:flex-1" title="Credit vs Debit (Total)">
+        {/* <ChartCard id="pie-chart" className="xl:flex-1" title="Credit vs Debit (Total)">
           <CustomDonutChart
             chartHeight="240"
             data={transactionTypeData}
@@ -248,7 +224,7 @@ const NewPage = () => {
             innerLabel="Total"
             centerTextclassName="top-2 whitespace-wrap"
           />
-        </ChartCard>
+        </ChartCard> */}
 
         <ChartCard className="w-auto flex-1" title="Top Debit Categories">
           <CustomBarChart data={topDebitCategories} color="#dc2626" />
@@ -293,7 +269,6 @@ const NewPage = () => {
       </div>
 
       {/* Top Transactions */}
-
       <div className="flex flex-col md:flex-row gap-3 md:gap-4">
       <TopItemList title="Top 5 Transactions" showBtn={true} btnText="View All" data={topTransactions} />
       <TopItemList title="Transactions Flagged for Review" flagged={true} titleColor="text-red-800" btnText="View All" data={topTransactions} />
@@ -303,7 +278,6 @@ const NewPage = () => {
       
       {/* Recent Transactions */}
       <RecentTransactions transactions={filteredRecords} />
-
     </main>
   );
 };

@@ -16,7 +16,7 @@ const DialogPopup = ({
 }) => {
   return (
     <main>
-      <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Root open={open} onOpenChange={setOpen} className="">
         <Dialog.Content maxWidth={maxWidth}>
 
           <Dialog.Title> {heading} </Dialog.Title>
@@ -26,7 +26,7 @@ const DialogPopup = ({
           {children}
 
           {showButtons && (
-            <Flex gap="3" mt="4" justify="end">
+            <Flex gap="3" mt="6" justify="end">
               
               <Dialog.Close>
                 <Button variant="soft" color="gray"> Cancel </Button>

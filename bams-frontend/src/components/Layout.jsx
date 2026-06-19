@@ -6,12 +6,36 @@ import { useAuthStore } from "../store/authStore";
 import { useSetupStore } from "../store/setupStore";
 
 const Layout = () => {
-  const { user } = useAuthStore();
-  const { isSyncing, lastSyncAt, syncDashboard } = useSetupStore();
+  const { user, accessToken } = useAuthStore();
+  const { isSyncing, isLoading, isSetupComplete, lastSyncAt, syncDashboard, hasAutoSyncedDashboard, setHasAutoSyncedDashboard, startSyncStatusPolling, } = useSetupStore();
   const [showMenu, setShowMenu] = useState(false);
   const effectiveLastSyncAt = lastSyncAt || user?.last_synced_at;
+  const hasCompletedSetup = user?.is_setup_completed === true || user?.is_setup_completed === "true";
+  const userSyncStatus = user?.sync_status || "not_started";
   const showMenuRef = useRef(null);
 
+
+  // To prevent the Dashboard page to call backend and load mails on every page navigation
+  useEffect(() => {
+    if (!hasCompletedSetup || !accessToken || isSetupComplete || isLoading) {
+      return;
+    }
+
+    if (userSyncStatus === "running") {
+      startSyncStatusPolling();
+      return;
+    }
+
+    if (isSyncing || hasAutoSyncedDashboard) {
+      return;
+    }
+
+    setHasAutoSyncedDashboard(true);
+    syncDashboard();
+  }, [ accessToken, hasAutoSyncedDashboard, hasCompletedSetup, isLoading, isSetupComplete, isSyncing, setHasAutoSyncedDashboard, startSyncStatusPolling, syncDashboard, userSyncStatus, ]);
+
+
+  // For sidebar to close in small screens, when user touches out of sidebar
   useEffect(() => {
     if (!showMenu) return undefined;
 

@@ -19,16 +19,12 @@ export function SetupFlowOverlay({
   setupError,
   retrySetup,
   isSetupComplete,
-  emailsCount = 0,
-  rowsWritten = 0,
   onClose,
 }) {
   const renderContent = () => {
     if (isSetupComplete) {
       return (
         <SetupSuccess
-          emailsCount={emailsCount}
-          rowsWritten={rowsWritten}
           onClose={onClose}
         />
       );

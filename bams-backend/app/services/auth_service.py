@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import requests
 from urllib.parse import urlencode
 # pyrefly: ignore [missing-import]
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..models.user import User
 from ..core.auth import create_access_token
+from ..utils.serializers import serialize_auth_user as serialize_user
 
 
 def generate_oauth_url(scopes: list[str], state: str = None) -> str:
@@ -79,30 +80,6 @@ def apply_permission_flags(user: User, scope: str | list[str]) -> None:
         s in scope
         for s in ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/spreadsheets']
     ))
-
-
-def _serialize_datetime(value: datetime | None) -> str | None:
-    if not value:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc).isoformat()
-    return value.astimezone(timezone.utc).isoformat()
-
-
-def serialize_user(user: User) -> dict:
-    return {
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "picture": user.picture,
-        "has_email_permissions": user.has_email_permissions,
-        "has_sheets_permissions": user.has_sheets_permissions,
-        "is_setup_completed": user.is_setup_completed,
-        "spreadsheet_id": user.spreadsheet_id,
-        "last_synced_at": _serialize_datetime(user.last_synced_at),
-        "last_synced_status": user.last_synced_status,
-        "last_synced_email_date": _serialize_datetime(user.last_synced_email_date),
-    }
 
 
 def create_or_update_user_from_google(code: str, db: Session) -> dict:

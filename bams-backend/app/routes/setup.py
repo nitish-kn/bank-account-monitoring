@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from datetime import timezone
-from email.utils import parsedate_to_datetime
+import asyncio
 import json
 from sqlalchemy.orm import Session
 
@@ -9,41 +8,27 @@ from ..core.dependencies import get_current_user
 from ..models.user import User
 from ..services.setup_service import setup_process_with_progress, perform_incremental_sync
 from ..database import get_db
-from ..services.setup_service import _get_sheet_title, build_credentials
+from ..services.setup_service import build_credentials
+from ..utils.date_utils import datetime_to_iso
+from ..utils.email_utils import email_timestamp, parse_sheet_email_row
 from googleapiclient.discovery import build
+from ..utils.sheets_utils import _get_sheet_title
 
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
 
 
-def _email_timestamp(email: dict) -> float:
-    """Return a sortable timestamp for sheet email rows."""
-    try:
-        return parsedate_to_datetime(email.get("date", "")).timestamp()
-    except (TypeError, ValueError, IndexError, AttributeError, OverflowError):
-        return 0
-
-
-def _datetime_to_iso(value) -> str | None:
-    if not value:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc).isoformat()
-    return value.astimezone(timezone.utc).isoformat()
-
-
 @router.get("/stream")
-async def stream_setup(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Stream setup progress via Server-Sent Events. It starts the setup process and yields progress updates in real-time.
-    Frontend connects with EventSource and receives real-time progress updates.
+async def stream_setup(current_user: User = Depends(get_current_user), db: Session = Depends(get_db) ):
+    """It starts the setup process and yields progress updates in real-time. Stream setup progress via Server-Sent Events.
+        Frontend connects with EventSource and receives real-time progress updates.
     """
     
     async def event_generator():
         """Generator that yields SSE formatted messages."""
         try:
+            yield f"data: {json.dumps({'step': 'connected', 'message': 'Setup stream connected...'})}\n\n"
+            await asyncio.sleep(0.05)
             async for progress_msg in setup_process_with_progress(current_user, db):
                 # Format as Server-Sent Event
                 yield f"data: {json.dumps(progress_msg)}\n\n"
@@ -55,24 +40,39 @@ async def stream_setup(
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         }
     )
 
 @router.get("/status")
 def get_setup_status(current_user: User = Depends(get_current_user)):
-    """Check if the user has completed initial setup and has all permissions."""
+    """Check if the user has completed initial setup and has all permissions.
+        It is for returning users."""
+    
     return {
         "is_setup_completed": current_user.is_setup_completed,
         "spreadsheet_id": current_user.spreadsheet_id,
         "has_permissions": current_user.has_email_permissions and current_user.has_sheets_permissions,
-        "last_synced_at": _datetime_to_iso(current_user.last_synced_at),
+        "last_synced_at": datetime_to_iso(current_user.last_synced_at),
         "last_synced_status": current_user.last_synced_status,
-        "last_synced_email_date": _datetime_to_iso(current_user.last_synced_email_date),
+        "last_synced_email_date": datetime_to_iso(current_user.last_synced_email_date),
+        "sync_status": current_user.sync_status,
+    }
+
+
+@router.get("/sync-status")
+def get_sync_status(current_user: User = Depends(get_current_user)):
+    """ Get the status while background job of fecthing mails are running """
+    return {
+        "sync_status": current_user.sync_status,
+        "last_synced_at": datetime_to_iso(current_user.last_synced_at),
+        "last_synced_status": current_user.last_synced_status,
+        "last_synced_email_date": datetime_to_iso(current_user.last_synced_email_date),
     }
 
 @router.post("/sync")
-async def sync_dashboard(
+def sync_dashboard(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -83,7 +83,7 @@ async def sync_dashboard(
             detail="Dashboard setup must be completed before synchronization."
         )
     
-    return await perform_incremental_sync(current_user, db)
+    return perform_incremental_sync(current_user, db)
 
 @router.get("/emails")
 def get_synced_emails(
@@ -111,20 +111,11 @@ def get_synced_emails(
         
         emails = []
         for row in rows:
-            if not row:
-                continue
-            # Pad-fill to ensure 6 elements
-            row_padded = row + [""] * (6 - len(row))
-            emails.append({
-                "id": row_padded[0],
-                "subject": row_padded[1],
-                "date": row_padded[2],
-                "status": row_padded[3],
-                "snippet": row_padded[4],
-                "body": row_padded[5],
-            })
+            email = parse_sheet_email_row(row)
+            if email:
+                emails.append(email)
 
-        emails.sort(key=_email_timestamp, reverse=True)
+        emails.sort(key=email_timestamp, reverse=True)
         return {"emails": emails}
     except Exception as e:
         raise HTTPException(

@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from "react";
 import CustomButton from "./ui/CustomButton";
 import CustomSearchBar from "./ui/CustomSearchBar";
-import CustomSelect from "./ui/CustomSelect";
+import CustomDropDown from "./ui/CustomDropDown";
 import FilterField from "./ui/FilterField";
 import { Funnel, RotateCcw, X } from "lucide-react";
 import { DEFAULT_TRANSACTION_FILTERS } from "../lib/transactional-helper";
 
-const selectTriggerClassName = "h-9! w-full justify-between text-sm";
-const selectContentClassName = "min-w-52";
+const dropdownTriggerClassName = "h-9! w-full justify-between! text-sm";
+const dropdownContentClassName = "min-w-56 max-h-72 overflow-y-auto";
+
+const getAllOptionLabel = (options = [], fallback = "All") => (
+  options.find((option) => option?.value === "all")?.label || fallback
+);
 
 const DashboardFilter = ({
   filters = DEFAULT_TRANSACTION_FILTERS,
@@ -66,89 +70,124 @@ const DashboardFilter = ({
         </FilterField>
 
         {/* <FilterField label="Entity">
-          <CustomSelect
-            size="2"
+          <CustomDropDown
             value={draftFilters.entity}
             options={filterOptions?.entities}
+            placeholder={getAllOptionLabel(filterOptions?.entities, "All Entities")}
             onValueChange={(value) => updateFilter("entity", value)}
+            multiple
             showSearch
             searchPlaceholder="Search entities..."
-            triggerClassName={selectTriggerClassName}
-            contentClassName={selectContentClassName}
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
           />
         </FilterField> */}
 
         <FilterField label="Bank">
-          <CustomSelect
-            size="2"
+          <CustomDropDown
             value={draftFilters.bank}
             options={filterOptions?.banks}
+            placeholder={getAllOptionLabel(filterOptions?.banks, "All Banks")}
             onValueChange={(value) => updateFilter("bank", value)}
+            multiple
             showSearch
             searchPlaceholder="Search banks..."
-            triggerClassName={selectTriggerClassName}
-            contentClassName={selectContentClassName}
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
           />
         </FilterField>
 
         <FilterField label="Account">
-          <CustomSelect
-            size="2"
+          <CustomDropDown
             value={draftFilters.account}
             options={filterOptions?.accounts}
+            placeholder={getAllOptionLabel(filterOptions?.accounts, "All Accounts")}
             onValueChange={(value) => updateFilter("account", value)}
+            multiple
             showSearch
             searchPlaceholder="Search accounts..."
-            triggerClassName={selectTriggerClassName}
-            contentClassName={selectContentClassName}
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
           />
         </FilterField>
 
         <FilterField label="Transaction Type">
-          <CustomSelect
-            size="2"
+          <CustomDropDown
             value={draftFilters.txnType}
             options={filterOptions?.transactionTypes}
+            placeholder={getAllOptionLabel(filterOptions?.transactionTypes, "All Types")}
             onValueChange={(value) => updateFilter("txnType", value)}
-            triggerClassName={selectTriggerClassName}
-            contentClassName={selectContentClassName}
+            multiple
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
           />
         </FilterField>
 
         <FilterField label="Mode">
-          <CustomSelect
-            size="2"
+          <CustomDropDown
             value={draftFilters.mode}
             options={filterOptions?.modes}
+            placeholder={getAllOptionLabel(filterOptions?.modes, "All Modes")}
             onValueChange={(value) => updateFilter("mode", value)}
+            multiple
             showSearch
             searchPlaceholder="Search modes..."
-            triggerClassName={selectTriggerClassName}
-            contentClassName={selectContentClassName}
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
           />
         </FilterField>
 
         <FilterField label="Category">
-          <CustomSelect
-            size="2"
+          <CustomDropDown
             value={draftFilters.category}
             options={filterOptions?.categories}
+            placeholder={getAllOptionLabel(filterOptions?.categories, "All Categories")}
             onValueChange={(value) => updateFilter("category", value)}
+            multiple
             showSearch
             searchPlaceholder="Search categories..."
-            triggerClassName={selectTriggerClassName}
-            contentClassName={selectContentClassName}
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
           />
         </FilterField>
 
         {/* <FilterField label="Status">
-          <CustomSelect
-            size="2"
+          <CustomDropDown
             value={draftFilters.status}
             options={filterOptions?.statuses}
+            placeholder={getAllOptionLabel(filterOptions?.statuses, "All Statuses")}
             onValueChange={(value) => updateFilter("status", value)}
-            triggerClassName={selectTriggerClassName}
-            contentClassName={selectContentClassName}
+            multiple
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
           />
         </FilterField> */}
 
@@ -179,22 +218,27 @@ const DashboardFilter = ({
         </FilterField>
 
         {/* <FilterField label="Currency">
-          <CustomSelect
-            size="2"
+          <CustomDropDown
             value={draftFilters.currency}
             options={filterOptions?.currencies}
+            placeholder={getAllOptionLabel(filterOptions?.currencies, "All Currencies")}
             onValueChange={(value) => updateFilter("currency", value)}
-            triggerClassName={selectTriggerClassName}
-            contentClassName={selectContentClassName}
+            multiple
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
           />
         </FilterField> */}
       </div>
 
-      <div className="flex items-end gap-2 sm:col-span-2 xl:col-span-2 xl:justify-end">
+      <div className="flex items-end gap-2 sm:col-span-2 xl:col-span-2 justify-end">
         <CustomButton
           variant="outline"
           color="gray"
-          size="2"
+          size={{initial: "1", sm: "2"}}
           className="h-9! flex-1 xl:flex-none"
           onClick={handleReset}
         >
@@ -203,7 +247,7 @@ const DashboardFilter = ({
         </CustomButton>
 
         <CustomButton
-          size="2"
+          size={{initial: "1", sm: "2"}}
           className="h-9! flex-1 xl:flex-none"
           onClick={handleApply}
         >

@@ -1,82 +1,75 @@
-from datetime import datetime, timezone
+import asyncio
+from datetime import timedelta
 from typing import Any
+from threading import Thread
 
 from fastapi import HTTPException
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
+from ..database import SessionLocal
 from ..models.user import User
+from ..utils.date_utils import datetime_to_iso, utc_now
+from ..utils.email_utils import latest_email_datetime
 from .credentials import build_credentials
-from .gmail_service import DEFAULT_EMAIL_FETCH_LIMIT, fetch_user_emails
+from .gmail_service import DEFAULT_EMAIL_FETCH_LIMIT, fetch_user_emails, iter_user_email_pages
+
+
+from ..utils.sheets_utils import _read_existing_email_ids, _get_sheet_title, _append_sheet_rows
 
 REQUIRED_SCHEMA = ["Email ID", "Subject", "Date Received", "Status", "Parsed Content", "Email Body"]
 SHEET_NAME = "Dashboard Data Sheet"
+SYNC_STATUS_NOT_STARTED = "not_started"
+SYNC_STATUS_RUNNING = "running"
+SYNC_STATUS_COMPLETED = "completed"
+SYNC_STATUS_FAILED = "failed"
 
 CACHED_EMAILS: list[dict] = []
 
 
-def _utc_now() -> datetime:
-    return datetime.utcnow()
-
-
-def _datetime_to_iso(value: datetime | None) -> str | None:
-    if not value:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc).isoformat()
-    return value.astimezone(timezone.utc).isoformat()
-
-
-def _email_internal_datetime(email: dict) -> datetime | None:
-    try:
-        internal_date = email.get("internalDate")
-        if not internal_date:
-            return None
-        return datetime.fromtimestamp(int(internal_date) / 1000, tz=timezone.utc).replace(tzinfo=None)
-    except (TypeError, ValueError, OSError, OverflowError):
-        return None
-
-
-def _latest_email_datetime(emails: list[dict]) -> datetime | None:
-    email_dates = [
-        email_date
-        for email_date in (_email_internal_datetime(email) for email in emails)
-        if email_date
-    ]
-    return max(email_dates) if email_dates else None
-
-
+# --------------------- Helper functions
 def _sync_metadata_payload(user: User) -> dict:
+    """ Formats a User model's data into a clean dictionary payload for API/frontend consumption. """
     return {
-        "last_synced_at": _datetime_to_iso(user.last_synced_at),
+        "last_synced_at": datetime_to_iso(user.last_synced_at),
         "last_synced_status": user.last_synced_status,
-        "last_synced_email_date": _datetime_to_iso(user.last_synced_email_date),
+        "last_synced_email_date": datetime_to_iso(user.last_synced_email_date),
+        "sync_status": user.sync_status,
     }
 
-
-def _mark_sync_success(user: User, db: Session, emails: list[dict] | None = None) -> dict:
-    latest_email_date = _latest_email_datetime(emails or [])
-
-    user.last_synced_at = _utc_now()
-    user.last_synced_status = "success"
+def _update_latest_synced_email_date(user: User, emails: list[dict] | None = None) -> None:
+    """ Inspects a batch of emails, finds the most recent timestamp, and updates the user's tracking state if it's newer than what is currently saved. """
+    latest_email_date = latest_email_datetime(emails or [])
     if latest_email_date and (
         not user.last_synced_email_date
         or latest_email_date > user.last_synced_email_date
     ):
         user.last_synced_email_date = latest_email_date
 
+
+
+
+# --------------------- Functions to update db fields based on the operation
+def _mark_sync_success(user: User, db: Session, emails: list[dict] | None = None) -> dict:
+    """ Mark the variable as success in db, on completion of transaction"""
+    _update_latest_synced_email_date(user, emails)
+    user.last_synced_at = utc_now()
+    user.last_synced_status = "success"
+    user.sync_status = SYNC_STATUS_COMPLETED
+
     db.add(user)
     db.commit()
     db.refresh(user)
     return _sync_metadata_payload(user)
 
-
 def _mark_sync_failed(user: User, db: Session) -> None:
+    """ Mark the variable as failed in db, on failure of transaction """
     try:
         db.rollback()
-        user.last_synced_at = _utc_now()
+        user.last_synced_at = utc_now()
         user.last_synced_status = "failed"
+        user.sync_status = SYNC_STATUS_FAILED
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -85,22 +78,12 @@ def _mark_sync_failed(user: User, db: Session) -> None:
         print(f"Failed to update sync failure metadata: {error}")
 
 
-def _get_sheet_title(sheets_service: Any, spreadsheet_id: str) -> str:
-    """Return the first sheet title from a spreadsheet. Fallback to Sheet1."""
-    try:
-        spreadsheet = sheets_service.spreadsheets().get(
-            spreadsheetId=spreadsheet_id,
-            fields="sheets(properties(title))"
-        ).execute()
-        sheets = spreadsheet.get("sheets", [])
-        if sheets:
-            return sheets[0].get("properties", {}).get("title", "Sheet1")
-    except HttpError:
-        pass
-    return "Sheet1"
 
 
-async def create_sheets_and_fill_schema(user: User) -> dict:
+# -------------------------- Setup Functions ---------------------------
+
+# Initial Setup Workflow - 1.1
+def create_sheets_and_fill_schema(user: User) -> dict:
     """Create or validate the required sheet and ensure the header row matches REQUIRED_SCHEMA."""
 
     # Check correct user and schema permissions before proceeding with sheet setup
@@ -168,7 +151,91 @@ async def create_sheets_and_fill_schema(user: User) -> dict:
     except Exception as error:
         raise HTTPException(status_code=500, detail=f"Unexpected setup error: {error}")
 
+# Initial Setup Workflow - 1.2.1.1
+def _run_backfill_sync_for_user(user_id: int) -> None:
+    global CACHED_EMAILS
 
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not user.is_setup_completed or not user.spreadsheet_id:
+            return
+
+        credentials = build_credentials(user)
+        sheets_service = build("sheets", "v4", credentials=credentials)
+        sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
+        existing_ids = _read_existing_email_ids(sheets_service, user.spreadsheet_id, sheet_title)
+
+        for emails in iter_user_email_pages(user):
+            CACHED_EMAILS = emails
+
+            _update_latest_synced_email_date(user, emails)
+            new_emails = [
+                email
+                for email in emails
+                if email.get("id") and email.get("id") not in existing_ids
+            ]
+
+            if not new_emails:
+                db.add(user)
+                db.commit()
+                continue
+
+            rows = parse_emails_for_sheet(new_emails)
+            _append_sheet_rows(sheets_service, user.spreadsheet_id, sheet_title, rows)
+            existing_ids.update(row[0] for row in rows if row and row[0])
+
+            db.add(user)
+            db.commit()
+
+        _mark_sync_success(user, db)
+    except Exception as error:
+        print(f"Background sync failed for user {user_id}: {error}")
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            _mark_sync_failed(user, db)
+    finally:
+        db.close()
+
+# Function to use threading for fetching mails in parellel
+# Initial Setup Workflow - 1.2.1
+def _start_background_sync_thread(user_id: int) -> None:
+    Thread(
+        target=_run_backfill_sync_for_user,
+        args=(user_id,),
+        daemon=True,
+    ).start()
+
+# Main function to start background job for fetching email for 30 days at initial login
+# Initial Setup Workflow - 1.2
+def start_background_sync_for_user(user: User, db: Session) -> dict:
+    if not user.is_setup_completed or not user.spreadsheet_id:
+        raise HTTPException(status_code=400, detail="Setup must be completed before sync.")
+
+    if user.sync_status == SYNC_STATUS_RUNNING:
+        return {
+            "status": "running",
+            "sync_status": SYNC_STATUS_RUNNING,
+            "message": "Sync is already running in the background.",
+            **_sync_metadata_payload(user),
+        }
+
+    user.sync_status = SYNC_STATUS_RUNNING
+    user.last_synced_status = SYNC_STATUS_RUNNING
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    _start_background_sync_thread(user.id)
+
+    return {
+        "status": "running",
+        "sync_status": user.sync_status,
+        "message": "Sync started in the background.",
+        **_sync_metadata_payload(user),
+    }
+
+# Incremental Sync Workflow - 2.1
 def parse_emails_for_sheet(emails: list[dict]) -> list[list[str]]:
     """Convert parsed Gmail message data into rows that match REQUIRED_SCHEMA."""
     rows: list[list[str]] = []
@@ -186,7 +253,10 @@ def parse_emails_for_sheet(emails: list[dict]) -> list[list[str]]:
     return rows
 
 
-async def fill_sheet_with_emails(user: User, spreadsheet_id: str, sheet_title: str, rows: list[list[str]]) -> dict:
+
+
+
+def fill_sheet_with_emails(user: User, spreadsheet_id: str, sheet_title: str, rows: list[list[str]]) -> dict:
     """Write email rows into the sheet below the header."""
 
     # If there are no rows to write, we can skip the API call and return early.
@@ -211,8 +281,7 @@ async def fill_sheet_with_emails(user: User, spreadsheet_id: str, sheet_title: s
     except HttpError as error:
         raise HTTPException(status_code=500, detail=f"Failed to write emails to sheet: {error}")
 
-
-async def start_email_fetching_process(user: User, spreadsheet_id: str, sheet_title: str) -> dict:
+def start_email_fetching_process(user: User, spreadsheet_id: str, sheet_title: str) -> dict:
     """Fetch Gmail emails, cache them, parse them, and fill the sheet."""
     global CACHED_EMAILS
 
@@ -227,29 +296,29 @@ async def start_email_fetching_process(user: User, spreadsheet_id: str, sheet_ti
 
     # Parse the raw email data into rows that match the required schema and write them into the sheet.
     parsed_rows = parse_emails_for_sheet(emails)
-    write_result = await fill_sheet_with_emails(user, spreadsheet_id, sheet_title, parsed_rows)
+    write_result = fill_sheet_with_emails(user, spreadsheet_id, sheet_title, parsed_rows)
     return {
         "emails_count": len(emails),
         "sheetUpdated": write_result,
     }
 
 
-def get_cached_emails() -> list[dict]:
-    """Return the last fetched email payloads."""
-    return CACHED_EMAILS
 
-# Main function that orchestrates the entire setup process with progress updates for the frontend to consume via SSE.
+
+# ------------- Main function that orchestrates the entire setup process with progress updates for the frontend to consume via SSE.
+
+# Initial Setup Workflow - 1
 async def setup_process_with_progress(user: User, db: Session):
     """Generator that yields progress messages as each setup step completes.
-    
     This allows the frontend to track real-time progress via Server-Sent Events.
     """
     
     try:
         # Step 1: Create or validate sheets
         yield {"step": "sheets_checking", "message": "Checking for existing sheet..."}
+        await asyncio.sleep(0.05)
         
-        setup_result = await create_sheets_and_fill_schema(user)
+        setup_result = create_sheets_and_fill_schema(user)
         spreadsheet_id = setup_result["spreadsheet_id"]
         sheet_title = setup_result["sheet_title"]
         
@@ -257,65 +326,32 @@ async def setup_process_with_progress(user: User, db: Session):
             yield {"step": "sheets_created", "message": "Sheet created and schema written!"}
         else:
             yield {"step": "sheets_validated", "message": "Existing sheet validated!"}
-        
-        # Step 2: Fetch emails from Gmail
-        yield {"step": "emails_fetching", "message": "Fetching tracked emails from Gmail..."}
-        
-        fetch_result = fetch_user_emails(user, max_results=DEFAULT_EMAIL_FETCH_LIMIT)
-        emails = fetch_result.get("emails", [])
+        await asyncio.sleep(0.05)
         
         yield {
-            "step": "emails_fetched",
-            "message": f"Found {len(emails)} tracked emails!",
-            "count": len(emails)
+            "step": "background_sync_starting",
+            "message": "Starting 30-day email sync in the background...",
         }
-        
-        # Step 3: Parse emails
-        yield {"step": "emails_parsing", "message": "Parsing email data..."}
-        
-        parsed_rows = parse_emails_for_sheet(emails)
-        
-        yield {
-            "step": "emails_parsed",
-            "message": f"Parsed {len(parsed_rows)} emails!",
-            "count": len(parsed_rows)
-        }
-        
-        # Step 4: Fill sheet with emails
-        yield {"step": "sheet_writing", "message": "Writing emails to Google Sheet..."}
-        
-        global CACHED_EMAILS
-        CACHED_EMAILS = emails
-        
-        write_result = await fill_sheet_with_emails(user, spreadsheet_id, sheet_title, parsed_rows)
-        
-        yield {
-            "step": "sheet_written",
-            "message": f"Successfully wrote {write_result.get('rows_written', 0)} rows to sheet!",
-            "rows": write_result.get('rows_written', 0)
-        }
-        
-        # Step 5: Complete
-        # Save setup status and spreadsheet ID to user record in DB
-        sync_metadata = {}
-        try:
-            user.is_setup_completed = True
-            user.spreadsheet_id = spreadsheet_id
-            sync_metadata = _mark_sync_success(user, db, emails)
-        except Exception as db_err:
-            # Log DB error but allow setup completion message to go through
-            print(f"Failed to update user DB status: {db_err}")
+        await asyncio.sleep(0.05)
+
+        user.is_setup_completed = True
+        user.spreadsheet_id = spreadsheet_id
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        sync_result = start_background_sync_for_user(user, db)
 
         yield {
             "step": "complete",
-            "message": "Setup complete!",
+            "message": "Setup complete. We are syncing your last 30 days of emails in the background.",
             "status": "success",
             "data": {
                 "spreadsheet_id": spreadsheet_id,
                 "sheet_title": sheet_title,
-                "emails_count": len(emails),
-                "rows_written": write_result.get('rows_written', 0),
-                **sync_metadata,
+                "emails_count": 0,
+                "rows_written": 0,
+                **sync_result,
             }
         }
         
@@ -334,84 +370,88 @@ async def setup_process_with_progress(user: User, db: Session):
             "status": "failed"
         }
 
-async def append_sheet_with_emails(user: User, spreadsheet_id: str, sheet_title: str, new_rows: list[list[str]]):
+def append_sheet_with_emails(user: User, spreadsheet_id: str, sheet_title: str, new_rows: list[list[str]]):
     """Safely append new rows to the Google Sheet using the append API."""
     if not new_rows:
         return {"updated": False, "rows_written": 0}
 
     credentials = build_credentials(user)
     sheets_service = build("sheets", "v4", credentials=credentials)
-    range_name = f"'{sheet_title}'!A2"
 
     try:
-        sheets_service.spreadsheets().values().append(
-            spreadsheetId=spreadsheet_id,
-            range=range_name,
-            valueInputOption="RAW",
-            insertDataOption="INSERT_ROWS",
-            body={"values": new_rows}
-        ).execute()
-        return {"updated": True, "rows_written": len(new_rows)}
+        return _append_sheet_rows(sheets_service, spreadsheet_id, sheet_title, new_rows)
     except HttpError as error:
         raise HTTPException(status_code=500, detail=f"Failed to append emails: {error}")
 
-async def perform_incremental_sync(user: User, db: Session):
-    """Fetch Gmail messages, filter out already synced email IDs, and append new ones to the Google Sheet."""
+# Incremental Sync Workflow - 2
+def perform_incremental_sync(user: User, db: Session):
+    """Fetch only the newest Gmail messages after the last synced email date."""
     if not user.is_setup_completed or not user.spreadsheet_id:
         raise HTTPException(status_code=400, detail="Setup must be completed before sync.")
 
+    if user.sync_status == SYNC_STATUS_RUNNING:
+        return {
+            "status": "running",
+            "sync_status": SYNC_STATUS_RUNNING,
+            "new_rows": 0,
+            "message": "Background sync is already running.",
+            **_sync_metadata_payload(user),
+        }
+
+    user.sync_status = SYNC_STATUS_RUNNING
+    user.last_synced_status = SYNC_STATUS_RUNNING
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
     try:
-        # 1. Fetch recent emails from Gmail
-        fetch_result = fetch_user_emails(user, max_results=DEFAULT_EMAIL_FETCH_LIMIT)
-        emails = fetch_result.get("emails", [])
-
-        if not emails:
-            sync_metadata = _mark_sync_success(user, db)
-            return {
-                "status": "success",
-                "new_rows": 0,
-                "message": "No emails found in Gmail.",
-                **sync_metadata,
-            }
-
-        # 2. Get existing Email IDs from Google Sheet Column A
         credentials = build_credentials(user)
         sheets_service = build("sheets", "v4", credentials=credentials)
-        sheet_title = "Sheet1"
+        sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
+        existing_ids = _read_existing_email_ids(sheets_service, user.spreadsheet_id, sheet_title)
 
-        try:
-            sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
-            
-            result = sheets_service.spreadsheets().values().get(
-                spreadsheetId=user.spreadsheet_id,
-                range=f"'{sheet_title}'!A2:A"
-            ).execute()
-            existing_ids = {row[0] for row in result.get("values", []) if row}
-        except Exception as e:
-            print(f"Failed to read existing sheet rows: {e}")
-            existing_ids = set()
+        fetched_emails: list[dict] = []
+        new_emails: list[dict] = []
 
-        # 3. Filter for new emails only
-        new_emails = [e for e in emails if e.get("id") not in existing_ids]
+        if user.last_synced_email_date:
+            # Gmail date search is day-granular. Step one day back and dedupe by Email ID.
+            start_date = user.last_synced_email_date - timedelta(days=1)
+            email_pages = iter_user_email_pages(user, start_date=start_date)
+            for emails in email_pages:
+                fetched_emails.extend(emails)
+                new_emails.extend(
+                    email
+                    for email in emails
+                    if email.get("id") and email.get("id") not in existing_ids
+                )
+        else:
+            fetch_result = fetch_user_emails(user, max_results=DEFAULT_EMAIL_FETCH_LIMIT)
+            fetched_emails = fetch_result.get("emails", [])
+            new_emails = [
+                email
+                for email in fetched_emails
+                if email.get("id") and email.get("id") not in existing_ids
+            ]
 
         if not new_emails:
-            sync_metadata = _mark_sync_success(user, db, emails)
+            sync_metadata = _mark_sync_success(user, db, fetched_emails)
             return {
                 "status": "success",
+                "sync_status": SYNC_STATUS_COMPLETED,
                 "new_rows": 0,
-                "message": "Dashboard is already up to date!",
+                "message": "Dashboard is already up to date.",
                 **sync_metadata,
             }
 
-        # 4. Parse and append to the sheet
-        new_rows = parse_emails_for_sheet(new_emails)
-        sync_result = await append_sheet_with_emails(user, user.spreadsheet_id, sheet_title, new_rows)
-        sync_metadata = _mark_sync_success(user, db, emails)
+        rows = parse_emails_for_sheet(new_emails)
+        sync_result = _append_sheet_rows(sheets_service, user.spreadsheet_id, sheet_title, rows)
+        sync_metadata = _mark_sync_success(user, db, fetched_emails or new_emails)
 
         return {
             "status": "success",
+            "sync_status": SYNC_STATUS_COMPLETED,
             "new_rows": sync_result.get("rows_written", 0),
-            "message": f"Successfully synced {sync_result.get('rows_written')} new emails!",
+            "message": f"Successfully synced {sync_result.get('rows_written', 0)} new emails.",
             **sync_metadata,
         }
     except Exception:
@@ -419,3 +459,6 @@ async def perform_incremental_sync(user: User, db: Session):
         raise
 
         
+def get_cached_emails() -> list[dict]:
+    """Return the last fetched email payloads."""
+    return CACHED_EMAILS

@@ -8,7 +8,11 @@ class Settings(BaseSettings):
     secret_key: str = "your-secret-key"  # for JWT
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 300
-
+    GROQ_API_KEY: str
+    MODEL_NAME: str = "openai/gpt-oss-120b"
+    PARSER_NAME: str = "bank_transaction_extractor"
+    PARSER_VERSION: str = "1.0.0"
+    
     class Config:
         env_file = ".env"
 

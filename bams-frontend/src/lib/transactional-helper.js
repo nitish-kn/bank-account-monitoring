@@ -105,9 +105,22 @@ export const getTransactionFilterOptions = (records = []) => ({
   currencies: toSelectOptions(records, "currency", "All Currencies"),
 });
 
+const getActiveFilterValues = (filterValue) => {
+  const rawValues = Array.isArray(filterValue) ? filterValue : [filterValue];
+
+  return rawValues
+    .map(normalizeValue)
+    .filter((value) => value && value !== ALL_FILTER_VALUE);
+};
+
 const matchesSelectFilter = (recordValue, filterValue) => {
-  if (!filterValue || filterValue === ALL_FILTER_VALUE) return true;
-  return normalizeSearchValue(recordValue) === normalizeSearchValue(filterValue);
+  const activeValues = getActiveFilterValues(filterValue);
+  if (!activeValues.length) return true;
+
+  const normalizedRecordValue = normalizeSearchValue(recordValue);
+  return activeValues.some((activeValue) =>
+    normalizedRecordValue === normalizeSearchValue(activeValue),
+  );
 };
 
 export const filterTransactions = (records = [], filters = DEFAULT_TRANSACTION_FILTERS) => {
@@ -179,9 +192,15 @@ export const hasActiveTransactionFilters = (filters = DEFAULT_TRANSACTION_FILTER
     ...filters,
   };
 
-  return Object.entries(DEFAULT_TRANSACTION_FILTERS).some(([key, defaultValue]) => (
-    normalizeValue(normalizedFilters[key]) !== normalizeValue(defaultValue)
-  ));
+  return Object.entries(DEFAULT_TRANSACTION_FILTERS).some(([key, defaultValue]) => {
+    const currentValue = normalizedFilters[key];
+
+    if (defaultValue === ALL_FILTER_VALUE || Array.isArray(currentValue)) {
+      return getActiveFilterValues(currentValue).length > 0;
+    }
+
+    return normalizeValue(currentValue) !== normalizeValue(defaultValue);
+  });
 };
 
 export const formatINR = (amount) => `\u20b9${formatAmount(amount)}`;

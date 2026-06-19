@@ -37,7 +37,7 @@ const Sidebar = ({ picture, name, onClose }) => {
 
         <div className="flex items-center gap-2 px-2">
           <img src={picture} alt="Profile" className="w-8 h-8 rounded-full" />
-          <span className="text-gray-600 text-sm font-semibold text mr-2">{name}</span>
+          <span className="text-gray-600 w-11/12 truncate text-sm font-semibold text mr-2">{name}</span>
 
         </div>
 

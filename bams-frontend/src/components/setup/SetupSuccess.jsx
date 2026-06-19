@@ -4,13 +4,13 @@ import { Logout } from "../Logout";
 import { SetupHeader } from "./SetupHeader";
 import { SetupMetric } from "./SetupMetric";
 
-export function SetupSuccess({ emailsCount = 0, rowsWritten = 0, onClose }) {
+export function SetupSuccess({ onClose }) {
   return (
     <div className="flex flex-col gap-6">
       <SetupHeader
         icon={CheckCircle2}
         title="Workspace setup complete"
-        subtitle="Your integration is active. FloData can now sync alert emails into your connected Google Sheet."
+        subtitle="Your integration is active. FloData is syncing your last 30 days of emails in the background."
         badge="Ready"
         badgeColor="green"
       />
@@ -18,15 +18,15 @@ export function SetupSuccess({ emailsCount = 0, rowsWritten = 0, onClose }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <SetupMetric
           icon={MailCheck}
-          label="Emails parsed"
-          value={emailsCount}
+          label="30-day sync"
+          value="Running"
           tone="green"
         />
 
         <SetupMetric
           icon={FileSpreadsheet}
-          label="Rows written"
-          value={rowsWritten}
+          label="Google Sheet"
+          value="Ready"
           tone="blue"
         />
       </div>
@@ -37,8 +37,8 @@ export function SetupSuccess({ emailsCount = 0, rowsWritten = 0, onClose }) {
         </Text>
 
         <Text as="p" size="1" className="mt-1 leading-6 text-green-700">
-          Your dashboard will continue showing synced alert data from your
-          Google Sheet. You can manually sync again from the dashboard anytime.
+          You can go to the dashboard now. New data will appear gradually while
+          the background sync continues.
         </Text>
       </div>
 

@@ -31,7 +31,6 @@ def google_auth(request: GoogleAuthRequest, db: Session = Depends(get_db)):
     return create_or_update_user_from_google(code=request.code, db=db)
 
 
-
 @router.get("/permission")
 def request_permission_access(current_user: User = Depends(get_current_user)):
     """Request both email and sheets permissions"""
@@ -66,6 +65,7 @@ def grant_permission(
         "user": serialize_user(current_user)
     }
 
+
 @router.post("/logout")
 def logout(current_user: User = Depends(get_current_user)):
     """
@@ -76,7 +76,6 @@ def logout(current_user: User = Depends(get_current_user)):
         "message": "Logged out successfully",
         "status": "success"
     }
-
 
 
 @router.post("/refresh")
