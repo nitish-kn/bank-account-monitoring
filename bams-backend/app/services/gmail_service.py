@@ -284,9 +284,8 @@ def verify_gmail_access(user: User, db=None) -> dict:
     has_access = GMAIL_READ_SCOPE in scopes
     return {"gmail_read_access": has_access, "scopes": scopes}
 
-
 # Function to fetch emails for returning users
-async def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) -> dict:
+def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) -> dict:
     """Fetch the user's most recent Gmail emails from tracked sender domains."""
     
     creds = build_credentials(user)
@@ -314,9 +313,8 @@ async def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_L
 
     return {"emails": parsed_emails}
 
-
 # Function used for setup of 30 day mail sync
-async def iter_user_email_pages(
+def iter_user_email_pages(
     user: User,
     days: int = GMAIL_BACKFILL_DAYS,
     start_date: datetime | None = None,

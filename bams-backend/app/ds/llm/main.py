@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from typing import List
 
-from schemas.email_schema import EmailPayload
-from services.extractor import extract_transactions
+from .schemas.email_schema import EmailPayload
+from .services.extractor import extract_transactions
 
 app = FastAPI()
 

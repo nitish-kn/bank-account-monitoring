@@ -1,4 +1,4 @@
-from services.html_cleaner import clean_email_body
+from ..services.html_cleaner import clean_email_body
 
 
 def prepare_emails(emails):

@@ -1,15 +1,15 @@
 import json
 
-from services.html_cleaner import clean_email_body
-from services.prompt_builder import build_batch_prompt
-from services.llm_client import call_llm
+from .html_cleaner import clean_email_body
+from .prompt_builder import build_batch_prompt
+from .llm_client import call_llm
 
-from utils.hashing import generate_hash
-from utils.datetime_utils import get_current_timestamp
+from ..utils.hashing import generate_hash
+from ..utils.datetime_utils import get_current_timestamp
 
-from schemas.transaction_schema import Transaction
+from ..schemas.transaction_schema import Transaction
 
-from config import (
+from ..config import (
     PARSER_NAME,
     PARSER_VERSION
 )

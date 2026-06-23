@@ -60,14 +60,15 @@ export const useEmailStore = create((set, get) => ({
 
     try {
       const response = await api.get("/setup/emails");
+      const syncedTransactions = response?.data?.transactions || response?.data?.emails || [];
 
       set({
-        syncedEmails: response?.data?.emails || [],
+        syncedEmails: syncedTransactions,
         hasFetchedSyncedEmails: true,
         syncedEmailsOwnerKey: ownerKey,
         loadingSynced: false,
       });
-      return response?.data?.emails || [];
+      return syncedTransactions;
     } catch (err) {
       console.error("Failed to fetch synced emails:", err);
       const errMsg = err.response?.data?.detail || err.message || "Failed to fetch synced emails";

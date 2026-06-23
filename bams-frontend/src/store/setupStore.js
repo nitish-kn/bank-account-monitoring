@@ -7,8 +7,8 @@ import { useEmailStore } from "./emailStore";
 const SYNC_STATUS_RUNNING = "running";
 const SYNC_STATUS_COMPLETED = "completed";
 const SYNC_STATUS_FAILED = "failed";
-const SYNC_POLL_INTERVAL_MS = 5000;
-const DASHBOARD_REFRESH_INTERVAL_MS = 15000;
+const SYNC_POLL_INTERVAL_MS = 15000;
+const DASHBOARD_REFRESH_INTERVAL_MS = 30000;
 
 export const useSetupStore = create((set, get) => ({
   // States
@@ -66,6 +66,8 @@ export const useSetupStore = create((set, get) => ({
       set({ abortController });
 
       const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+      
+      // Start SSE from here
       await fetchEventSource(`${baseUrl}/setup/stream`, {
         method: "GET",
         headers: {
@@ -73,6 +75,7 @@ export const useSetupStore = create((set, get) => ({
           Accept: "text/event-stream",
         },
         signal: abortController.signal,
+        
         async onopen(response) {
           if (response.status === 401) {
             const expiredToken = useAuthStore.getState().accessToken;
@@ -255,6 +258,7 @@ export const useSetupStore = create((set, get) => ({
     set({ syncPollIntervalId: null });
   },
 
+  // Get the status of the sync setup of new user for first time login, if the syncing is ongoing or complete 
   fetchSyncStatus: async () => {
     try {
       const response = await api.get("/setup/sync-status");
@@ -291,14 +295,20 @@ export const useSetupStore = create((set, get) => ({
       }
 
       const now = Date.now();
+      
+      // It checks when was last time the dashboard was refreshed, if the time is more that interval window, it'll run again
       if (isRunning && now - get().lastDashboardRefreshAt > DASHBOARD_REFRESH_INTERVAL_MS) {
         set({ lastDashboardRefreshAt: now });
+
+        // Call the email refresh
         useEmailStore.getState().fetchSyncedEmails({ force: true });
       }
 
       if (isCompleted || isFailed) {
         get().stopSyncStatusPolling();
         if (isCompleted) {
+
+          // Call the email refresh
           useEmailStore.getState().fetchSyncedEmails({ force: true });
         }
       }
@@ -310,10 +320,13 @@ export const useSetupStore = create((set, get) => ({
     }
   },
 
+  // Polling to check the status of the syncing for new user or first time login
+  // The main call for fetchSyncStatus function happens here, 
   startSyncStatusPolling: () => {
     if (get().syncPollIntervalId) {
       return;
     }
+
 
     const intervalId = window.setInterval(() => {
       get().fetchSyncStatus();

@@ -19,14 +19,24 @@ def _get_sheet_title(sheets_service: Any, spreadsheet_id: str) -> str:
 
 def _read_existing_email_ids(sheets_service: Any, spreadsheet_id: str, sheet_title: str) -> set[str]:
     """ Fetches column A (skipping the header) to extract historical email IDs. This prevents duplicate entries. """
+    return _read_existing_column_values(sheets_service, spreadsheet_id, sheet_title, "A")
+
+
+def _read_existing_column_values(
+    sheets_service: Any,
+    spreadsheet_id: str,
+    sheet_title: str,
+    column: str,
+) -> set[str]:
+    """Fetch a single sheet column, skipping the header row."""
     try:
         result = sheets_service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
-            range=f"'{sheet_title}'!A2:A",
+            range=f"'{sheet_title}'!{column}2:{column}",
         ).execute()
         return {row[0] for row in result.get("values", []) if row}
     except Exception as error:
-        print(f"Failed to read existing sheet email ids: {error}")
+        print(f"Failed to read existing sheet column {column}: {error}")
         return set()
     
 

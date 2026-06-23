@@ -10,7 +10,11 @@ from ..services.setup_service import setup_process_with_progress, perform_increm
 from ..database import get_db
 from ..services.setup_service import build_credentials
 from ..utils.date_utils import datetime_to_iso
-from ..utils.email_utils import email_timestamp, parse_sheet_email_row
+from ..utils.transaction_utils import (
+    TRANSACTION_DATA_RANGE,
+    parse_sheet_transaction_row,
+    transaction_timestamp,
+)
 from googleapiclient.discovery import build
 from ..utils.sheets_utils import _get_sheet_title
 
@@ -90,35 +94,35 @@ def get_synced_emails(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Retrieve all parsed emails directly from the user's Google Sheet."""
+    """Retrieve parsed transactions directly from the user's Google Sheet."""
     
     
     if not current_user.is_setup_completed or not current_user.spreadsheet_id:
-        return {"emails": []}
+        return {"transactions": []}
     
     credentials = build_credentials(current_user)
     sheets_service = build("sheets", "v4", credentials=credentials)
     
     try:
         sheet_title = _get_sheet_title(sheets_service, current_user.spreadsheet_id)
-        # Read the values from A2 to F (all rows except header)
+        # Read all transaction-schema rows except the header.
         result = sheets_service.spreadsheets().values().get(
             spreadsheetId=current_user.spreadsheet_id,
-            range=f"'{sheet_title}'!A2:F"
+            range=f"'{sheet_title}'!{TRANSACTION_DATA_RANGE}"
         ).execute()
         
         rows = result.get("values", [])
         
-        emails = []
+        transactions = []
         for row in rows:
-            email = parse_sheet_email_row(row)
-            if email:
-                emails.append(email)
+            transaction = parse_sheet_transaction_row(row)
+            if transaction:
+                transactions.append(transaction)
 
-        emails.sort(key=email_timestamp, reverse=True)
-        return {"emails": emails}
+        transactions.sort(key=transaction_timestamp, reverse=True)
+        return {"transactions": transactions}
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to read synced emails from Google Sheets: {str(e)}"
+            detail=f"Failed to read synced transactions from Google Sheets: {str(e)}"
         )

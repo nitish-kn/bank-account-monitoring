@@ -3,7 +3,7 @@ import DataCard from "../components/ui/DataCard";
 import ChartCard from "../components/charts/ChartCard";
 import { Flex } from "@radix-ui/themes";
 import { sampleMails } from "../assets/sample-mails";
-import { ArrowDown, ArrowUp, TrendingUp, ReceiptText, TrendingUpDown, TrendingDown, Calendar, ChevronDown, Filter, MailPlus, UserPlus, } from "lucide-react";
+import { ArrowDown, ArrowUp, TrendingUp, ReceiptText, TrendingUpDown, TrendingDown, Calendar, ChevronDown, Filter, MailPlus, UserPlus, Loader2 } from "lucide-react";
 import { calculateTransactionSummary, filterTransactionsByDateRange, filterTransactions, formatTransactionDateRangeLabel, getDailyNetCashFlowTrend, getTopCategoryTotals, getTopTransactions, getTransactionFilterOptions, getTransactionTypeCountData, getTransactionsByModeData, hasActiveTransactionFilters, maxCreditAmount, maxDebitAmount, } from "../lib/transactional-helper";
 import { formatCompactINR } from "../lib/helper";
 import CustomButton from "../components/ui/CustomButton";
@@ -18,16 +18,22 @@ import TopItemList from "../components/ui/TopItemList";
 import { useDashboardFilterStore } from "../store/dashboardfilterStore";
 import SendInviteDialog from "../components/ui/SendInviteDialog";
 import CheckInviteDialog from "../components/ui/CheckInviteDialog";
+import { useEmailStore } from "../store/emailStore";
 
 const NewPage = () => {
-  const [data] = useState(sampleMails);
   const [openFilter, setOpenFilter] = useState(false);
   const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
   const [cashFlowPeriod, setCashFlowPeriod] = useState("daily");
   const dateRangePopoverRef = useRef(null);
   const { filters: appliedFilters, dateRange, applyFilters, resetFilters, setDateRange, } = useDashboardFilterStore();
+  const { syncedEmails, fetchSyncedEmails, loadingSynced } = useEmailStore();
+  console.log(syncedEmails);
+  
+  useEffect(() => {
+    fetchSyncedEmails();
+  }, [fetchSyncedEmails]);
 
-  const records = data?.records || [];
+  const records = syncedEmails || [];
   const maxSelectableDate = useMemo(() => new Date(), []);
   const dateRangeLabel = useMemo(() => formatTransactionDateRangeLabel(dateRange), [dateRange]);
 
@@ -121,7 +127,12 @@ const NewPage = () => {
   }, [openDateRangeFilter]);
 
   return (
-    <main className="flex overflow-y-auto flex-col gap-3 md:gap-4">
+    <main className="flex overflow-y-auto flex-col gap-3 md:gap-4 relative">
+      {loadingSynced && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm rounded-xl">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </div>
+      )}
 
       {/* Dashboard Header */}
       <Flex direction={{initial:"column", sm: "row"}} align={{initial: "start", sm:"center"}}  position="relative" className="bg-white gap-4 p-4 rounded-xl shadow-md">

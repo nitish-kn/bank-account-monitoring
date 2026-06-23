@@ -15,7 +15,7 @@ const Headers = ({ name, picture, isSyncing, lastSyncAt, syncDashboard, setShowM
 
   const btntext = pageTitle === "Dashboard" ? "Sync your data" : "Refresh data";
   
-    useEffect(() => {
+  useEffect(() => {
     if (!showSyncTime) return undefined;
 
     const handleOutsideClick = (event) => {

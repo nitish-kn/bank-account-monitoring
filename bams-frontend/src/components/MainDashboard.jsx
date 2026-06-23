@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Spinner, Table } from "@radix-ui/themes";
+import { Badge, Button, Spinner } from "@radix-ui/themes";
 import { useEmailStore } from "../store/emailStore";
-import { FileSpreadsheet, MailPlus, RotateCcw, TriangleAlert } from "lucide-react";
+import { FileSpreadsheet, TriangleAlert } from "lucide-react";
 import CustomTable from "./ui/CustomTable";
-import { cleanText, getStatusColor } from "../lib/helper";
+import { cleanText, formatAmount, getStatusColor } from "../lib/helper";
 import { EmptyMails } from "../utils/EmptyStates";
 import Pagination from "./Pagination";
 
@@ -11,7 +11,6 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
   const { syncedEmails, loadingSynced: loadingEmails, syncedError, } = useEmailStore();
   const [emailPage, setEmailPage] = useState(1);
   const [emailPageSize, setEmailPageSize] = useState(10);
-  console.log(syncedEmails)
   const totalEmailPages = Math.max(Math.ceil((syncedEmails?.length || 0) / emailPageSize), 1);
 
   useEffect(() => {
@@ -25,40 +24,47 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
 
   const emailColumns = [
     {
-      key: "subject",
-      header: "Subject",
-      // width: "w-[20%]",
-      render: (email, idx) => (
+      key: "txn_date",
+      header: "Date",
+      cellClassName: "whitespace-nowrap",
+      render: (transaction) => (
+        <p className="text-xs text-gray-700">
+          {transaction?.txn_date || "-"}
+        </p>
+      ),
+    },
+    {
+      key: "bank_name",
+      header: "Bank / Account",
+      render: (transaction) => (
         <div className="min-w-0 ">
           <p
             className="truncate text-sm max-w-80 text-black"
-            title={email?.subject}
+            title={transaction?.bank_name}
           >
-            {email?.subject || "Untitled alert"}
+            {transaction?.bank_name || "Unknown bank"}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-gray-500" title={transaction?.account_number}>
+            {transaction?.account_number || "-"}
           </p>
         </div>
       ),
     },
     {
-      key: "date",
-      header: "Date",
-      // width: "w-[16%]",
+      key: "txn_type",
+      header: "Type / Status",
       cellClassName: "whitespace-nowrap",
-      render: (email) => (
-        <p className="text-xs text-gray-700">
-          {email?.date || "-"}
-        </p>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      // width: "w-[14%]",
-      cellClassName: "whitespace-nowrap",
-      render: (email) => {
-        const status = email.status?.toLowerCase();
-
-        const statusColor = getStatusColor(status);
+      render: (transaction) => {
+        const transactionType = transaction?.txn_type?.toLowerCase();
+        const status = transaction?.parser_metadata?.parsed_status?.toLowerCase();
+        const statusColor = status === "not_transaction"
+          ? "gray"
+          : transactionType === "debit"
+            ? "red"
+            : transactionType === "credit"
+              ? "green"
+              : getStatusColor(status);
+        const label = transaction?.txn_type || transaction?.parser_metadata?.parsed_status || "Parsed";
 
         return (
           <Badge
@@ -67,42 +73,56 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
             radius="full"
             className="font-semibold capitalize"
           >
-            {email.status || "Synced"}
+            {label}
           </Badge>
         );
       },
     },
     {
-      key: "snippet",
-      header: "Parsed Content",
-      // width: "w-[38%]",
-      cellClassName: "max-w-[380px]",
-      render: (email) => {
-        const snippet = cleanText(email?.snippet);
+      key: "amount",
+      header: "Amount",
+      cellClassName: "whitespace-nowrap",
+      render: (transaction) => {
+        const amount = transaction?.amount || transaction?.inr_equivalent;
+        const currency = transaction?.currency || "INR";
 
         return (
-          <p
-            className="max-w-105 truncate text-sm leading-6 text-gray-800"
-            title={snippet}
-          >
-            {snippet || "No parsed content available"}
+          <p className="text-sm font-semibold text-gray-900">
+            {amount ? `${currency} ${formatAmount(amount)}` : "-"}
           </p>
         );
       },
     },
     {
-      key: "body",
-      header: "Email Body",
+      key: "counterparty",
+      header: "Counterparty",
+      cellClassName: "max-w-[280px]",
+      render: (transaction) => {
+        const counterparty = cleanText(transaction?.counterparty);
+
+        return (
+          <p
+            className="max-w-72 truncate text-sm leading-6 text-gray-800"
+            title={counterparty}
+          >
+            {counterparty || "-"}
+          </p>
+        );
+      },
+    },
+    {
+      key: "narration",
+      header: "Narration",
       cellClassName: "max-w-[420px]",
-      render: (email) => {
-        const body = cleanText(email?.body);
+      render: (transaction) => {
+        const narration = cleanText(transaction?.narration || transaction?.raw_data?.subject);
 
         return (
           <p
             className="max-w-120 truncate text-sm leading-6 text-gray-800"
-            title={body}
+            title={narration}
           >
-            {body || "No body available"}
+            {narration || "No narration available"}
           </p>
         );
       },
@@ -118,7 +138,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
           <div>
             <div className="flex items-start gap-4">
               <p className="text-2xl font-bold text-black text-shadow-xs">
-                Synced Alert Inbox
+                Synced Transactions
               </p>
 
               {/* {!loadingEmails && !syncedError && syncedEmails.length > 0 && (
@@ -129,7 +149,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
             </div>
 
             <p className="mt-1 text-xs font-medium text-gray-500 text-shadow-xs">
-              Real-time parsed alerts fetched from your connected sheet
+              Parsed transaction records fetched from your connected sheet
             </p>
           </div>
 
@@ -203,10 +223,10 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
               {loadingEmails ? (
                 <div className="text-center">
                   <p className="text-sm font-semibold text-gray-700">
-                    Loading new emails
+                    Loading transactions
                   </p>
                   <p className="mt-1 text-xs font-medium text-gray-400">
-                    Please wait while we fetch latest emails from your sheets...
+                    Please wait while we fetch latest transactions from your sheet...
                   </p>
                 </div>
               ) : (
@@ -225,7 +245,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
 
               <div className="text-center">
                 <p className="text-sm font-bold text-red-700">
-                  Unable to load synced emails
+                  Unable to load synced transactions
                 </p>
                 <p className="mt-1 text-xs font-medium text-red-500">
                   Please check Google Sheets permissions and try again.
@@ -239,7 +259,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
           ) : syncedEmails.length === 0 ? (
               
             // No error but, no emails to show
-            <EmptyMails heading="No synced mails found" description="Once the required emails are synced, they will appear here." />
+            <EmptyMails heading="No synced transactions found" description="Once transactions are parsed, they will appear here." />
           ) : (
             
             // The main table to show the parsed data
@@ -248,15 +268,15 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
                 columns={emailColumns}
                 data={paginatedEmails}
                 minWidth="900px"
-                getRowKey={(email, idx) => email.id || email.message_id || email.subject || idx}
-                emptyMessage="No synced emails found"
+                getRowKey={(transaction, idx) => transaction.id || transaction.gmail_message_id || transaction.ref_number || idx}
+                emptyMessage="No synced transactions found"
               />
 
               <Pagination
                 currentPage={emailPage}
                 totalItems={syncedEmails.length}
                 pageSize={emailPageSize}
-                itemLabel="alerts"
+                itemLabel="transactions"
                 onPageChange={setEmailPage}
                 onPageSizeChange={(nextPageSize) => {
                   setEmailPageSize(nextPageSize);
