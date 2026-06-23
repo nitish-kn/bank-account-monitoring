@@ -4,8 +4,6 @@ import json
 def build_batch_prompt(emails):
 
     schema = {
-        "id": None,
-        "gmail_message_id": None,
         "bank_name": None,
         "account_holder_name": None,
         "account_number": None,
@@ -46,10 +44,7 @@ def build_batch_prompt(emails):
             "confidence_score": None,
             "missing_optional_fields": []
         },
-        "raw_data": {
-            "subject": None,
-            "body": None
-        }
+        "raw_data": {}
     }
 
     return f"""
@@ -68,7 +63,6 @@ Your job is to:
 7. Return ONLY a JSON array.
 8. Do NOT return markdown.
 9. Do NOT return explanations.
-10. Preserve the input email id in the output id field.
 
 SPECIAL RULES:
 
@@ -118,17 +112,13 @@ Examples:
 
 Never return numeric values.
 
-5. id and gmail_message_id:
-
-Must always be strings.
-
-6. txn_type:
+5. txn_type:
 
 Use only:
 "Credit"
 "Debit"
 
-7. currency:
+6. currency:
 
 Use ISO codes:
 "INR"
@@ -150,15 +140,4 @@ Output Schema:
 Emails:
 
 {json.dumps(emails, indent=2, ensure_ascii=False)}
-
-Return format:
-
-[
-  {{
-    "id": "...",
-    "gmail_message_id": "...",
-    "bank_name": "...",
-    ...
-  }}
-]
 """

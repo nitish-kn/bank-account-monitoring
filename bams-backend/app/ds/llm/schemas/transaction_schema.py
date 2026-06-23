@@ -20,12 +20,9 @@ class EmailMetadata(BaseModel):
 
 
 
-
-
 class RawData(BaseModel):
     subject: Optional[str] = None
     body: Optional[str] = None
-
 
 
 class ParserMetadata(BaseModel):
@@ -59,13 +56,13 @@ class Transaction(BaseModel):
 
     category: Optional[str] = None
 
-    amount: Optional[float] = None
+    amount: Optional[str] = None
 
     currency: Optional[str] = None
 
     original_currency: Optional[str] = None
 
-    inr_equivalent: Optional[float] = None
+    inr_equivalent: Optional[str] = None
 
     txn_date: Optional[str] = None
 

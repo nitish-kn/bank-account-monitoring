@@ -1,7 +1,8 @@
 import asyncio
 from datetime import timedelta
 from threading import Thread
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 from fastapi import HTTPException
 from googleapiclient.discovery import build
@@ -270,30 +271,94 @@ def start_background_sync_for_user(user: User, db: Session) -> dict:
         **_sync_metadata_payload(user),
     }
 
+MAX_WORKERS = 3
+
+# def _batch_extract_transactions(emails: list[dict]) -> list[dict]:
+#     def safe_extract(batch_index, batch):
+#         try:
+#             print(f"Batch {batch_index} started")
+#             print("Batch IDs:", [email.get("id") for email in batch])
+
+#             result = extract_transactions(batch)
+
+#             if result is None:
+#                 print(f"Batch {batch_index} returned None")
+#                 return []
+
+#             if not isinstance(result, list):
+#                 print(f"Batch {batch_index} returned non-list:", type(result), result)
+#                 return []
+
+#             print(f"Batch {batch_index} success, transactions:", len(result))
+#             return result
+
+#         except Exception as e:
+#             print(f"Batch {batch_index} extraction failed: {e}")
+#             print("Failed batch IDs:", [email.get("id") for email in batch])
+#             return []
+
+#     batches = [emails[i:i + BATCH_SIZE] for i in range(0, len(emails), BATCH_SIZE)]
+
+#     if not batches:
+#         return []
+
+#     extracted_transactions = []
+
+#     with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(batches))) as executor:
+#         futures = [
+#             executor.submit(safe_extract, index + 1, batch)
+#             for index, batch in enumerate(batches)
+#         ]
+
+#         for future in as_completed(futures):
+#             batch_result = future.result()
+#             extracted_transactions.extend(batch_result)
+
+#     return extracted_transactions
+
+
+
+BATCH_SIZE = 10
+
 def _batch_extract_transactions(emails: list[dict]) -> list[dict]:
-    """Process emails in batches of 5 using the LLM extraction function in parallel."""
-    
-    def safe_extract(batch):
+    def safe_extract(batch_index, batch):
         try:
-            return extract_transactions(batch)
+            print(f"Batch {batch_index} started")
+            print("Batch IDs:", [email.get("id") for email in batch])
+
+            result = extract_transactions(batch)
+
+            if result is None:
+                print(f"Batch {batch_index} returned None")
+                return []
+
+            if not isinstance(result, list):
+                print(f"Batch {batch_index} returned non-list:", type(result), result)
+                return []
+
+            print(f"Batch {batch_index} success, transactions:", len(result))
+            return result
+
         except Exception as e:
-            print(f"Batch extraction failed: {e}")
+            print(f"Batch {batch_index} extraction failed: {e}")
+            print("Failed batch IDs:", [email.get("id") for email in batch])
             return []
 
-    extracted_transactions = []
-    batches = [emails[i:i + 5] for i in range(0, len(emails), 5)]
-    
-    print("batched mails -", batches[0] ,"\n")
+    batches = [emails[i:i + BATCH_SIZE] for i in range(0, len(emails), BATCH_SIZE)]
+
     if not batches:
         return []
 
-    with ThreadPoolExecutor(max_workers=min(10, len(batches))) as executor:
-        results = list(executor.map(safe_extract, batches[0]))
-        
-    for batch_result in results:
-        if batch_result:
-            extracted_transactions.extend(batch_result)
-            
+    extracted_transactions = []
+
+    for index, batch in enumerate(batches):
+        batch_result = safe_extract(index + 1, batch)
+        extracted_transactions.extend(batch_result)
+
+        if index < len(batches) - 1:
+            print("Waiting 60 seconds before next batch...")
+            time.sleep(60)
+
     return extracted_transactions
 
 # Incremental Sync Workflow - 2.1

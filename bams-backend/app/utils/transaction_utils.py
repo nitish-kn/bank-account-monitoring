@@ -10,7 +10,7 @@ TRANSACTION_SCHEMA = list(Transaction.model_fields.keys())
 GMAIL_MESSAGE_ID_FIELD = "gmail_message_id"
 GMAIL_MESSAGE_ID_COLUMN = "B"
 JSON_TRANSACTION_FIELDS = {"email_metadata", "parser_metadata", "raw_data"}
-
+VALID_TRANSACTION_TYPES = {"Debit", "Credit", "credit", "debit"}
 
 def _column_name(column_number: int) -> str:
     name = ""
@@ -41,6 +41,11 @@ def transactions_to_sheet_rows(transactions: list[dict]) -> list[list[str]]:
     for transaction in transactions:
         if hasattr(transaction, "model_dump"):
             transaction = transaction.model_dump()
+
+        transaction_type = transaction.get("transaction_type")
+
+        if not transaction_type or transaction_type.lower() not in VALID_TRANSACTION_TYPES:
+            continue
 
         rows.append([
             _serialize_sheet_value(transaction.get(column))
