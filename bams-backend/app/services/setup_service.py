@@ -8,13 +8,14 @@ from fastapi import HTTPException
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
+from typing import Generator
 
 from ..database import SessionLocal
 from ..models.user import User
 from ..utils.date_utils import datetime_to_iso, utc_now
 from ..utils.email_utils import latest_email_datetime
 from .credentials import build_credentials
-from .gmail_service import DEFAULT_EMAIL_FETCH_LIMIT, fetch_user_emails, iter_user_email_pages
+from .gmail_service import DEFAULT_EMAIL_FETCH_LIMIT, fetch_user_emails, iter_user_email_pages, get_latest_gmail_message_id
 
 
 from ..utils.sheets_utils import _read_existing_column_values, _get_sheet_title, _append_sheet_rows
@@ -85,7 +86,8 @@ def _mark_sync_failed(user: User, db: Session) -> None:
         db.refresh(user)
     except Exception as error:
         db.rollback()
-        print(f"Failed to update sync failure metadata: {error}")
+        safe_error = str(error).encode('ascii', 'replace').decode('ascii')
+        print(f"Failed to update sync failure metadata: {safe_error}")
 
 
 
@@ -194,7 +196,11 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
         )
 
         # Pulls batches of full emails from Gmail API
-        for emails in iter_user_email_pages(user):
+        start_date = None
+        if user.last_synced_email_date:
+            start_date = user.last_synced_email_date - timedelta(days=1)
+
+        for emails in iter_user_email_pages(user, start_date=start_date):
             _update_latest_synced_email_date(user, emails)
             new_emails = [
                 email
@@ -207,25 +213,30 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                 db.commit()
                 continue
             
-            print("Emsils from Gmail Api - ", new_emails, "\n")
-            extracted_txns = _batch_extract_transactions(new_emails)
-            print("Extracted txn - ", extracted_txns, "\n" )
-            CACHED_EMAILS = extracted_txns
+            print("Emails from Gmail Api - count:", len(new_emails), "\n")
+            CACHED_EMAILS = []
+            for batch_txns in _batch_extract_transactions(new_emails):
+                if not batch_txns:
+                    continue
+                print("Extracted batch txn - count:", len(batch_txns), "\n" )
 
-            rows = parse_emails_for_sheet(extracted_txns)
-            _append_sheet_rows(sheets_service, user.spreadsheet_id, sheet_title, rows)
-            existing_gmail_message_ids.update(
-                transaction.get("gmail_message_id")
-                for transaction in extracted_txns
-                if transaction.get("gmail_message_id")
-            )
+                rows = parse_emails_for_sheet(batch_txns)
+                _append_sheet_rows(sheets_service, user.spreadsheet_id, sheet_title, rows)
+                
+                CACHED_EMAILS.extend(batch_txns)
+                existing_gmail_message_ids.update(
+                    transaction.get("gmail_message_id")
+                    for transaction in batch_txns
+                    if transaction.get("gmail_message_id")
+                )
 
-            db.add(user)
-            db.commit()
+                db.add(user)
+                db.commit()
 
         _mark_sync_success(user, db)
     except Exception as error:
-        print(f"Background sync failed for user {user_id}: {error}")
+        safe_error = str(error).encode('ascii', 'replace').decode('ascii')
+        print(f"Background sync failed for user {user_id}: {safe_error}")
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             _mark_sync_failed(user, db)
@@ -320,7 +331,7 @@ MAX_WORKERS = 3
 
 BATCH_SIZE = 10
 
-def _batch_extract_transactions(emails: list[dict]) -> list[dict]:
+def _batch_extract_transactions(emails: list[dict]) -> Generator[list[dict], None, None]:
     def safe_extract(batch_index, batch):
         try:
             print(f"Batch {batch_index} started")
@@ -340,26 +351,23 @@ def _batch_extract_transactions(emails: list[dict]) -> list[dict]:
             return result
 
         except Exception as e:
-            print(f"Batch {batch_index} extraction failed: {e}")
+            safe_e = str(e).encode('ascii', 'replace').decode('ascii')
+            print(f"Batch {batch_index} extraction failed: {safe_e}")
             print("Failed batch IDs:", [email.get("id") for email in batch])
             return []
 
     batches = [emails[i:i + BATCH_SIZE] for i in range(0, len(emails), BATCH_SIZE)]
 
     if not batches:
-        return []
-
-    extracted_transactions = []
+        return
 
     for index, batch in enumerate(batches):
         batch_result = safe_extract(index + 1, batch)
-        extracted_transactions.extend(batch_result)
+        yield batch_result
 
         if index < len(batches) - 1:
             print("Waiting 60 seconds before next batch...")
             time.sleep(60)
-
-    return extracted_transactions
 
 # Incremental Sync Workflow - 2.1
 def parse_emails_for_sheet(transactions: list[dict]) -> list[list[str]]:
@@ -513,76 +521,41 @@ def perform_incremental_sync(user: User, db: Session):
             **_sync_metadata_payload(user),
         }
 
-    user.sync_status = SYNC_STATUS_RUNNING
-    user.last_synced_status = SYNC_STATUS_RUNNING
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
+    # Fetch the single latest email ID from Gmail and check if it's already in the sheet.
     try:
         credentials = build_credentials(user)
         sheets_service = build("sheets", "v4", credentials=credentials)
         sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
-        existing_gmail_message_ids = _read_existing_column_values(
-            sheets_service,
-            user.spreadsheet_id,
-            sheet_title,
-            GMAIL_MESSAGE_ID_COLUMN,
-        )
-
-        fetched_emails: list[dict] = []
-        new_emails: list[dict] = []
-
-        if user.last_synced_email_date:
-            # Gmail date search is day-granular. Step one day back and dedupe by Email ID.
-            start_date = user.last_synced_email_date - timedelta(days=1)
-            email_pages = iter_user_email_pages(user, start_date=start_date)
-            for emails in email_pages:
-                fetched_emails.extend(emails)
-                new_emails.extend(
-                    email
-                    for email in emails
-                    if email.get("id") and email.get("id") not in existing_gmail_message_ids
-                )
-        else:
-            fetch_result = fetch_user_emails(user, max_results=DEFAULT_EMAIL_FETCH_LIMIT)
-            fetched_emails = fetch_result.get("emails", [])
-            new_emails = [
-                email
-                for email in fetched_emails
-                if email.get("id") and email.get("id") not in existing_gmail_message_ids
-            ]
-
-        if not new_emails:
-            sync_metadata = _mark_sync_success(user, db, fetched_emails)
-            return {
-                "status": "success",
-                "sync_status": SYNC_STATUS_COMPLETED,
-                "new_rows": 0,
-                "message": "Dashboard is already up to date.",
-                **sync_metadata,
-            }
-
-        extracted_txns = _batch_extract_transactions(new_emails)
-        global CACHED_EMAILS
-        CACHED_EMAILS = extracted_txns
         
-        rows = parse_emails_for_sheet(extracted_txns)
-        sync_result = _append_sheet_rows(sheets_service, user.spreadsheet_id, sheet_title, rows)
-        sync_metadata = _mark_sync_success(user, db, fetched_emails or new_emails)
+        # Fetch the latest email ID from Gmail
+        latest_gmail_id = get_latest_gmail_message_id(user)
+        if latest_gmail_id:
+            # Check if this ID is already in the sheet
+            existing_gmail_message_ids = _read_existing_column_values(
+                sheets_service,
+                user.spreadsheet_id,
+                sheet_title,
+                GMAIL_MESSAGE_ID_COLUMN,
+            )
+            if latest_gmail_id in existing_gmail_message_ids:
+                # Up to date!
+                # Mark as success to clear running statuses if any
+                sync_metadata = _mark_sync_success(user, db)
+                return {
+                    "status": "success",
+                    "sync_status": SYNC_STATUS_COMPLETED,
+                    "new_rows": 0,
+                    "message": "Dashboard is already up to date.",
+                    **sync_metadata,
+                }
+    except Exception as e:
+        # If check fails for some API/credentials reasons, fallback to background sync
+        safe_error = str(e).encode('ascii', 'replace').decode('ascii')
+        print(f"Latest email check failed, falling back to full sync: {safe_error}")
 
-        return {
-            "status": "success",
-            "sync_status": SYNC_STATUS_COMPLETED,
-            "new_rows": sync_result.get("rows_written", 0),
-            "message": f"Successfully synced {sync_result.get('rows_written', 0)} new emails.",
-            **sync_metadata,
-        }
-    except Exception:
-        _mark_sync_failed(user, db)
-        raise
+    return start_background_sync_for_user(user, db)
 
-        
+
 def get_cached_emails() -> list[dict]:
     """Return the last fetched email payloads."""
     return CACHED_EMAILS

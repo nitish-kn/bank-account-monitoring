@@ -28,6 +28,9 @@ TRACKED_EMAIL_DOMAINS = [
     "github.com",
     "flodataanalytics.com",
     "axis.bank.in",
+    "hdfcbank.bank.in",
+    "indusind.com",
+    "kotak.bank.in"   
 ]
 
 
@@ -362,3 +365,26 @@ def iter_user_email_pages(
             break
 
         time.sleep(PAGE_THROTTLE_SECONDS)
+
+
+def get_latest_gmail_message_id(user: User) -> str | None:
+    """Fetch only the single most recent message ID from Gmail for tracked domains."""
+    creds = build_credentials(user)
+    active_token = creds.token
+    if not active_token:
+        return None
+    if not _tracked_domains():
+        return None
+
+    headers = {"Authorization": f"Bearer {active_token}"}
+    params = {"maxResults": 1, "q": _build_sender_query()}
+
+    response = _request_get_with_backoff(GMAIL_MESSAGES_URL, headers=headers, params=params, timeout=10)
+    if response.status_code != 200:
+        return None
+
+    messages = response.json().get("messages", [])
+    if not messages:
+        return None
+
+    return messages[0].get("id")

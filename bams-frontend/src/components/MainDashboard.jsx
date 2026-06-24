@@ -129,6 +129,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
     },
   ];
 
+  console.log(syncedEmails)
   return (
     <div className="w-full flex flex-col gap-2">
       {/* Synced Emails Table Section */}
@@ -213,32 +214,25 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
 
         {/* Content */}
         <div className="overflow-x-auto">
-          
+
           {/* Loading State */}
-          {loadingEmails || (isSyncing && syncedEmails.length === 0) ? (
+          {loadingEmails ? (
 
             <div className="flex w-full flex-col items-center justify-center gap-3 py-16">
               <Spinner size="3" />
 
-              {loadingEmails ? (
-                <div className="text-center">
-                  <p className="text-sm font-semibold text-gray-700">
-                    Loading transactions
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-gray-400">
-                    Please wait while we fetch latest transactions from your sheet...
-                  </p>
-                </div>
-              ) : (
-
-                <div className="text-sm font-semibold text-gray-700">
-                  {syncMessage || "Processing..."}
-                </div>
-              )}
+              <div className="text-center">
+                <p className="text-sm font-semibold text-gray-700">
+                  Loading transactions
+                </p>
+                <p className="mt-1 text-xs font-medium text-gray-400">
+                  Please wait while we fetch latest transactions from your sheet...
+                </p>
+              </div>
             </div>
 
           ) : syncedError ? (
-            
+
             // If an error occured while loading new mails
             <div className="m-4 rounded-xl border border-red-100 bg-red-50 p-6 flex flex-col items-center justify-center gap-4 overflow-hidden">
               <TriangleAlert className="text-red-600 shrink-0" size={64} />
@@ -257,11 +251,11 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
               </pre>
             </div>
           ) : syncedEmails.length === 0 ? (
-              
+
             // No error but, no emails to show
             <EmptyMails heading="No synced transactions found" description="Once transactions are parsed, they will appear here." />
           ) : (
-            
+
             // The main table to show the parsed data
             <>
               <CustomTable

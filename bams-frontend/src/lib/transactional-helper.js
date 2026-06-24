@@ -14,10 +14,41 @@ const normalizeSearchValue = (value = "") => normalizeValue(value).toLowerCase()
 const ALL_FILTER_VALUE = "all";
 const MODE_CHART_COLORS = ["#4f86f7", "#2f6fe4", "#22a6c7", "#f59e0b", "#1d9a57", "#6d4ee8", "#a3aab8"];
 
+const parseToISODate = (dateStr) => {
+  if (!dateStr) return "";
+  const normalized = String(dateStr).trim();
+  
+  const dmyRegex = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/;
+  const match = normalized.match(dmyRegex);
+  if (match) {
+    const [_, day, month, year] = match;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  
+  const ymdRegex = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/;
+  const ymdMatch = normalized.match(ymdRegex);
+  if (ymdMatch) {
+    const [_, year, month, day] = ymdMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  try {
+    const date = new Date(normalized);
+    if (!isNaN(date.getTime())) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  } catch (e) {}
+
+  return normalized.slice(0, 10);
+};
+
 const toDateOnlyValue = (dateValue) => {
   if (!dateValue) return "";
 
-  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  const date = dateValue instanceof Date ? dateValue : new Date(parseToISODate(dateValue));
   if (Number.isNaN(date.getTime())) return "";
 
   const year = date.getFullYear();
@@ -30,8 +61,9 @@ const toDateOnlyValue = (dateValue) => {
 const formatDateOnlyLabel = (dateValue, short = false) => {
   if (!dateValue) return "-";
 
-  const [year, month, day] = String(dateValue).split("-").map(Number);
-  const date = year && month && day ? new Date(year, month - 1, day) : new Date(dateValue);
+  const normalized = parseToISODate(dateValue);
+  const [year, month, day] = normalized.split("-").map(Number);
+  const date = year && month && day ? new Date(year, month - 1, day) : new Date(normalized);
 
   if (Number.isNaN(date.getTime())) return "-";
 
@@ -77,13 +109,23 @@ export const DEFAULT_TRANSACTION_FILTERS = {
   minAmount: "",
   maxAmount: "",
   currency: ALL_FILTER_VALUE,
+  accountHolderName: ALL_FILTER_VALUE,
+  accountType: ALL_FILTER_VALUE,
+};
+
+const getNestedValue = (obj, path) => {
+  if (!obj || !path) return undefined;
+  return path.split(".").reduce((acc, part) => acc?.[part], obj);
 };
 
 const toSelectOptions = (records = [], key, allLabel) => {
   const values = Array.from(
     new Set(
       records
-        .map((record) => normalizeValue(record?.[key]))
+        .map((record) => {
+          const val = key.includes(".") ? getNestedValue(record, key) : record?.[key];
+          return normalizeValue(val);
+        })
         .filter(Boolean),
     ),
   ).sort((a, b) => a.localeCompare(b));
@@ -95,14 +137,16 @@ const toSelectOptions = (records = [], key, allLabel) => {
 };
 
 export const getTransactionFilterOptions = (records = []) => ({
-  entities: toSelectOptions(records, "source_name", "All Entities"),
+  entities: toSelectOptions(records, "email_metadata.forwarded_by_name", "All Entities"),
   banks: toSelectOptions(records, "bank_name", "All Banks"),
   accounts: toSelectOptions(records, "account_number", "All Accounts"),
   transactionTypes: toSelectOptions(records, "txn_type", "All Types"),
   modes: toSelectOptions(records, "mode", "All Modes"),
   categories: toSelectOptions(records, "category", "All Categories"),
-  statuses: toSelectOptions(records, "parsed_status", "All Statuses"),
+  statuses: toSelectOptions(records, "parser_metadata.parsed_status", "All Statuses"),
   currencies: toSelectOptions(records, "currency", "All Currencies"),
+  accountHolderNames: toSelectOptions(records, "account_holder_name", "All Account Holders"),
+  accountTypes: toSelectOptions(records, "account_type", "All Account Types"),
 });
 
 const getActiveFilterValues = (filterValue) => {
@@ -140,13 +184,18 @@ export const filterTransactions = (records = [], filters = DEFAULT_TRANSACTION_F
 
     if (searchTerm) {
       const searchableText = [
-        record?.subject,
+        record?.raw_data?.subject,
+        record?.email_metadata?.original_subject,
+        record?.email_metadata?.receiver_subject,
         record?.ref_number,
         record?.counterparty,
         record?.narration,
         record?.category,
         record?.bank_name,
         record?.account_number,
+        record?.account_holder_name,
+        record?.account_type,
+        record?.vpa,
       ]
         .map(normalizeSearchValue)
         .join(" ");
@@ -154,14 +203,16 @@ export const filterTransactions = (records = [], filters = DEFAULT_TRANSACTION_F
       if (!searchableText.includes(searchTerm)) return false;
     }
 
-    if (!matchesSelectFilter(record?.source_name, normalizedFilters.entity)) return false;
+    if (!matchesSelectFilter(record?.email_metadata?.forwarded_by_name, normalizedFilters.entity)) return false;
     if (!matchesSelectFilter(record?.bank_name, normalizedFilters.bank)) return false;
     if (!matchesSelectFilter(record?.account_number, normalizedFilters.account)) return false;
     if (!matchesSelectFilter(record?.txn_type, normalizedFilters.txnType)) return false;
     if (!matchesSelectFilter(record?.mode, normalizedFilters.mode)) return false;
     if (!matchesSelectFilter(record?.category, normalizedFilters.category)) return false;
-    if (!matchesSelectFilter(record?.parsed_status, normalizedFilters.status)) return false;
+    if (!matchesSelectFilter(record?.parser_metadata?.parsed_status, normalizedFilters.status)) return false;
     if (!matchesSelectFilter(record?.currency, normalizedFilters.currency)) return false;
+    if (!matchesSelectFilter(record?.account_holder_name, normalizedFilters.accountHolderName)) return false;
+    if (!matchesSelectFilter(record?.account_type, normalizedFilters.accountType)) return false;
     if (hasMinAmount && amount < minAmount) return false;
     if (hasMaxAmount && amount > maxAmount) return false;
 
@@ -170,13 +221,13 @@ export const filterTransactions = (records = [], filters = DEFAULT_TRANSACTION_F
 };
 
 export const filterTransactionsByDateRange = (records = [], dateRange = {}) => {
-  const startDate = normalizeValue(dateRange.startDate);
-  const endDate = normalizeValue(dateRange.endDate);
+  const startDate = parseToISODate(dateRange.startDate);
+  const endDate = parseToISODate(dateRange.endDate);
 
   if (!startDate && !endDate) return records;
 
   return records.filter((record) => {
-    const transactionDate = normalizeValue(record?.txn_date).slice(0, 10);
+    const transactionDate = parseToISODate(record?.txn_date);
 
     if (!transactionDate) return false;
     if (startDate && transactionDate < startDate) return false;
@@ -339,7 +390,8 @@ const getTransactionDirectionAmount = (record) => {
 const parseDateOnly = (dateValue) => {
   if (!dateValue) return null;
 
-  const [year, month, day] = String(dateValue).slice(0, 10).split("-").map(Number);
+  const normalized = parseToISODate(dateValue);
+  const [year, month, day] = normalized.split("-").map(Number);
   if (!year || !month || !day) return null;
 
   return new Date(year, month - 1, day);
@@ -357,7 +409,7 @@ const getDateLabel = (dateValue) => {
 
 export const getDailyNetCashFlowTrend = (records = [], dateRange = {}) => {
   const netByDate = records.reduce((acc, record) => {
-    const date = normalizeValue(record?.txn_date).slice(0, 10);
+    const date = parseToISODate(record?.txn_date);
     if (!date) return acc;
 
     acc[date] = (acc[date] || 0) + getTransactionDirectionAmount(record);

@@ -42,6 +42,15 @@ const CustomAreaTrendChart = ({
   positiveColor = "#16a34a",
   negativeColor = "#ef4444",
 }) => {
+  const maxAbsValue = data.reduce((max, item) => {
+    const pos = Math.abs(Number(item[positiveKey]) || 0);
+    const neg = Math.abs(Number(item[negativeKey]) || 0);
+    return Math.max(max, pos, neg);
+  }, 1000);
+
+  const paddedMax = maxAbsValue * 1.1;
+  const yDomain = [-paddedMax, paddedMax];
+
   return (
     <div className="w-full" style={{ height, minWidth: 0, minHeight: 0 }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -56,7 +65,7 @@ const CustomAreaTrendChart = ({
               <stop offset="95%" stopColor={negativeColor} stopOpacity={0.03} />
             </linearGradient>
           </defs>
-
+ 
           <CartesianGrid stroke="#e5e7eb" vertical={false} strokeDasharray="3 3" />
           <ReferenceLine y={0} stroke="#9ca3af" strokeDasharray="4 4" />
           <XAxis
@@ -73,6 +82,7 @@ const CustomAreaTrendChart = ({
             tickFormatter={formatTrendAmount}
             tick={{ fill: "#4b5563", fontSize: 12 }}
             width={54}
+            domain={yDomain}
           />
           <Tooltip content={<TrendTooltip />} />
           <Area

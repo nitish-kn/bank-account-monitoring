@@ -123,6 +123,42 @@ const DashboardFilter = ({
           />
         </FilterField>
 
+        <FilterField label="Account Holder Name">
+          <CustomDropDown
+            value={draftFilters.accountHolderName}
+            options={filterOptions?.accountHolderNames}
+            placeholder={getAllOptionLabel(filterOptions?.accountHolderNames, "All Account Holders")}
+            onValueChange={(value) => updateFilter("accountHolderName", value)}
+            multiple
+            showSearch
+            searchPlaceholder="Search account holders..."
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
+          />
+        </FilterField>
+
+        <FilterField label="Account Type">
+          <CustomDropDown
+            value={draftFilters.accountType}
+            options={filterOptions?.accountTypes}
+            placeholder={getAllOptionLabel(filterOptions?.accountTypes, "All Account Types")}
+            onValueChange={(value) => updateFilter("accountType", value)}
+            multiple
+            showSearch
+            searchPlaceholder="Search account types..."
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
+          />
+        </FilterField>
+
         <FilterField label="Transaction Type">
           <CustomDropDown
             value={draftFilters.txnType}

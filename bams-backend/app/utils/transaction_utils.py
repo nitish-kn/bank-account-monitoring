@@ -42,7 +42,7 @@ def transactions_to_sheet_rows(transactions: list[dict]) -> list[list[str]]:
         if hasattr(transaction, "model_dump"):
             transaction = transaction.model_dump()
 
-        transaction_type = transaction.get("transaction_type")
+        transaction_type = transaction.get("txn_type") or transaction.get("transaction_type")
 
         if not transaction_type or transaction_type.lower() not in VALID_TRANSACTION_TYPES:
             continue

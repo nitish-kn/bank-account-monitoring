@@ -5,7 +5,7 @@ import {
   getDefaultTransactionDateRange,
 } from "../lib/transactional-helper";
 
-const getDefaultDateRange = () => getDefaultTransactionDateRange(new Date(), 7);
+const getDefaultDateRange = () => getDefaultTransactionDateRange(new Date(), 30);
 
 const normalizeFilters = (filters = {}) => ({
   ...DEFAULT_TRANSACTION_FILTERS,
@@ -45,7 +45,7 @@ export const useDashboardFilterStore = create(
       }),
     }),
     {
-      name: "dashboard-filter-state",
+      name: "dashboard-filter-state-v2",
       partialize: (state) => ({
         filters: state.filters,
         dateRange: state.dateRange,

@@ -135,7 +135,7 @@ const RecentTransactions = ({ transactions = [] }) => {
 
           return (
             <div className={`text-sm font-semibold ${color}`}>
-              {sign} ₹{formatAmount(amountValue)}
+              {sign} {formatCompactINR(amountValue)}
             </div>
           );
         },

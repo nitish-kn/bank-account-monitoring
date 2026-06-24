@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base, run_migrations
 from . import models
-from .routes import auth, family, gmail, invites, sheets, setup
+from .routes import auth, family, gmail, invites, sheets, setup, statements
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -25,6 +25,7 @@ app.include_router(gmail.router)
 app.include_router(invites.router)
 app.include_router(sheets.router)
 app.include_router(setup.router)
+app.include_router(statements.router)
 
 @app.get("/")
 def root():

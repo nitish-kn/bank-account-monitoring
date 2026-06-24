@@ -46,10 +46,12 @@ const NewPage = () => {
     [appliedFilters, dateRange, records],
   );
   
+  console.log("filter records -", filteredRecords)
   const hasActiveFilters = useMemo(() => hasActiveTransactionFilters(appliedFilters), [appliedFilters]);
 
   const summaryData = useMemo(() => calculateTransactionSummary(filteredRecords), [filteredRecords]);
 
+  console.log(summaryData)
   const cards = useMemo(
     () => [
       {

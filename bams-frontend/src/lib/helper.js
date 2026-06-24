@@ -101,17 +101,66 @@ export const formatCompactINR = (amount) => {
   return `₹${formatted}`;
 };
 
+const parseToISODate = (dateStr) => {
+  if (!dateStr) return "";
+  const normalized = String(dateStr).trim();
+  
+  const dmyRegex = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/;
+  const match = normalized.match(dmyRegex);
+  if (match) {
+    const [_, day, month, year] = match;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  
+  const ymdRegex = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/;
+  const ymdMatch = normalized.match(ymdRegex);
+  if (ymdMatch) {
+    const [_, year, month, day] = ymdMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  try {
+    const date = new Date(normalized);
+    if (!isNaN(date.getTime())) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  } catch (e) {}
+
+  return normalized.slice(0, 10);
+};
+
+const normalizeDateForJS = (dateValue) => {
+  if (!dateValue) return "";
+  const str = String(dateValue);
+  
+  if (str.includes("T")) {
+    const [datePart, timePart] = str.split("T");
+    return `${parseToISODate(datePart)}T${timePart}`;
+  }
+  
+  if (str.includes(" ")) {
+    const [datePart, timePart] = str.split(" ");
+    return `${parseToISODate(datePart)}T${timePart}`;
+  }
+  
+  return parseToISODate(str);
+};
+
 export const isValidDate = (dateValue) => {
   if (!dateValue) return false;
-
-  const date = new Date(dateValue);
+  const normalized = normalizeDateForJS(dateValue);
+  const date = new Date(normalized);
   return !Number.isNaN(date.getTime());
 };
 
 export const formatDate = (dateValue) => {
-  if (!isValidDate(dateValue)) return "-";
+  const normalized = normalizeDateForJS(dateValue);
+  if (!isValidDate(normalized)) return "-";
 
-  return new Date(dateValue).toLocaleDateString("en-IN", {
+  return new Date(normalized).toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -119,26 +168,28 @@ export const formatDate = (dateValue) => {
 };
 
 export const formatTime = (dateValue) => {
-  if (!isValidDate(dateValue)) return "-";
+  const normalized = normalizeDateForJS(dateValue);
+  if (!isValidDate(normalized)) return "-";
 
-  return new Date(dateValue).toLocaleTimeString("en-IN", {
+  return new Date(normalized).toLocaleTimeString("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
   });
 };
 
 export const formatDateAndTime = (dateValue) => {
-  if (!isValidDate(dateValue)) {
+  const normalized = normalizeDateForJS(dateValue);
+  if (!isValidDate(normalized)) {
     return {
       date: "-",
       time: null,
     };
   }
 
-  const hasTime = String(dateValue).includes("T");
+  const hasTime = String(normalized).includes("T");
 
   return {
-    date: formatDate(dateValue),
-    time: hasTime ? formatTime(dateValue) : null,
+    date: formatDate(normalized),
+    time: hasTime ? formatTime(normalized) : null,
   };
 };
