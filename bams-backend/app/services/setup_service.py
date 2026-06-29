@@ -38,6 +38,11 @@ SYNC_STATUS_FAILED = "failed"
 
 CACHED_EMAILS: list[dict] = []
 
+# Thread tracking for stuck-sync detection
+# Maps user_id -> {"thread": Thread, "started_at": float (time.time())}
+_active_sync_threads: dict[int, dict] = {}
+SYNC_TIMEOUT_SECONDS = 30 * 60  # 30 minutes soft timeout for hung threads
+
 
 # --------------------- Helper functions
 def _sync_metadata_payload(user: User) -> dict:
@@ -88,6 +93,36 @@ def _mark_sync_failed(user: User, db: Session) -> None:
         db.rollback()
         safe_error = str(error).encode('ascii', 'replace').decode('ascii')
         print(f"Failed to update sync failure metadata: {safe_error}")
+
+
+def _is_sync_genuinely_running(user_id: int) -> bool:
+    """Check if a sync thread is genuinely alive and within the timeout window.
+    Returns True only if the thread exists, is alive, AND hasn't exceeded the soft timeout.
+    Handles three cases:
+      1. Server restarted -> dict is empty -> False
+      2. Thread crashed   -> is_alive() is False -> False
+      3. Thread hung/deadlocked -> is_alive() True but exceeded timeout -> False
+    """
+    entry = _active_sync_threads.get(user_id)
+    if not entry:
+        return False
+
+    thread = entry.get("thread")
+    started_at = entry.get("started_at", 0)
+
+    if not thread or not thread.is_alive():
+        # Thread is dead, clean up
+        _active_sync_threads.pop(user_id, None)
+        return False
+
+    # Thread is alive — check soft timeout
+    elapsed = time.time() - started_at
+    if elapsed > SYNC_TIMEOUT_SECONDS:
+        print(f"Sync thread for user {user_id} exceeded {SYNC_TIMEOUT_SECONDS}s timeout (elapsed: {elapsed:.0f}s). Treating as stuck.")
+        _active_sync_threads.pop(user_id, None)
+        return False
+
+    return True
 
 
 
@@ -241,16 +276,22 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
         if user:
             _mark_sync_failed(user, db)
     finally:
+        _active_sync_threads.pop(user_id, None)
         db.close()
 
 # Function to use threading for fetching mails in parellel
 # Initial Setup Workflow - 1.2.1
 def _start_background_sync_thread(user_id: int) -> None:
-    Thread(
+    thread = Thread(
         target=_run_backfill_sync_for_user,
         args=(user_id,),
         daemon=True,
-    ).start()
+    )
+    _active_sync_threads[user_id] = {
+        "thread": thread,
+        "started_at": time.time(),
+    }
+    thread.start()
 
 # Main function to start background job for fetching email for 30 days at initial login
 # Initial Setup Workflow - 1.2
@@ -260,12 +301,18 @@ def start_background_sync_for_user(user: User, db: Session) -> dict:
 
     # If the user stops the setup in between but return later, this check this prevent to start the setup again for them
     if user.sync_status == SYNC_STATUS_RUNNING:
-        return {
-            "status": "running",
-            "sync_status": SYNC_STATUS_RUNNING,
-            "message": "Sync is already running in the background.",
-            **_sync_metadata_payload(user),
-        }
+        if _is_sync_genuinely_running(user.id):
+            return {
+                "status": "running",
+                "sync_status": SYNC_STATUS_RUNNING,
+                "message": "Sync is already running in the background.",
+                **_sync_metadata_payload(user),
+            }
+        else:
+            # DB says running but thread is dead or timed out — reset
+            print(f"Sync for user {user.id} marked as running but no active thread found. Resetting to failed.")
+            _mark_sync_failed(user, db)
+            db.refresh(user)
 
     user.sync_status = SYNC_STATUS_RUNNING
     user.last_synced_status = SYNC_STATUS_RUNNING
@@ -513,13 +560,19 @@ def perform_incremental_sync(user: User, db: Session):
         raise HTTPException(status_code=400, detail="Setup must be completed before sync.")
 
     if user.sync_status == SYNC_STATUS_RUNNING:
-        return {
-            "status": "running",
-            "sync_status": SYNC_STATUS_RUNNING,
-            "new_rows": 0,
-            "message": "Background sync is already running.",
-            **_sync_metadata_payload(user),
-        }
+        if _is_sync_genuinely_running(user.id):
+            return {
+                "status": "running",
+                "sync_status": SYNC_STATUS_RUNNING,
+                "new_rows": 0,
+                "message": "Background sync is already running.",
+                **_sync_metadata_payload(user),
+            }
+        else:
+            # DB says running but thread is dead or timed out — reset
+            print(f"Incremental sync: user {user.id} marked running but no active thread. Resetting to failed.")
+            _mark_sync_failed(user, db)
+            db.refresh(user)
 
     # Fetch the single latest email ID from Gmail and check if it's already in the sheet.
     try:

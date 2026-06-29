@@ -59,7 +59,7 @@ const Layout = () => {
       
       <div className="flex w-full">
         <div className="hidden lg:flex">
-          <Sidebar picture={user?.picture} name={user?.name} />
+          <Sidebar picture={user?.picture} name={user?.name} lastSyncAt={effectiveLastSyncAt}/>
         </div>
 
         {showMenu && (
@@ -75,8 +75,6 @@ const Layout = () => {
         )}
         <div className="flex-1 flex flex-col min-h-screen bg-gray-200/50 overflow-hidden">
           <Headers
-            name={user?.name}
-            picture={user?.picture}
             isSyncing={isSyncing}
             lastSyncAt={effectiveLastSyncAt}
             syncDashboard={syncDashboard}

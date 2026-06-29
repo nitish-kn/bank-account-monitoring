@@ -37,7 +37,7 @@ const TopItemList = ({
       <div className="overflow-x-auto">
         {data?.map((txn) => (
           <div
-            key={txn?.block_index}
+            key={txn?.gmail_message_id || txn?.id}
             className="flex items-center justify-between gap-3 text-mid py-2"
           >
             <p className="flex items-center gap-2 font-normal">

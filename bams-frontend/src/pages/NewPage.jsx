@@ -27,7 +27,6 @@ const NewPage = () => {
   const dateRangePopoverRef = useRef(null);
   const { filters: appliedFilters, dateRange, applyFilters, resetFilters, setDateRange, } = useDashboardFilterStore();
   const { syncedEmails, fetchSyncedEmails, loadingSynced } = useEmailStore();
-  console.log(syncedEmails);
   
   useEffect(() => {
     fetchSyncedEmails();
@@ -46,12 +45,10 @@ const NewPage = () => {
     [appliedFilters, dateRange, records],
   );
   
-  console.log("filter records -", filteredRecords)
   const hasActiveFilters = useMemo(() => hasActiveTransactionFilters(appliedFilters), [appliedFilters]);
 
   const summaryData = useMemo(() => calculateTransactionSummary(filteredRecords), [filteredRecords]);
 
-  console.log(summaryData)
   const cards = useMemo(
     () => [
       {
@@ -130,11 +127,11 @@ const NewPage = () => {
 
   return (
     <main className="flex overflow-y-auto flex-col gap-3 md:gap-4 relative">
-      {loadingSynced && (
+      {/* {loadingSynced && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm rounded-xl">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
         </div>
-      )}
+      )} */}
 
       {/* Dashboard Header */}
       <Flex direction={{initial:"column", sm: "row"}} align={{initial: "start", sm:"center"}}  position="relative" className="bg-white gap-4 p-4 rounded-xl shadow-md">

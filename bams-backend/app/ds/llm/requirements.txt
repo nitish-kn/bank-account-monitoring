@@ -6,3 +6,6 @@ beautifulsoup4
 pydantic
 langsmith
 langchain-groq
+openai
+PyMuPDF
+pillow

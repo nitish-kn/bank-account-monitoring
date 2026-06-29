@@ -11,3 +11,6 @@ google-api-python-client
 beautifulsoup4
 langsmith
 langchain-groq
+openai
+PyMuPDF
+pillow

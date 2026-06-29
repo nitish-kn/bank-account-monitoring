@@ -1,13 +1,30 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Logout } from "./Logout";
 import { Landmark, } from "lucide-react";
 import { NavLinks } from "../utils/constants";
+import { formatRelativeSyncTime } from "../lib/helper";
+import { Badge } from "@radix-ui/themes";
 
-const Sidebar = ({ picture, name, onClose }) => {
+const Sidebar = ({ picture, name, onClose, lastSyncAt }) => {
   const pathname = useLocation().pathname;
+  const [now, setNow] = useState(() => new Date());
+  
+  const syncLabel = formatRelativeSyncTime(lastSyncAt, now);
 
-  return (
+
+  useEffect(() => {
+    if (!lastSyncAt) return undefined;
+  
+    setNow(new Date());
+    const intervalId = window.setInterval(() => {
+      setNow(new Date());
+    }, 30000);
+  
+    return () => window.clearInterval(intervalId);
+  }, [lastSyncAt]);
+  
+  return ( 
     <main className="flex flex-col items-center w-56 px-3 py-4 sticky top-0 h-screen shadow-md bg-blue-50/10">
       <div className="flex items-center justify-center pt-4 gap-2">
         <Landmark width={40} height={40} className="text-blue-800" />
@@ -33,18 +50,27 @@ const Sidebar = ({ picture, name, onClose }) => {
         ))}
       </div>
 
-      <div className="mt-auto w-full flex border-t border-gray-300 pt-3 justify-between items-center">
 
-        <div className="flex items-center gap-2 px-2">
-          <img src={picture} alt="Profile" className="w-8 h-8 rounded-full" />
-          <span className="text-gray-600 w-11/12 truncate text-sm font-semibold text mr-2">{name}</span>
+      <div className="mt-auto w-full space-y-2">
+
+        {syncLabel && (
+          <p className="text-sm pb-1 text-center font-medium"> {syncLabel} </p>
+        )}
+
+        <div className="flex border-t border-gray-300 pt-2 justify-between items-center">
+          <div className="flex items-center gap-2 px-2">
+            <img src={picture} alt="Profile" className="w-8 h-8 rounded-full" />
+            <span className="text-gray-600 w-11/12 truncate text-sm font-semibold text mr-2">{name}</span>
+
+          </div>
+
+          <Logout
+            className="w-full !border !border-transparent hover:!border-gray-500 hover:!cursor-pointer !mr-0.5 !rounded-full !p-3 !text-gray-600 !shadow-none"
+            text=""
+          />      
+
 
         </div>
-
-        <Logout
-          className="w-full !border !border-transparent hover:!border-gray-500 hover:!cursor-pointer !mr-0.5 !rounded-full !p-3 !text-gray-600 !shadow-none"
-          text=""
-        />      
         </div>
     </main>
   );

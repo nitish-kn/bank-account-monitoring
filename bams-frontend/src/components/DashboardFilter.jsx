@@ -105,6 +105,24 @@ const DashboardFilter = ({
           />
         </FilterField>
 
+        <FilterField label="Individual Account">
+          <CustomDropDown
+            value={draftFilters.individualAccount}
+            options={filterOptions?.individualAccounts}
+            placeholder={getAllOptionLabel(filterOptions?.individualAccounts, "All Individual Accounts")}
+            onValueChange={(value) => updateFilter("individualAccount", value)}
+            multiple
+            showSearch
+            searchPlaceholder="Search individual accounts..."
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
+          />
+        </FilterField>
+        
         <FilterField label="Account">
           <CustomDropDown
             value={draftFilters.account}

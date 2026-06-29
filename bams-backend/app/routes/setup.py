@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..core.dependencies import get_current_user
 from ..models.user import User
-from ..services.setup_service import setup_process_with_progress, perform_incremental_sync
+from ..services.setup_service import setup_process_with_progress, perform_incremental_sync, _is_sync_genuinely_running, _mark_sync_failed, SYNC_STATUS_RUNNING
 from ..database import get_db
 from ..services.setup_service import build_credentials
 from ..utils.date_utils import datetime_to_iso
@@ -66,8 +66,17 @@ def get_setup_status(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/sync-status")
-def get_sync_status(current_user: User = Depends(get_current_user)):
-    """ Get the status while background job of fecthing mails are running """
+def get_sync_status(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """ Get the status while background job and dashboard sync of fetching mails are running.
+        Also detects stuck syncs (dead thread / timeout) and auto-resets them.
+    """
+    # If DB says running, verify the thread is genuinely alive
+    if current_user.sync_status == SYNC_STATUS_RUNNING:
+        if not _is_sync_genuinely_running(current_user.id):
+            print(f"Sync status poll: user {current_user.id} marked running but no active thread. Resetting to failed.")
+            _mark_sync_failed(current_user, db)
+            db.refresh(current_user)
+
     return {
         "sync_status": current_user.sync_status,
         "last_synced_at": datetime_to_iso(current_user.last_synced_at),

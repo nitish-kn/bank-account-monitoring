@@ -75,6 +75,8 @@ export const useEmailStore = create((set, get) => ({
       set({
         syncedError: errMsg,
         loadingSynced: false,
+        hasFetchedSyncedEmails: true,
+        syncedEmailsOwnerKey: ownerKey,
       });
     }
   },

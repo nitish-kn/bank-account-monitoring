@@ -3,7 +3,7 @@ import { Badge, Button, Spinner } from "@radix-ui/themes";
 import { useEmailStore } from "../store/emailStore";
 import { FileSpreadsheet, TriangleAlert } from "lucide-react";
 import CustomTable from "./ui/CustomTable";
-import { cleanText, formatAmount, getStatusColor } from "../lib/helper";
+import { cleanText, formatAmount, formatCompactINR, getStatusColor } from "../lib/helper";
 import { EmptyMails } from "../utils/EmptyStates";
 import Pagination from "./Pagination";
 
@@ -88,7 +88,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
 
         return (
           <p className="text-sm font-semibold text-gray-900">
-            {amount ? `${currency} ${formatAmount(amount)}` : "-"}
+            {amount ? `${formatCompactINR(amount)}` : "-"}
           </p>
         );
       },
@@ -139,7 +139,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
           <div>
             <div className="flex items-start gap-4">
               <p className="text-2xl font-bold text-black text-shadow-xs">
-                Synced Transactions
+                All Transactions
               </p>
 
               {/* {!loadingEmails && !syncedError && syncedEmails.length > 0 && (

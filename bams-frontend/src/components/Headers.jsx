@@ -7,7 +7,7 @@ import { ChevronDown, Menu, Upload, CloudUpload, FileText, X } from "lucide-reac
 import DialogPopup from "./ui/DialogPopup";
 import api from "../lib/api";
 
-const Headers = ({ name, picture, isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
+const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
   const pathname = useLocation().pathname.split("/")[1];
   const pageTitle = pathname[0].toUpperCase() + pathname.slice(1);
   const [now, setNow] = useState(() => new Date());
@@ -101,16 +101,16 @@ const Headers = ({ name, picture, isSyncing, lastSyncAt, syncDashboard, setShowM
   }, [showSyncTime]);
 
 
-  useEffect(() => {
-    if (!lastSyncAt) return undefined;
+  // useEffect(() => {
+  //   if (!lastSyncAt) return undefined;
 
-    setNow(new Date());
-    const intervalId = window.setInterval(() => {
-      setNow(new Date());
-    }, 30000);
+  //   setNow(new Date());
+  //   const intervalId = window.setInterval(() => {
+  //     setNow(new Date());
+  //   }, 30000);
 
-    return () => window.clearInterval(intervalId);
-  }, [lastSyncAt]);
+  //   return () => window.clearInterval(intervalId);
+  // }, [lastSyncAt]);
 
   return (
     <>
@@ -133,11 +133,16 @@ const Headers = ({ name, picture, isSyncing, lastSyncAt, syncDashboard, setShowM
           </p>
         </div>
         <div className="flex md:flex-row items-center gap-1 md:gap-2.5 relative">
-          <CustomButton onClick={() => setShowUploadDialog(true)}>
-            <Upload className="h-4 w-4 mr-1.5" /> Upload Statements
+          <CustomButton onClick={() => setShowUploadDialog(true)} variant="soft" disabled={uploading}>
+            {uploading ? "Processing..." : (
+              <>
+                <Upload className="h-4 w-4" /> 
+                <span className="hidden md:inline">Upload Statements</span>
+              </>
+            )}
           </CustomButton>
 
-          {syncLabel && (
+          {/* {syncLabel && (
             <Badge
               radius="large"
               variant="outline"
@@ -145,14 +150,13 @@ const Headers = ({ name, picture, isSyncing, lastSyncAt, syncDashboard, setShowM
             >
               {syncLabel}
             </Badge>
-          )}
+          )} */}
 
           <CustomButton
-            variant="classic"
+            variant="soft"
             disabled={isSyncing}
             onClick={syncDashboard}
-            className="flex-1 py-3 px-4 border border-gray-200 text-gray-800 hover:bg-gray-50 font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-center"
-            color="bg-blue-500"
+            className="cursor-pointer text-center"
           >
             {isSyncing ? (
               <span className="flex items-center gap-2">
@@ -164,14 +168,14 @@ const Headers = ({ name, picture, isSyncing, lastSyncAt, syncDashboard, setShowM
             )}
           </CustomButton>
 
-          <CustomButton color="gray" variant="ghost" className="ml-1! flex! md:hidden!" onClick={() => setShowSyncTime(prev => !prev)}>
+          {/* <CustomButton color="gray" variant="ghost" className="ml-1! flex! md:hidden!" onClick={() => setShowSyncTime(prev => !prev)}>
             <ChevronDown className="h-4 w-4" />
           </CustomButton>
           {showSyncTime && (
             <div ref={showSyncBadgeRef}>
               <div className="absolute top-10 left-6 bg-white whitespace-nowrap text-xs p-2 font-medium rounded-md shadow-lg"> {syncLabel} </div>
             </div>
-          )}
+          )} */}
         </div>
 
       </div>

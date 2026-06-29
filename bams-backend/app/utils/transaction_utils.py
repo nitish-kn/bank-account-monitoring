@@ -25,6 +25,10 @@ TRANSACTION_HEADER_RANGE = f"A1:{TRANSACTION_SHEET_END_COLUMN}1"
 TRANSACTION_DATA_RANGE = f"A2:{TRANSACTION_SHEET_END_COLUMN}"
 
 
+def transaction_column_for_field(field_name: str) -> str:
+    return _column_name(TRANSACTION_SCHEMA.index(field_name) + 1)
+
+
 def _serialize_sheet_value(value: Any) -> str:
     if value is None:
         return ""

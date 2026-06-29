@@ -156,21 +156,21 @@ const RecentTransactions = ({ transactions = [] }) => {
       //     width: "w-16",
       //     render: (row) => <SourceBadge source={row.source_name || "Unknown"} />,
       //   },
-      {
-        key: "actions",
-        header: "",
-        width: "w-16",
-        render: () => (
-          <Button
-            color="gray"
-            variant="ghost"
-            size="1"
-            className="hover:bg-gray-100"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        ),
-      },
+      // {
+      //   key: "actions",
+      //   header: "",
+      //   width: "w-16",
+      //   render: () => (
+      //     <Button
+      //       color="gray"
+      //       variant="ghost"
+      //       size="1"
+      //       className="hover:bg-gray-100"
+      //     >
+      //       <MoreHorizontal className="h-4 w-4" />
+      //     </Button>
+      //   ),
+      // },
     ],
     [],
   );
