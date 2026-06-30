@@ -17,6 +17,8 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
     setEmailPage((page) => Math.min(page, totalEmailPages));
   }, [totalEmailPages]);
 
+  console.log(syncedEmails)
+
   const paginatedEmails = useMemo(() => {
     const start = (emailPage - 1) * emailPageSize;
     return syncedEmails.slice(start, start + emailPageSize);
@@ -51,8 +53,25 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
       ),
     },
     {
+      key: "account_holder_name",
+      header: "Account Holder Name",
+      cellClassName: "max-w-[280px]",
+      render: (transaction) => {
+        const accountHolderName = cleanText(transaction?.account_holder_name);
+
+        return (
+          <p
+            className="max-w-72 truncate text-sm font-medium leading-6 text-gray-800"
+            title={accountHolderName}
+          >
+            {accountHolderName || "-"}
+          </p>
+        );
+      },
+    },
+    {
       key: "txn_type",
-      header: "Type / Status",
+      header: "Credit / Debit",
       cellClassName: "whitespace-nowrap",
       render: (transaction) => {
         const transactionType = transaction?.txn_type?.toLowerCase();
@@ -84,11 +103,9 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
       cellClassName: "whitespace-nowrap",
       render: (transaction) => {
         const amount = transaction?.amount || transaction?.inr_equivalent;
-        const currency = transaction?.currency || "INR";
-
         return (
-          <p className="text-sm font-semibold text-gray-900">
-            {amount ? `${formatCompactINR(amount)}` : "-"}
+          <p className={`w-full ${amount ? "text-right" : "text-center"} text-sm font-semibold text-gray-900`}>
+            {amount ? `₹ ${formatAmount(amount)}` : "-"}
           </p>
         );
       },

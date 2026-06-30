@@ -855,7 +855,11 @@ export const getDailyNetCashFlowTrend = (records = [], dateRange = {}) => {
 export const getTransactionsByModeData = (records = [], limit = 7) => {
   const modeCounts = records.reduce((acc, record) => {
     const mode = normalizeValue(record?.mode) || "Others";
-    acc[mode] = (acc[mode] || 0) + 1;
+
+    if(record?.txn_type?.toLowerCase() === "debit"){
+      acc[mode] = (acc[mode] || 0) + 1;
+    }
+
     return acc;
   }, {});
 

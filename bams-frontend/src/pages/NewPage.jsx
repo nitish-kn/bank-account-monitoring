@@ -263,7 +263,7 @@ const NewPage = () => {
           <CustomAreaTrendChart data={cashFlowTrendData} />
         </ChartCard>
 
-        <ChartCard title="Transactions by Mode">
+        <ChartCard title="Transactions by Mode (Debit)">
           <CustomDonutChart
             data={transactionsByModeData}
             totalLabel={(transactionsByModeData.length || 0).toLocaleString("en-IN")}
