@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Spinner } from "@radix-ui/themes";
 import { useEmailStore } from "../store/emailStore";
-import { FileSpreadsheet, TriangleAlert } from "lucide-react";
+import { FileSpreadsheet, FileText, TriangleAlert } from "lucide-react";
 import CustomTable from "./ui/CustomTable";
 import { cleanText, formatAmount, formatCompactINR, getStatusColor } from "../lib/helper";
 import { EmptyMails } from "../utils/EmptyStates";
@@ -17,7 +17,7 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
     setEmailPage((page) => Math.min(page, totalEmailPages));
   }, [totalEmailPages]);
 
-  console.log(syncedEmails)
+  // console.log(syncedEmails)
 
   const paginatedEmails = useMemo(() => {
     const start = (emailPage - 1) * emailPageSize;
@@ -144,9 +144,29 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
         );
       },
     },
+    {
+      key: "source",
+      header: "Source",
+      cellClassName: "whitespace-nowrap",
+      render: (transaction) => {
+        const source = transaction?.gmail_message_id;
+
+        return (
+          <div className="flex items-center justify-center w-full gap-1">
+            {source ? (
+              // Email source
+              <div className="flex items-center">
+                <img src="./gmail-icon.png" alt="Gmail" className="w-5 h-5" />
+              </div>
+            ) : 
+              <span><FileText className="text-blue-600 w-5 h-5"/></span>
+            }
+          </div>
+        );
+      },
+    },
   ];
 
-  console.log(syncedEmails)
   return (
     <div className="w-full flex flex-col gap-2">
       {/* Synced Emails Table Section */}

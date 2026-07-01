@@ -9,10 +9,7 @@ from ..utils.datetime_utils import get_current_timestamp
 
 from ..schemas.transaction_schema import Transaction
 
-from ..config import (
-    PARSER_NAME,
-    PARSER_VERSION
-)
+from ....config import settings
 
 
 def extract_transactions(emails):
@@ -139,11 +136,11 @@ def extract_transactions(emails):
 
         result[
             "parser_name"
-        ] = PARSER_NAME
+        ] = settings.PARSER_NAME
 
         result[
             "parser_version"
-        ] = PARSER_VERSION
+        ] = settings.PARSER_VERSION
 
         result[
             "parsed_at"

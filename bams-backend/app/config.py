@@ -1,7 +1,15 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(BACKEND_ROOT / ".env"),
+        extra="ignore",
+    )
 
     google_client_id: str
     google_client_secret: str

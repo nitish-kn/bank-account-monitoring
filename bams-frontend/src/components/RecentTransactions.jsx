@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import CustomTable from "./ui/CustomTable";
-import { MoreHorizontal } from "lucide-react";
+import { Eye, FileText, MoreHorizontal } from "lucide-react";
 import { Button } from "@radix-ui/themes";
 import { formatAmount, formatCompactINR, formatDateAndTime } from "../lib/helper";
 import Pagination from "./Pagination";
 import CustomSearchBar from "./ui/CustomSearchBar";
+import DialogPopup from "./ui/DialogPopup";
 
 const TypeBadge = ({ type }) => {
   const isCredit = String(type).toLowerCase() === "credit";
@@ -15,7 +16,7 @@ const TypeBadge = ({ type }) => {
     <span
       className={`inline-flex items-center rounded-md! px-2.5 py-1 text-xs font-semibold ${bgColor} ${textColor}`}
     >
-      {type}
+      {type.charAt(0).toUpperCase() + type.slice(1)}
     </span>
   );
 };
@@ -28,22 +29,24 @@ const CategoryBadge = ({ category, type }) => {
 
   return (
     <span
-      className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium border ${bgColor} ${textColor} ${borderColor}`}
+      className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium text-blue-700`}
     >
-      {category}
+      {category ? category : "Others"}
     </span>
   );
 };
 
 const SourceBadge = ({ source }) => {
   return (
-    <div className="flex items-center gap-1">
-      {source === "Gmail" && (
-        <>
-          <span className="text-red-500 font-bold">M</span>
-          <span className="text-sm font-medium text-gray-700">{source}</span>
-        </>
-      )}
+    <div className="flex items-center justify-center gap-1">
+      {source ? (
+        // Email source
+        <div className="flex items-center">
+          <img src="./gmail-icon.png" alt="Gmail" className="w-5 h-5" />
+        </div>
+      ) : 
+        <span><FileText className="text-blue-600 w-5 h-5"/></span>
+      }
     </div>
   );
 };
@@ -52,6 +55,8 @@ const RecentTransactions = ({ transactions = [] }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [data, setData] = useState({});
 
   const columns = useMemo(
     () => [
@@ -111,17 +116,17 @@ const RecentTransactions = ({ transactions = [] }) => {
         ),
       },
       {
-        key: "txn_type",
-        header: "Type",
-        width: "w-28",
-        render: (row) => <TypeBadge type={row.txn_type} />,
-      },
-      {
         key: "category",
         header: "Category",
         render: (row) => (
           <CategoryBadge category={row.category} type={row.txn_type} />
         ),
+      },
+      {
+        key: "txn_type",
+        header: "Type",
+        width: "w-28",
+        render: (row) => <TypeBadge type={row.txn_type} />,
       },
       {
         key: "amount",
@@ -150,27 +155,30 @@ const RecentTransactions = ({ transactions = [] }) => {
           </div>
         ),
       },
-      //   {
-      //     key: "source_name",
-      //     header: "Source",
-      //     width: "w-16",
-      //     render: (row) => <SourceBadge source={row.source_name || "Unknown"} />,
-      //   },
-      // {
-      //   key: "actions",
-      //   header: "",
-      //   width: "w-16",
-      //   render: () => (
-      //     <Button
-      //       color="gray"
-      //       variant="ghost"
-      //       size="1"
-      //       className="hover:bg-gray-100"
-      //     >
-      //       <MoreHorizontal className="h-4 w-4" />
-      //     </Button>
-      //   ),
-      // },
+      {
+        key: "source_name",
+        header: "Source",
+        width: "w-16",
+        render: (row) => <SourceBadge source={row?.gmail_message_id} />,
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        width: "w-20",
+        render: (row) => (
+          <Button
+            color="gray"
+            variant="ghost"
+            size="1"
+            className="hover:bg-gray-100 flex items-center justify-center"
+          >
+            <Eye className="h-5 w-5 font-bold" onClick={() => {
+              setOpenDialog(true);
+              setData(row);
+            }}/>
+          </Button>
+        ),
+      },
     ],
     [],
   );
@@ -204,38 +212,60 @@ const RecentTransactions = ({ transactions = [] }) => {
   }, [currentPage, filteredTransactions, pageSize]);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-3 sm:p-4">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900">Recent Transactions</h2>
+    <>
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-3 sm:p-4">
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">Recent Transactions</h2>
 
-        <div className="hidden lg:flex items-center gap-3">
-          <CustomSearchBar
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="Search transactions..."
-            className="w-72"
+          <div className="hidden lg:flex items-center gap-3">
+            <CustomSearchBar
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="Search transactions..."
+              className="w-72"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <CustomTable
+            columns={columns}
+            data={paginatedTransactions}
+            minWidth="1200px"
+            emptyMessage="No transactions found"
+            getRowKey={(row, idx) => row?.primary_dedupe_key || idx}
           />
         </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <CustomTable
-          columns={columns}
-          data={paginatedTransactions}
-          minWidth="1200px"
-          emptyMessage="No transactions found"
-          getRowKey={(row, idx) => row?.primary_dedupe_key || idx}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredTransactions.length}
+          pageSize={pageSize}
+          itemLabel="transactions"
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
         />
       </div>
-      <Pagination
-        currentPage={currentPage}
-        totalItems={filteredTransactions.length}
-        pageSize={pageSize}
-        itemLabel="transactions"
-        onPageChange={setCurrentPage}
-        onPageSizeChange={setPageSize}
-      />
-    </div>
+
+      <DialogPopup open={openDialog} setOpen={setOpenDialog} subheading="Transaction Details">
+        {data ? (
+          <div className="text-sm text-gray-900 w-full">
+            <p>Narration - <span className="font-medium text-lg">{data?.narration}</span></p>
+            <p>Transaction Date - <span className="font-medium text-lg">{formatDateAndTime(data?.txn_date).date}</span></p>
+            <p>Account Number - <span className="font-medium text-lg">{data?.account_number}</span></p>
+            <p>Reference Number - <span className="font-medium text-lg">{data?.ref_number}</span></p>
+            <p>Category - <span className="font-medium text-lg">{data?.category}</span></p>
+            <p>Transaction Type - <span className="font-medium text-lg">{data?.txn_type}</span></p>
+            <p>Amount - <span className="font-medium text-lg">{formatAmount(data?.amount)}</span></p>
+            <p>Balance After Transaction - <span className="font-medium text-lg">{formatAmount(data?.balance_after_txn)}</span></p>
+            <p>Account Holder Name - <span className="font-medium text-lg">{data?.account_holder_name}</span></p>
+            <p>Counter Party Name - <span className="font-medium text-lg">{data?.counter_party_name}</span></p>
+            
+          </div>
+        ) : (
+          <div className="text-sm text-gray-500">No transaction details available.</div>
+        )}
+      </DialogPopup>
+    </>
   );
 };
 

@@ -12,7 +12,7 @@ Pipeline
 
 Usage
 -----
-    export OPENAI_API_KEY="sk-..."
+    Set OPENAI_API_KEY in bams-backend/.env
     python main.py [--pdf input/statement.pdf] [--batch-size 5] [--dpi 150]
 
 Requirements
@@ -37,15 +37,11 @@ from openai import OpenAI
 from PIL import Image
 from pydantic import ValidationError
 
+from ...config import settings
 from .schemas.models import ExtractionLogEntry, Transaction, TransactionBatch
 # from tracing import init_tracing
 
-from dotenv import load_dotenv
-load_dotenv()
-
-import os
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = settings.openai_api_key
 
 # ------------------------------------------------------------------ #
 # Configuration                                                       #
@@ -474,7 +470,7 @@ def extract_transactions_from_pdf(
     # Initialise Phoenix tracing before the OpenAI client is created
     # init_tracing()
 
-    client = OpenAI(api_key=OPENAI_API_KEY)  # reads OPENAI_API_KEY from environment
+    client = OpenAI(api_key=OPENAI_API_KEY)
 
     # 1 — Render all pages
     raw_images = pdf_to_images(pdf_path, dpi=dpi)
