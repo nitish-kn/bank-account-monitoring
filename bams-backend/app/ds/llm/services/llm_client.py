@@ -1,22 +1,25 @@
-from langchain_groq import ChatGroq
+from openai import OpenAI
 
 from ..config import (
-    GROQ_API_KEY,
-    MODEL_NAME
+    MODEL_NAME,
+    OPENAI_API_KEY,
 )
 
-llm = ChatGroq(
-    groq_api_key=GROQ_API_KEY,
-    model_name=MODEL_NAME,
-    temperature=0,
-)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 def call_llm(prompt: str):
+    response = client.responses.create(
+        model=MODEL_NAME,
+        instructions=(
+            "You are a helpful assistant. Return the answer as valid JSON "
+            "when the prompt requests structured output."
+        ),
+        input=prompt,
+    )
 
-    response = llm.invoke(prompt)
-
-    content = response.content.strip()
+    content = getattr(response, "output_text", "") or ""
+    content = content.strip()
 
     content = content.replace(
         "```json", ""

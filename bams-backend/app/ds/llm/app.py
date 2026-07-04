@@ -38,6 +38,7 @@ from PIL import Image
 from pydantic import ValidationError
 
 from .schemas.models import ExtractionLogEntry, Transaction, TransactionBatch
+from .utils.account_lookup import fill_missing_account_details
 # from tracing import init_tracing
 
 from dotenv import load_dotenv
@@ -515,8 +516,14 @@ def extract_transactions_from_pdf(
             )
             continue
 
+        enriched_transactions = []
+        for tx in batch_result.transactions:
+            tx_dict = tx.model_dump()
+            enriched_tx = fill_missing_account_details(tx_dict)
+            enriched_transactions.append(Transaction.model_validate(enriched_tx))
+
         valid, log_entry = validate_transactions(
-            raw_transactions=batch_result.transactions,
+            raw_transactions=enriched_transactions,
             batch_index=batch_idx + 1,
             pages=page_numbers,
             extraction_notes=batch_result.extraction_notes,
