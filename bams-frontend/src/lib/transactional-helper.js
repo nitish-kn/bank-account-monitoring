@@ -4,6 +4,7 @@ const all_banks = [
   { name: "Axis Bank", value: "axis bank" },
   { name: "ICICI Bank", value: "icici bank" },
   { name: "HDFC Bank", value: "hdfc bank" },
+  { name: "Indusind Bank", value: "indusind bank" },
 ];
 
 const all_account_holder_names_ = [
@@ -131,18 +132,26 @@ const individual_account = [
   { name: "Sunita Gupta - HDFC Bank - XX4845", value: "sunita gupta - hdfc bank - xx4845" }
 ];
 
+const transactionTypes = [
+  { name: "Credit", value: "credit" },
+  { name: "Debit", value: "debit" },
+];
+
 
 const normalizeTransactionType = (type = "") =>
   String(type).trim().toLowerCase();
 
+
+// Change numbers to finite numbers, else return 0
 const toAmount = (value) => {
   const amount = Number(value || 0);
   return Number.isFinite(amount) ? amount : 0;
 };
 
+
+// Text strings are lowercased and stripped of whitespace
 const normalizeValue = (value = "") => String(value || "").trim();
-const normalizeSearchValue = (value = "") =>
-  normalizeValue(value).toLowerCase();
+const normalizeSearchValue = (value = "") => normalizeValue(value).toLowerCase();
 
 const ALL_FILTER_VALUE = "all";
 const MODE_CHART_COLORS = [
@@ -288,6 +297,8 @@ const toSelectOptions = (records = [], key, allLabel) => {
   ];
 };
 
+
+// ---------------------- Main function to generate filter options to show in the dropdowns ----------------------
 const buildCombinedSelectOptions = (records = [], key, predefinedList = [], allLabel) => {
   const optionsMap = new Map();
 
@@ -341,6 +352,26 @@ const buildCombinedSelectOptions = (records = [], key, predefinedList = [], allL
     ...dynamicOptions,
   ];
 };
+
+// Function to build select options using only predefined list 
+const buildSelectOptions = (
+  key,
+  predefinedList = [],
+  allLabel
+) => {
+  return [
+    { label: allLabel, value: ALL_FILTER_VALUE },
+    ...predefinedList
+      .map((item) => {
+        const label = item.name || item.label || String(item.value || "");
+        const value = String(item.value ?? "").trim();
+
+        return value ? { label, value } : null;
+      })
+      .filter(Boolean),
+  ];
+};
+
 
 const buildIndividualAccountOptions = (records = [], predefinedList = [], allLabel) => {
   const optionsMap = new Map();
@@ -397,15 +428,17 @@ const buildIndividualAccountOptions = (records = [], predefinedList = [], allLab
   ];
 };
 
+
+// ---------------------- Main function to generate filter options to show in the dropdowns ----------------------
 export const getTransactionFilterOptions = (records = []) => ({
   entities: toSelectOptions(
     records,
     "email_metadata.forwarded_by_name",
     "All Entities",
   ),
-  banks: buildCombinedSelectOptions(records, "bank_name", all_banks, "All Banks"),
-  accounts: buildCombinedSelectOptions(records, "account_number", all_account_numbers, "All Accounts"),
-  transactionTypes: toSelectOptions(records, "txn_type", "All Types"),
+  banks: buildCombinedSelectOptions([], "bank_name", all_banks, "All Banks"),
+  accounts: buildCombinedSelectOptions([], "account_number", all_account_numbers, "All Accounts"),
+  transactionTypes: buildCombinedSelectOptions([], "txn_type", transactionTypes, "All Types"),
   modes: toSelectOptions(records, "mode", "All Modes"),
   categories: toSelectOptions(records, "category", "All Categories"),
   statuses: toSelectOptions(
@@ -415,7 +448,7 @@ export const getTransactionFilterOptions = (records = []) => ({
   ),
   currencies: toSelectOptions(records, "currency", "All Currencies"),
   accountHolderNames: buildCombinedSelectOptions(
-    records,
+    [],
     "account_holder_name",
     all_account_holder_names_,
     "All Account Holders",
@@ -427,12 +460,14 @@ export const getTransactionFilterOptions = (records = []) => ({
     "All Account Types",
   ),
   individualAccounts: buildIndividualAccountOptions(
-    records,
+    [],
     individual_account,
     "All Individual Accounts",
   ),
 });
 
+
+// ---------------------- Filtering Logic ----------------------
 const getActiveFilterValues = (filterValue) => {
   const rawValues = Array.isArray(filterValue) ? filterValue : [filterValue];
 
@@ -441,6 +476,9 @@ const getActiveFilterValues = (filterValue) => {
     .filter((value) => value && value !== ALL_FILTER_VALUE);
 };
 
+
+// Filter matching functions to check if a record matches the active filter values for a given field
+// Function compares one record against one filter.
 const matchesSelectFilter = (recordValue, filterValue) => {
   const activeValues = getActiveFilterValues(filterValue);
   if (!activeValues.length) return true;
@@ -478,6 +516,8 @@ const matchesIndividualAccountFilter = (record, filterValue) => {
   });
 };
 
+
+// ---------------------- Main Filtering Function ----------------------
 export const filterTransactions = (
   records = [],
   filters = DEFAULT_TRANSACTION_FILTERS,
@@ -487,18 +527,21 @@ export const filterTransactions = (
     ...filters,
   };
 
+  // 1. Normalize the search term for case-insensitive matching
   const searchTerm = normalizeSearchValue(normalizedFilters.search);
-  const minAmount = Number(normalizedFilters.minAmount);
-  const maxAmount = Number(normalizedFilters.maxAmount);
-  const hasMinAmount =
-    normalizedFilters.minAmount !== "" && Number.isFinite(minAmount);
-  const hasMaxAmount =
-    normalizedFilters.maxAmount !== "" && Number.isFinite(maxAmount);
+
+  // Convert min/max amount filters to numbers and check if they are valid
+  const minAmount = Number(normalizedFilters.minAmount) || 0;
+  const maxAmount = Number(normalizedFilters.maxAmount) || 0;
+  const hasMinAmount = normalizedFilters.minAmount !== "" && Number.isFinite(minAmount);
+  const hasMaxAmount = normalizedFilters.maxAmount !== "" && Number.isFinite(maxAmount);
 
   // Collect all active select-type filter checks
   // Each entry is a function: (record) => boolean
   const selectFilterChecks = [];
 
+
+  // 2. For each select-type filter, if it has active values, add a corresponding check function
   if (getActiveFilterValues(normalizedFilters.entity).length) {
     selectFilterChecks.push((record) =>
       matchesSelectFilter(
@@ -567,6 +610,8 @@ export const filterTransactions = (
     );
   }
 
+
+  // 3. Filter the records based on the search term, amount range, and select-type filters
   return records.filter((record) => {
     const amount = toAmount(record?.amount);
 
@@ -599,7 +644,7 @@ export const filterTransactions = (
     // Select filters use UNION (OR) logic:
     // If any select filters are active, record must match at least ONE of them
     if (selectFilterChecks.length > 0) {
-      const matchesAny = selectFilterChecks.some((check) => check(record));
+      const matchesAny = selectFilterChecks.every((check) => check(record));
       if (!matchesAny) return false;
     }
 

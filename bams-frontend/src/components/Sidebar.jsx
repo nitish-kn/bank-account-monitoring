@@ -2,9 +2,9 @@ import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Logout } from "./Logout";
 import { Landmark, } from "lucide-react";
-import { NavLinks } from "../utils/constants";
 import { formatRelativeSyncTime } from "../lib/helper";
 import { Badge } from "@radix-ui/themes";
+import { NavLinks } from "../assets/navlinks";
 
 const Sidebar = ({ picture, name, onClose, lastSyncAt }) => {
   const pathname = useLocation().pathname;

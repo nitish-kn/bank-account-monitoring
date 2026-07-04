@@ -35,43 +35,53 @@ app.include_router(setup.router)
 app.include_router(statements.router)
 
 
+# @app.get("/", tags=["Root"])
+# async def root():
+#     """Root endpoint."""
+#     print(f"FRONTEND_INDEX_FILE: {FRONTEND_INDEX_FILE}")
+#     print(f"Project root: {PROJECT_ROOT}")
+
+#     if FRONTEND_INDEX_FILE.exists():
+#         return FileResponse(FRONTEND_INDEX_FILE)
+
+#     return {
+#         "message": f"Welcome to flodata",
+#         "version": "1.0",
+#         "docs": "/api/docs",
+#         "health": "/health"
+#     }
+
+
+# @app.get("/{full_path:path}", include_in_schema=False)
+# async def serve_frontend(full_path: str):
+#     """Serve frontend build files and fall back to the SPA entrypoint."""
+#     if not FRONTEND_INDEX_FILE.exists():
+#         return JSONResponse(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             content={"detail": "Frontend build not found. Run the client build first."},
+#         )
+
+#     requested_path = (FRONTEND_DIST_DIR / full_path).resolve()
+#     if FRONTEND_DIST_DIR.resolve() not in requested_path.parents and requested_path != FRONTEND_DIST_DIR.resolve():
+#         return JSONResponse(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             content={"detail": "Not found"},
+#         )
+
+#     if requested_path.is_file():
+#         return FileResponse(requested_path)
+
+#     return FileResponse(FRONTEND_INDEX_FILE)
+
 @app.get("/", tags=["Root"])
 async def root():
     """Root endpoint."""
-    print(f"FRONTEND_INDEX_FILE: {FRONTEND_INDEX_FILE}")
-    print(f"Project root: {PROJECT_ROOT}")
-
-    if FRONTEND_INDEX_FILE.exists():
-        return FileResponse(FRONTEND_INDEX_FILE)
-
     return {
         "message": f"Welcome to flodata",
         "version": "1.0",
         "docs": "/api/docs",
         "health": "/health"
     }
-
-
-@app.get("/{full_path:path}", include_in_schema=False)
-async def serve_frontend(full_path: str):
-    """Serve frontend build files and fall back to the SPA entrypoint."""
-    if not FRONTEND_INDEX_FILE.exists():
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"detail": "Frontend build not found. Run the client build first."},
-        )
-
-    requested_path = (FRONTEND_DIST_DIR / full_path).resolve()
-    if FRONTEND_DIST_DIR.resolve() not in requested_path.parents and requested_path != FRONTEND_DIST_DIR.resolve():
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={"detail": "Not found"},
-        )
-
-    if requested_path.is_file():
-        return FileResponse(requested_path)
-
-    return FileResponse(FRONTEND_INDEX_FILE)
 
 
 @app.get("/health")

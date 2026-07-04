@@ -7,7 +7,7 @@ import { cleanText, formatAmount, formatCompactINR, getStatusColor } from "../li
 import { EmptyMails } from "../utils/EmptyStates";
 import Pagination from "./Pagination";
 
-export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDashboard }) {
+export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, syncDashboard }) {
   const { syncedEmails, loadingSynced: loadingEmails, syncedError, } = useEmailStore();
   const [emailPage, setEmailPage] = useState(1);
   const [emailPageSize, setEmailPageSize] = useState(10);
@@ -40,11 +40,11 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
       header: "Bank / Account",
       render: (transaction) => (
         <div className="min-w-0 ">
-          <p
-            className="truncate text-sm max-w-80 text-black"
-            title={transaction?.bank_name}
-          >
+          <p className="truncate text-sm max-w-80 text-black" title={transaction?.bank_name} >
             {transaction?.bank_name || "Unknown bank"}
+          </p>
+          <p className="mt-0.5 truncate text-xs font-medium! text-gray-800" title={transaction?.account_holder_name}>
+            {transaction?.account_holder_name || "-"}
           </p>
           <p className="mt-0.5 truncate text-xs text-gray-500" title={transaction?.account_number}>
             {transaction?.account_number || "-"}
@@ -52,23 +52,23 @@ export function MainDashboard({ user, isSyncing, syncMessage, lastSyncAt, syncDa
         </div>
       ),
     },
-    {
-      key: "account_holder_name",
-      header: "Account Holder Name",
-      cellClassName: "max-w-[280px]",
-      render: (transaction) => {
-        const accountHolderName = cleanText(transaction?.account_holder_name);
+    // {
+    //   key: "account_holder_name",
+    //   header: "Account Holder Name",
+    //   cellClassName: "max-w-[280px]",
+    //   render: (transaction) => {
+    //     const accountHolderName = cleanText(transaction?.account_holder_name);
 
-        return (
-          <p
-            className="max-w-72 truncate text-sm font-medium leading-6 text-gray-800"
-            title={accountHolderName}
-          >
-            {accountHolderName || "-"}
-          </p>
-        );
-      },
-    },
+    //     return (
+    //       <p
+    //         className="max-w-72 truncate text-sm font-medium leading-6 text-gray-800"
+    //         title={accountHolderName}
+    //       >
+    //         {accountHolderName || "-"}
+    //       </p>
+    //     );
+    //   },
+    // },
     {
       key: "txn_type",
       header: "Credit / Debit",

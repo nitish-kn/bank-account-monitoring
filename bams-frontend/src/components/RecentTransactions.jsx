@@ -38,7 +38,7 @@ const CategoryBadge = ({ category, type }) => {
 
 const SourceBadge = ({ source }) => {
   return (
-    <div className="flex items-center justify-center gap-1">
+    <div className="flex items-center justify-center w-full gap-1">
       {source ? (
         // Email source
         <div className="flex items-center">
@@ -96,25 +96,22 @@ const RecentTransactions = ({ transactions = [] }) => {
         width: "w-72",
         render: (row) => (
           <div className="max-w-60 w-fit">
-            <p className="font-semibold text-gray-900 text-sm">
-              {row?.bank_name || "Unknown Bank"}
-            </p>
-            {/* <p className="text-xs text-gray-500 truncate">
-              {row?.ref_number || "No reference"}
-            </p> */}
+            <p className="font-semibold text-gray-900 text-sm"> {row?.bank_name || "Unknown Bank"} </p>
+            <p className="text-xs font-medium text-gray-800 truncate"> {row?.account_holder_name || "-"} </p>
+            <p className="text-xs text-gray-500 truncate"> {row?.account_number || "-"} </p>
           </div>
         ),
       },
-      {
-        key: "account_number",
-        header: "Account",
-        width: "w-28",
-        render: (row) => (
-          <div className="text-xs font-medium text-gray-600">
-            {row?.account_number}
-          </div>
-        ),
-      },
+      // {
+      //   key: "account_number",
+      //   header: "Account",
+      //   width: "w-28",
+      //   render: (row) => (
+      //     <div className="text-xs font-medium text-gray-600">
+      //       {row?.account_number}
+      //     </div>
+      //   ),
+      // },
       {
         key: "category",
         header: "Category",
@@ -139,8 +136,8 @@ const RecentTransactions = ({ transactions = [] }) => {
           const color = isCredit ? "text-green-600" : "text-red-500";
 
           return (
-            <div className={`text-sm font-semibold ${color}`}>
-              {sign} {formatCompactINR(amountValue)}
+            <div className={`text-sm font-semibold w-full text-right ${color}`}>
+              {sign} ₹ {formatAmount(amountValue)}
             </div>
           );
         },
@@ -148,10 +145,10 @@ const RecentTransactions = ({ transactions = [] }) => {
       {
         key: "balance_after_txn",
         header: "Balance",
-        width: "w-28",
+        width: "w-36",
         render: (row) => (
-          <div className="text-sm text-gray-700 font-medium">
-            {formatCompactINR(row.balance_after_txn) || "-"}
+          <div className="text-sm w-full text-right text-gray-700 font-medium">
+            ₹ {formatAmount(row.balance_after_txn) || "-"}
           </div>
         ),
       },
@@ -170,7 +167,7 @@ const RecentTransactions = ({ transactions = [] }) => {
             color="gray"
             variant="ghost"
             size="1"
-            className="hover:bg-gray-100 flex items-center justify-center"
+            className="hover:bg-gray-100 flex items-center justify-center w-full!"
           >
             <Eye className="h-5 w-5 font-bold" onClick={() => {
               setOpenDialog(true);

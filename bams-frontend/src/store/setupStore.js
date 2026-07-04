@@ -65,7 +65,7 @@ export const useSetupStore = create((set, get) => ({
       const abortController = new AbortController();
       set({ abortController });
 
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+      const baseUrl = import.meta.env.VITE_API_BASE_URL;
       
       // Start SSE from here
       await fetchEventSource(`${baseUrl}/setup/stream`, {

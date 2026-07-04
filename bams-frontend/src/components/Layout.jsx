@@ -7,7 +7,7 @@ import { useSetupStore } from "../store/setupStore";
 
 const Layout = () => {
   const { user, accessToken } = useAuthStore();
-  const { isSyncing, isLoading, isSetupComplete, lastSyncAt, syncDashboard, hasAutoSyncedDashboard, setHasAutoSyncedDashboard, startSyncStatusPolling, } = useSetupStore();
+  const { isSyncing, lastSyncAt, syncDashboard, startSyncStatusPolling, } = useSetupStore();
   const [showMenu, setShowMenu] = useState(false);
   const effectiveLastSyncAt = lastSyncAt || user?.last_synced_at;
   const hasCompletedSetup = user?.is_setup_completed === true || user?.is_setup_completed === "true";
@@ -15,24 +15,15 @@ const Layout = () => {
   const showMenuRef = useRef(null);
 
 
-  // To prevent the Dashboard page to call backend and load mails on every page navigation
+  // Keep progress polling alive for setup/manual syncs that are already running.
+  // Returning users should sync only when they click the refresh button.
   useEffect(() => {
-    if (!hasCompletedSetup || !accessToken || isSetupComplete || isLoading) {
+    if (!hasCompletedSetup || !accessToken || userSyncStatus !== "running") {
       return;
     }
 
-    if (userSyncStatus === "running") {
-      startSyncStatusPolling();
-      return;
-    }
-
-    if (isSyncing || hasAutoSyncedDashboard) {
-      return;
-    }
-
-    setHasAutoSyncedDashboard(true);
-    syncDashboard();
-  }, [ accessToken, hasAutoSyncedDashboard, hasCompletedSetup, isLoading, isSetupComplete, isSyncing, setHasAutoSyncedDashboard, startSyncStatusPolling, syncDashboard, userSyncStatus, ]);
+    startSyncStatusPolling();
+  }, [accessToken, hasCompletedSetup, startSyncStatusPolling, userSyncStatus]);
 
 
   // For sidebar to close in small screens, when user touches out of sidebar

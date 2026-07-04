@@ -376,7 +376,7 @@ MAX_WORKERS = 3
 
 
 
-BATCH_SIZE = 10
+BATCH_SIZE = 5
 
 def _batch_extract_transactions(emails: list[dict]) -> Generator[list[dict], None, None]:
     def safe_extract(batch_index, batch):
