@@ -103,9 +103,9 @@ class Transaction(BaseModel):
         default=None,
         description="Nature of the counterparty: 'merchant', 'individual', 'bank', 'government', etc.",
     )
-    vpa: Optional[str] = Field(
+    txn_via: Optional[str] = Field(
         default=None,
-        description="UPI Virtual Payment Address if present (e.g. 'user@upi').",
+        description="Transaction done via BANK / Credit card / Fastag",
     )
     ref_number: Optional[str] = Field(
         default=None,
