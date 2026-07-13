@@ -70,7 +70,7 @@ class Transaction(BaseModel):
 
     counterparty_kind: Optional[str] = None
 
-    vpa: Optional[str] = None
+    txn_via: Optional[str] = None
 
     ref_number: Optional[str] = None
 

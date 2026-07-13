@@ -1,9 +1,15 @@
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from .config import settings
 
-engine = create_engine(settings.database_url, connect_args={"check_same_thread": False})
+def _engine_options() -> dict:
+    if settings.database_url.startswith("sqlite"):
+        return {"connect_args": {"check_same_thread": False}}
+
+    return {"pool_pre_ping": True}
+
+
+engine = create_engine(settings.database_url, **_engine_options())
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -17,6 +23,9 @@ def get_db():
 
 def run_migrations():
     """Dynamically add missing columns to users table for SQLite development database."""
+    if engine.dialect.name != "sqlite":
+        return
+
     from sqlalchemy import inspect, text
     inspector = inspect(engine)
     try:
@@ -47,3 +56,10 @@ def run_migrations():
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_invites_invite_type ON invites (invite_type)"))
     except Exception as e:
         print(f"Migration error: {e}")
+
+
+def init_database():
+    """Initialize local SQLite databases. PostgreSQL schema is managed by Alembic."""
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
+        run_migrations()
