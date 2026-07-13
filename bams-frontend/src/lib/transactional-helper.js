@@ -629,7 +629,7 @@ export const filterTransactions = (
         record?.account_number,
         record?.account_holder_name,
         record?.account_type,
-        record?.vpa,
+        record?.txn_via,
       ]
         .map(normalizeSearchValue)
         .join(" ");

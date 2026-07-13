@@ -1,10 +1,11 @@
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, ForeignKey, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from ..database import Base
+from .types import ID_TYPE
 
 
 class InviteType(str, Enum):
@@ -15,10 +16,10 @@ class InviteType(str, Enum):
 class Invite(Base):
     __tablename__ = "invites"
 
-    id = Column(Integer, primary_key=True, index=True)
-    family_id = Column(Integer, ForeignKey("families.id"), nullable=False, index=True)
-    invited_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    invited_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    id = Column(ID_TYPE, primary_key=True)
+    family_id = Column(ID_TYPE, ForeignKey("families.id"), nullable=False, index=True)
+    invited_by_user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
+    invited_user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=True, index=True)
     invited_email = Column(String, nullable=False, index=True)
     invite_type = Column(
         String,

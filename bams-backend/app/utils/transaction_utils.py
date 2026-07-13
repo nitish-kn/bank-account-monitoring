@@ -6,11 +6,84 @@ from typing import Any, Mapping
 from ..ds.llm.schemas.transaction_schema import Transaction
 
 
+def normalize_transaction_date(raw_date: Any) -> str:
+    """Return a consistent YYYY-MM-DD string for all transaction dates."""
+
+    if raw_date is None:
+        return ""
+
+    if isinstance(raw_date, datetime):
+        return raw_date.strftime("%Y-%m-%d")
+
+    text = str(raw_date).strip()
+
+    if not text:
+        return ""
+
+    text = text.replace(",", "").replace("Z", "+00:00")
+
+    # ISO formats
+    try:
+        return datetime.fromisoformat(text).strftime("%Y-%m-%d")
+    except (TypeError, ValueError, OSError, OverflowError):
+        pass
+
+    # RFC 2822 / email dates
+    try:
+        parsed = parsedate_to_datetime(text)
+        if parsed is not None:
+            return parsed.strftime("%Y-%m-%d")
+    except (TypeError, ValueError, IndexError, AttributeError, OverflowError):
+        pass
+
+    formats = [
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%d.%m.%Y",
+
+        "%d/%m/%y",
+        "%d-%m-%y",
+
+        "%m/%d/%Y",
+        "%m-%d-%Y",
+
+        "%d %b %Y",
+        "%d %B %Y",
+
+        "%b %d %Y",
+        "%B %d %Y",
+
+        "%d %b %y",
+        "%d %B %y",
+
+        "%b %d %y",
+        "%B %d %y",
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(text, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+
+    # Try parsing only the first token if datetime is appended
+    try:
+        return datetime.fromisoformat(text.split()[0]).strftime("%Y-%m-%d")
+    except (TypeError, ValueError, OSError, OverflowError):
+        pass
+
+    return text
+
+
 TRANSACTION_SCHEMA = list(Transaction.model_fields.keys())
 GMAIL_MESSAGE_ID_FIELD = "gmail_message_id"
 GMAIL_MESSAGE_ID_COLUMN = "B"
 JSON_TRANSACTION_FIELDS = {"email_metadata", "parser_metadata", "raw_data"}
 VALID_TRANSACTION_TYPES = {"Debit", "Credit", "credit", "debit"}
+
 
 def _column_name(column_number: int) -> str:
     name = ""
@@ -32,10 +105,13 @@ def transaction_column_for_field(field_name: str) -> str:
 def _serialize_sheet_value(value: Any) -> str:
     if value is None:
         return ""
+
     if isinstance(value, (dict, list)):
         return json.dumps(value, ensure_ascii=False)
+
     if isinstance(value, bool):
         return "true" if value else "false"
+
     return str(value)
 
 
@@ -46,13 +122,26 @@ def transactions_to_sheet_rows(transactions: list[dict]) -> list[list[str]]:
         if hasattr(transaction, "model_dump"):
             transaction = transaction.model_dump()
 
-        transaction_type = transaction.get("txn_type") or transaction.get("transaction_type")
+        transaction_type = (
+            transaction.get("txn_type")
+            or transaction.get("transaction_type")
+        )
 
-        if not transaction_type or transaction_type.lower() not in VALID_TRANSACTION_TYPES:
+        if (
+            not transaction_type
+            or transaction_type.lower() not in VALID_TRANSACTION_TYPES
+        ):
             continue
 
+        normalized_transaction = dict(transaction)
+
+        # Normalize transaction date before storing
+        normalized_transaction["txn_date"] = normalize_transaction_date(
+            normalized_transaction.get("txn_date")
+        )
+
         rows.append([
-            _serialize_sheet_value(transaction.get(column))
+            _serialize_sheet_value(normalized_transaction.get(column))
             for column in TRANSACTION_SCHEMA
         ])
 
@@ -62,6 +151,7 @@ def transactions_to_sheet_rows(transactions: list[dict]) -> list[list[str]]:
 def _parse_json_cell(value: str) -> Any:
     if not value:
         return {}
+
     try:
         return json.loads(value)
     except (TypeError, ValueError):
@@ -70,12 +160,16 @@ def _parse_json_cell(value: str) -> Any:
 
 def _parse_bool_cell(value: str) -> bool | str | None:
     normalized_value = str(value).strip().lower()
+
     if not normalized_value:
         return None
+
     if normalized_value in {"true", "yes", "1"}:
         return True
+
     if normalized_value in {"false", "no", "0"}:
         return False
+
     return value
 
 
@@ -87,6 +181,7 @@ def parse_sheet_transaction_row(
         return None
 
     row_padded = row + [""] * (len(TRANSACTION_SCHEMA) - len(row))
+
     transaction = {
         column: row_padded[index]
         for index, column in enumerate(TRANSACTION_SCHEMA)
@@ -95,7 +190,14 @@ def parse_sheet_transaction_row(
     for field in JSON_TRANSACTION_FIELDS:
         transaction[field] = _parse_json_cell(transaction.get(field, ""))
 
-    transaction["is_forwarded"] = _parse_bool_cell(transaction.get("is_forwarded", ""))
+    transaction["is_forwarded"] = _parse_bool_cell(
+        transaction.get("is_forwarded", "")
+    )
+
+    # Normalize txn_date after reading from sheet
+    transaction["txn_date"] = normalize_transaction_date(
+        transaction.get("txn_date")
+    )
 
     if extra_fields:
         transaction.update(extra_fields)
@@ -105,11 +207,25 @@ def parse_sheet_transaction_row(
 
 def transaction_timestamp(transaction: dict) -> float:
     raw_date = transaction.get("txn_date") or ""
+
     if not raw_date:
         return 0
 
+    normalized_date = normalize_transaction_date(raw_date)
+
+    if normalized_date:
+        try:
+            return datetime.strptime(
+                normalized_date,
+                "%Y-%m-%d"
+            ).timestamp()
+        except (TypeError, ValueError, OSError, OverflowError):
+            pass
+
     try:
-        return datetime.fromisoformat(str(raw_date).replace("Z", "+00:00")).timestamp()
+        return datetime.fromisoformat(
+            str(raw_date).replace("Z", "+00:00")
+        ).timestamp()
     except (TypeError, ValueError, OSError, OverflowError):
         pass
 

@@ -39,6 +39,7 @@ from pydantic import ValidationError
 
 from ...config import settings
 from .schemas.models import ExtractionLogEntry, Transaction, TransactionBatch
+from .utils.account_lookup import fill_missing_account_details
 # from tracing import init_tracing
 
 OPENAI_API_KEY = settings.openai_api_key
@@ -246,9 +247,9 @@ Extract:
 * Reference Number
 * Similar identifiers
 
-## vpa
+## txn_via
 
-* Extract any value matching `*@*`.
+* Extract the transaction channel, for example `Bank Transaction`, `Credit Card`, or `FASTag`.
 
 ## counterparty
 
@@ -511,8 +512,14 @@ def extract_transactions_from_pdf(
             )
             continue
 
+        enriched_transactions = []
+        for tx in batch_result.transactions:
+            tx_dict = tx.model_dump()
+            enriched_tx = fill_missing_account_details(tx_dict)
+            enriched_transactions.append(Transaction.model_validate(enriched_tx))
+
         valid, log_entry = validate_transactions(
-            raw_transactions=batch_result.transactions,
+            raw_transactions=enriched_transactions,
             batch_index=batch_idx + 1,
             pages=page_numbers,
             extraction_notes=batch_result.extraction_notes,

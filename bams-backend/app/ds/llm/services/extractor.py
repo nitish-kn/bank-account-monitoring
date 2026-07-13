@@ -1,4 +1,6 @@
 import json
+import re
+import difflib
 
 from .html_cleaner import clean_email_body
 from .prompt_builder import build_batch_prompt
@@ -6,6 +8,7 @@ from .llm_client import call_llm
 
 from ..utils.hashing import generate_hash
 from ..utils.datetime_utils import get_current_timestamp
+from ..utils.account_lookup import fill_missing_account_details
 
 from ..schemas.transaction_schema import Transaction
 
@@ -99,6 +102,8 @@ def extract_transactions(emails):
                 "account_holder_name"
             ] = "Customer"
 
+        result = fill_missing_account_details(result)
+
         # Default forwarded flag
 
         if not result.get(
@@ -170,5 +175,55 @@ def extract_transactions(emails):
         final_results.append(
             validated_result.model_dump()
         )
+
+    # Normalize / canonicalize counterparty names across this batch
+    def _clean_key(name: str) -> str:
+        if not name:
+            return ""
+        return re.sub(r"\W+", "", name.lower())
+
+    # Build groups of similar cleaned keys
+    groups: list[dict] = []  # each: {key: cleaned_key, originals: [names]}
+
+    for res in final_results:
+        name = res.get("counterparty") or ""
+        cleaned = _clean_key(name)
+        placed = False
+        if not cleaned:
+            continue
+        for g in groups:
+            # compare cleaned strings for similarity
+            ratio = difflib.SequenceMatcher(None, cleaned, g["key"]).ratio()
+            if ratio >= 0.80:
+                g["originals"].append(name)
+                g["members"].append(res)
+                placed = True
+                break
+        if not placed:
+            groups.append({"key": cleaned, "originals": [name], "members": [res]})
+
+    # For each group, pick a canonical display name (prefer longest non-empty original)
+    for g in groups:
+        candidates = [n for n in g["originals"] if n]
+        if candidates:
+            canonical = max(candidates, key=lambda s: len(s))
+        else:
+            canonical = ""
+
+        # Append details like account_number or ref_number in parentheses if present
+        for member in g["members"]:
+            suffix_parts = []
+            acct = member.get("account_number")
+            ref = member.get("ref_number")
+            if acct:
+                suffix_parts.append(f"Account: {acct}")
+            if ref:
+                suffix_parts.append(f"Ref: {ref}")
+
+            suffix = ""
+            if suffix_parts:
+                suffix = " (" + ", ".join(suffix_parts) + ")"
+
+            member["counterparty"] = canonical + suffix if canonical else member.get("counterparty")
 
     return final_results
