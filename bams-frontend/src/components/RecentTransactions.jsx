@@ -58,7 +58,6 @@ const RecentTransactions = ({ transactions = [] }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [data, setData] = useState({});
 
-  console.log(data)
   const columns = useMemo(
     () => [
       {

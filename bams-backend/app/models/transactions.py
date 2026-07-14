@@ -1,12 +1,15 @@
 from ..database import Base
-from sqlalchemy import Column, DateTime, Integer, String, Numeric
+from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, Numeric
 from sqlalchemy.dialects.postgresql import JSONB
-
+from .types import ID_TYPE
+from sqlalchemy.orm import relationship
 
 class Transactions(Base):
     __tablename__ = "transactions"
 
     id = Column(String, primary_key=True, index=True)
+
+    user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
 
     gmail_message_id = Column(String, index=True)
 
@@ -37,11 +40,15 @@ class Transactions(Base):
 
     source = Column(String, nullable=False)
 
-    dedupe_key = Column(String, nullable=False, index=True)
+    dedupe_key = Column(String, nullable=True, index=True)
     email_metadata = Column(JSONB)
     parser_metadata = Column(JSONB)
     raw_data = Column(JSONB)
     optional_fields = Column(JSONB)
 
+    sheets_synced_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default="now()")
     updated_at = Column(DateTime(timezone=True), onupdate="now()")
+
+    user = relationship("User", back_populates="transactions")  # or appropriate name

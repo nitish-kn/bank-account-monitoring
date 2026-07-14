@@ -33,3 +33,6 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     family = relationship("Family", foreign_keys=[family_id], back_populates="members")
+    transactions = relationship("Transactions", back_populates="user")
+    bank_accounts = relationship("BankAccounts", back_populates="user")
+    parsed_emails = relationship("Parsed", back_populates="user")
