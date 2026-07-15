@@ -17,11 +17,6 @@ def _get_sheet_title(sheets_service: Any, spreadsheet_id: str) -> str:
     return "Sheet1"
 
 
-def _read_existing_email_ids(sheets_service: Any, spreadsheet_id: str, sheet_title: str) -> set[str]:
-    """ Fetches column A (skipping the header) to extract historical email IDs. This prevents duplicate entries. """
-    return _read_existing_column_values(sheets_service, spreadsheet_id, sheet_title, "A")
-
-
 def _read_existing_column_values(
     sheets_service: Any,
     spreadsheet_id: str,

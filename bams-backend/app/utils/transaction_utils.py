@@ -3,8 +3,16 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Any, Mapping
 
-from ..ds.llm.schemas.transaction_schema import Transaction
-
+from ..core.constants import (
+    GMAIL_MESSAGE_ID_COLUMN,
+    GMAIL_MESSAGE_ID_FIELD,
+    JSON_TRANSACTION_FIELDS,
+    TRANSACTION_DATA_RANGE,
+    TRANSACTION_HEADER_RANGE,
+    TRANSACTION_SCHEMA,
+    TRANSACTION_SHEET_END_COLUMN,
+    VALID_TRANSACTION_TYPES,
+)
 
 def normalize_transaction_date(raw_date: Any) -> str:
     """Return a consistent YYYY-MM-DD string for all transaction dates."""
@@ -78,24 +86,12 @@ def normalize_transaction_date(raw_date: Any) -> str:
     return text
 
 
-TRANSACTION_SCHEMA = list(Transaction.model_fields.keys())
-GMAIL_MESSAGE_ID_FIELD = "gmail_message_id"
-GMAIL_MESSAGE_ID_COLUMN = "B"
-JSON_TRANSACTION_FIELDS = {"email_metadata", "parser_metadata", "raw_data"}
-VALID_TRANSACTION_TYPES = {"Debit", "Credit", "credit", "debit"}
-
-
 def _column_name(column_number: int) -> str:
     name = ""
     while column_number:
         column_number, remainder = divmod(column_number - 1, 26)
         name = chr(65 + remainder) + name
     return name
-
-
-TRANSACTION_SHEET_END_COLUMN = _column_name(len(TRANSACTION_SCHEMA))
-TRANSACTION_HEADER_RANGE = f"A1:{TRANSACTION_SHEET_END_COLUMN}1"
-TRANSACTION_DATA_RANGE = f"A2:{TRANSACTION_SHEET_END_COLUMN}"
 
 
 def transaction_column_for_field(field_name: str) -> str:
@@ -233,3 +229,13 @@ def transaction_timestamp(transaction: dict) -> float:
         return parsedate_to_datetime(str(raw_date)).timestamp()
     except (TypeError, ValueError, IndexError, AttributeError, OverflowError):
         return 0
+    
+
+def check_valid_transactions(transactions: list[dict]) -> list[dict]:
+    """Return only rows that the parser classified as real transactions."""
+
+    return [
+        row 
+        for row in transactions
+        if row.get("parser_metadata", {}).get("parsed_status") == "parsed"
+    ]

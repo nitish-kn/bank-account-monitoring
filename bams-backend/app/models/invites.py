@@ -4,13 +4,18 @@ from sqlalchemy import Column, DateTime, ForeignKey, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
+from ..core.constants import (
+    FAMILY_INVITE as FAMILY_INVITE_VALUE,
+    INVITE_STATUS_PENDING,
+    JOIN_REQUEST as JOIN_REQUEST_VALUE,
+)
 from ..database import Base
 from .types import ID_TYPE
 
 
 class InviteType(str, Enum):
-    FAMILY_INVITE = "family_invite"
-    JOIN_REQUEST = "join_request"
+    FAMILY_INVITE = FAMILY_INVITE_VALUE
+    JOIN_REQUEST = JOIN_REQUEST_VALUE
 
 
 class Invite(Base):
@@ -28,7 +33,7 @@ class Invite(Base):
         server_default=InviteType.FAMILY_INVITE.value,
         index=True,
     )
-    status = Column(String, default="pending", nullable=False, server_default="pending", index=True)
+    status = Column(String, default=INVITE_STATUS_PENDING, nullable=False, server_default=INVITE_STATUS_PENDING, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     expires_at = Column(DateTime(timezone=True), nullable=True)

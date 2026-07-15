@@ -5,18 +5,18 @@ import hashlib
 import re
 from uuid import uuid4
 from typing import List
+from sqlalchemy.orm import Session
 
+from ..core.constants import UPLOAD_DIR
+from ..models.transactions import Transactions
 from ..models.user import User
 from ..services.credentials import build_credentials
-from ..utils.sheets_utils import _get_sheet_title, _read_existing_column_values
-from ..utils.transaction_utils import (
-    transactions_to_sheet_rows,
-    transaction_column_for_field,
+from ..utils.db_utils import (
+    build_transaction_dedupe_key,
+    save_valid_transaction_to_db,
 )
-from .setup_service import append_sheet_with_emails
-
-BACKEND_ROOT = Path(__file__).resolve().parents[2]
-UPLOAD_DIR = BACKEND_ROOT / "uploads"
+from ..utils.sheets_utils import _get_sheet_title
+from .setup_service import _sync_transactions_to_sheet
 
 
 def _parse_statement_pdf(pdf_path: Path) -> list[dict]:
@@ -43,10 +43,6 @@ def _safe_upload_name(filename: str | None, index: int) -> str:
     return f"{stem}_{uuid4().hex}{suffix}"
 
 
-def _normalize_reference(value: str | None) -> str:
-    return str(value or "").strip().lower()
-
-
 def _fallback_reference(transaction: dict) -> str:
     raw_key = "|".join(
         str(transaction.get(field) or "").strip()
@@ -64,6 +60,8 @@ def _fallback_reference(transaction: dict) -> str:
 
 
 def _normalize_statement_transaction(transaction: dict, source_file: str) -> dict:
+    """ Makes statement parser output look like a parsed transaction."""
+
     normalized = dict(transaction or {})
     ref_number = str(normalized.get("ref_number") or "").strip() or _fallback_reference(normalized)
     parser_metadata = normalized.get("parser_metadata") or {}
@@ -81,6 +79,7 @@ def _normalize_statement_transaction(transaction: dict, source_file: str) -> dic
     normalized["ref_number"] = ref_number
     normalized.setdefault("id", ref_number)
     normalized.setdefault("gmail_message_id", "")
+    normalized["source"] = "statement"
     normalized.setdefault("email_metadata", {})
     normalized["parser_metadata"] = parser_metadata
     normalized.setdefault("raw_data", {"source_file": source_file})
@@ -122,12 +121,13 @@ def _delete_saved_statement(saved_path: Path) -> None:
     except OSError as error:
         print(f"Failed to delete temporary statement file {saved_path}: {error}")
 
-async def process_and_upload_statements(user: User, files: List[UploadFile]) -> dict:
+async def process_and_upload_statements(user: User, files: List[UploadFile], db: Session) -> dict:
     """
     Service to process uploaded bank statement files.
     Saves files, invokes the PDF LLM parser sequentially for each statement,
-    and appends extracted transactions directly into the user's Google Sheet.
+    saves extracted transactions into DB, then projects unsynced rows to Google Sheets.
     """
+    
     if not files:
         raise HTTPException(status_code=400, detail="No statement files uploaded.")
 
@@ -142,22 +142,20 @@ async def process_and_upload_statements(user: User, files: List[UploadFile]) -> 
         sheets_service = build("sheets", "v4", credentials=credentials)
         sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
 
-        # Retrieve all currently saved reference numbers to avoid duplicate insertions
-        existing_ref_numbers = _read_existing_column_values(
-            sheets_service,
-            user.spreadsheet_id,
-            sheet_title,
-            transaction_column_for_field("ref_number"),
-        )
-        existing_ref_numbers = {
-            _normalize_reference(ref)
-            for ref in existing_ref_numbers
-            if _normalize_reference(ref)
+        existing_dedupe_keys = {
+            row.dedupe_key
+            for row in db.query(Transactions.dedupe_key)
+            .filter(
+                Transactions.user_id == user.id,
+                Transactions.dedupe_key.isnot(None),
+            )
+            .all()
+            if row.dedupe_key
         }
     except Exception as e:
         for _, saved_path in saved_files:
             _delete_saved_statement(saved_path)
-        raise HTTPException(status_code=500, detail=f"Failed to connect to Google Sheets or read reference numbers: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to connect to Google Sheets or database: {str(e)}")
 
     all_extracted_txns = []
     total_rows_written = 0
@@ -179,18 +177,19 @@ async def process_and_upload_statements(user: User, files: List[UploadFile]) -> 
                 })
                 continue
 
-            # Filter out transactions that have a duplicate ref_number
+            # Filter out transactions that already exist in the DB dedupe set.
             unique_txns = []
             for txn in extracted_txns:
                 normalized_txn = _normalize_statement_transaction(txn, original_filename)
-                ref = _normalize_reference(normalized_txn.get("ref_number"))
+                dedupe_key = build_transaction_dedupe_key(normalized_txn, user.id)
+                normalized_txn["dedupe_key"] = dedupe_key
 
-                if ref in existing_ref_numbers:
+                if dedupe_key in existing_dedupe_keys:
                     skipped_duplicates += 1
                     continue
 
                 unique_txns.append(normalized_txn)
-                existing_ref_numbers.add(ref)
+                existing_dedupe_keys.add(dedupe_key)
 
             if not unique_txns:
                 processed_files.append({
@@ -203,16 +202,26 @@ async def process_and_upload_statements(user: User, files: List[UploadFile]) -> 
                 continue
 
             all_extracted_txns.extend(unique_txns)
-            
-            # 3. Serialize extracted transactions to sheet rows
-            rows = transactions_to_sheet_rows(unique_txns)
-            if rows:
-                # Safely append rows to the user's spreadsheet by reusing the existing setup utility
-                sync_result = append_sheet_with_emails(user, user.spreadsheet_id, sheet_title, rows)
-                rows_written = sync_result.get("rows_written", 0)
-                total_rows_written += rows_written
-            else:
-                rows_written = 0
+
+            try:
+                saved_transactions = save_valid_transaction_to_db(unique_txns, user.id, db)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed saving statement transactions for '{original_filename}': {str(e)}"
+                )
+
+            sync_result = _sync_transactions_to_sheet(
+                user,
+                db,
+                sheets_service=sheets_service,
+                sheet_title=sheet_title,
+                transaction_ids=[transaction.id for transaction in saved_transactions],
+            )
+            rows_written = sync_result.get("rows_written", 0)
+            total_rows_written += rows_written
 
             processed_files.append({
                 "filename": original_filename,

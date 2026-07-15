@@ -1,47 +1,57 @@
 import asyncio
 from datetime import timedelta
 from threading import Thread
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import time
 
 from fastapi import HTTPException
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
-from typing import Generator
 
+from ..core.constants import (
+    EMAIL_EXTRACTION_BATCH_SIZE,
+    EMAIL_EXTRACTION_MAX_IN_FLIGHT,
+    EMAIL_EXTRACTION_MAX_WORKERS,
+    REQUIRED_SCHEMA,
+    SHEET_NAME,
+    SYNC_STATUS_COMPLETED,
+    SYNC_STATUS_FAILED,
+    SYNC_STATUS_RUNNING,
+    SYNC_TIMEOUT_SECONDS,
+    TRANSACTION_DATA_RANGE,
+    TRANSACTION_HEADER_RANGE,
+)
 from ..database import SessionLocal
 from ..models.user import User
 from ..utils.date_utils import datetime_to_iso, utc_now
 from ..utils.email_utils import latest_email_datetime
+from ..utils.db_utils import (
+    check_existing_gmail_message_id,
+    get_unsynced_transactions_for_user,
+    mark_transactions_sheet_synced,
+    save_valid_transaction_to_db,
+    transaction_to_schema_dict,
+    update_parsed_status_to_db,
+)
 from .credentials import build_credentials
-from .gmail_service import DEFAULT_EMAIL_FETCH_LIMIT, fetch_user_emails, iter_user_email_pages, get_latest_gmail_message_id
+from .gmail_service import (
+    get_latest_gmail_message_id,
+    hydrate_user_message_page,
+    iter_user_message_pages,
+)
 
 
-from ..utils.sheets_utils import _read_existing_column_values, _get_sheet_title, _append_sheet_rows
+from ..utils.sheets_utils import _get_sheet_title, _append_sheet_rows
 from ..utils.transaction_utils import (
-    GMAIL_MESSAGE_ID_COLUMN,
-    TRANSACTION_DATA_RANGE,
-    TRANSACTION_HEADER_RANGE,
-    TRANSACTION_SCHEMA,
-    TRANSACTION_SHEET_END_COLUMN,
     transactions_to_sheet_rows,
+    check_valid_transactions
 )
 from ..ds.llm.services.extractor import extract_transactions
-
-REQUIRED_SCHEMA = TRANSACTION_SCHEMA
-SHEET_NAME = "Dashboard Data Sheet"
-SYNC_STATUS_NOT_STARTED = "not_started"
-SYNC_STATUS_RUNNING = "running"
-SYNC_STATUS_COMPLETED = "completed"
-SYNC_STATUS_FAILED = "failed"
-
-CACHED_EMAILS: list[dict] = []
 
 # Thread tracking for stuck-sync detection
 # Maps user_id -> {"thread": Thread, "started_at": float (time.time())}
 _active_sync_threads: dict[int, dict] = {}
-SYNC_TIMEOUT_SECONDS = 30 * 60  # 30 minutes soft timeout for hung threads
 
 
 # --------------------- Helper functions
@@ -58,7 +68,7 @@ def _update_latest_synced_email_date(user: User, emails: list[dict] | None = Non
     """ Inspects a batch of emails, finds the most recent timestamp, and updates the user's tracking state if it's newer than what is currently saved. """
     latest_email_date = latest_email_datetime(emails or [])
     if latest_email_date and (
-        not user.last_synced_email_date
+        not user.last_synced_email_date     # If the user is new, or its their first sync
         or latest_email_date > user.last_synced_email_date
     ):
         user.last_synced_email_date = latest_email_date
@@ -93,6 +103,51 @@ def _mark_sync_failed(user: User, db: Session) -> None:
         db.rollback()
         safe_error = str(error).encode('ascii', 'replace').decode('ascii')
         print(f"Failed to update sync failure metadata: {safe_error}")
+
+
+def _sync_transactions_to_sheet(
+    user: User,
+    db: Session,
+    sheets_service=None,
+    sheet_title: str | None = None,
+    transaction_ids: list[str] | None = None,
+) -> dict:
+    """Append committed DB transactions that have not yet been projected to Sheets.
+        This function get unsynced DB transactions then:
+        -> convert DB rows to transaction_schema dicts
+        -> convert those dicts to Sheet rows
+        -> append rows to Google Sheets
+        -> mark transactions as synced """
+    
+    if not user.spreadsheet_id:
+        return {"updated": False, "rows_written": 0}
+
+    pending_transactions = get_unsynced_transactions_for_user(
+        user.id,
+        db,
+        transaction_ids=transaction_ids,
+    )
+    if not pending_transactions:
+        return {"updated": False, "rows_written": 0}
+
+    if sheets_service is None:
+        credentials = build_credentials(user)
+        sheets_service = build("sheets", "v4", credentials=credentials)
+
+    if sheet_title is None:
+        sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
+
+    rows = transactions_to_sheet_rows([
+        transaction_to_schema_dict(transaction)
+        for transaction in pending_transactions
+    ])
+    if not rows:
+        return {"updated": False, "rows_written": 0}
+
+    result = _append_sheet_rows(sheets_service, user.spreadsheet_id, sheet_title, rows)
+    mark_transactions_sheet_synced(pending_transactions, db)
+    db.commit()
+    return result
 
 
 def _is_sync_genuinely_running(user_id: int) -> bool:
@@ -210,63 +265,159 @@ def create_sheets_and_fill_schema(user: User) -> dict:
 
 # Initial Setup Workflow - 1.2.1.1
 def _run_backfill_sync_for_user(user_id: int) -> None:
-    global CACHED_EMAILS
+    """ This is main backgound sync """
 
     db = SessionLocal()
     try:
+        # 1. Load user from DB
         user = db.query(User).filter(User.id == user_id).first()
         if not user or not user.is_setup_completed or not user.spreadsheet_id:
             return
 
+        # 2. Build Sheets client
         credentials = build_credentials(user)
         sheets_service = build("sheets", "v4", credentials=credentials)
         sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
 
-        # Pulls already synced message IDs from Google Sheet
-        existing_gmail_message_ids = _read_existing_column_values(
-            sheets_service,
-            user.spreadsheet_id,
-            sheet_title,
-            GMAIL_MESSAGE_ID_COLUMN,
-        )
+        # 3. Get existing Gmail IDs from parsed table
+        existing_gmail_message_ids = check_existing_gmail_message_id(user, db)
 
-        # Pulls batches of full emails from Gmail API
+        # Dynamic start date for fetching emails. If the user has a last_synced_email_date, 
+        # we start from one day before that to ensure we don't miss any emails.
         start_date = None
         if user.last_synced_email_date:
             start_date = user.last_synced_email_date - timedelta(days=1)
 
-        for emails in iter_user_email_pages(user, start_date=start_date):
-            _update_latest_synced_email_date(user, emails)
-            new_emails = [
-                email
-                for email in emails
-                if email.get("id") and email.get("id") not in existing_gmail_message_ids
+        # 4. Ask Gmail for message ID pages
+        for message_page in iter_user_message_pages(user, start_date=start_date):
+            
+            # 5. Remove IDs already in DB
+            new_messages = [
+                message
+                for message in message_page
+                if message.get("id") and message.get("id") not in existing_gmail_message_ids
             ]
 
-            if not new_emails:
+            if not new_messages:
                 db.add(user)
                 db.commit()
                 continue
-            
-            print("Emails from Gmail Api - count:", len(new_emails), "\n")
-            CACHED_EMAILS = []
-            for batch_txns in _batch_extract_transactions(new_emails):
-                if not batch_txns:
-                    continue
-                print("Extracted batch txn - count:", len(batch_txns), "\n" )
 
-                rows = parse_emails_for_sheet(batch_txns)
-                _append_sheet_rows(sheets_service, user.spreadsheet_id, sheet_title, rows)
-                
-                CACHED_EMAILS.extend(batch_txns)
-                existing_gmail_message_ids.update(
-                    transaction.get("gmail_message_id")
-                    for transaction in batch_txns
-                    if transaction.get("gmail_message_id")
+            # 6. Hydrate only new IDs
+            new_emails = hydrate_user_message_page(user, new_messages)
+            _update_latest_synced_email_date(user, new_emails)
+            hydrated_email_ids = {
+                email.get("id")
+                for email in new_emails
+                if email.get("id")
+            }
+            missing_hydrated_messages = [
+                message
+                for message in new_messages
+                if message.get("id") and message.get("id") not in hydrated_email_ids
+            ]
+            if missing_hydrated_messages:
+                update_parsed_status_to_db(
+                    user_id,
+                    [],
+                    db,
+                    emails=[{"id": message.get("id")} for message in missing_hydrated_messages],
+                    error="Gmail message detail could not be parsed after hydration.",
                 )
-
                 db.add(user)
                 db.commit()
+                existing_gmail_message_ids.update(
+                    message.get("id")
+                    for message in missing_hydrated_messages
+                    if message.get("id")
+                )
+
+            if not new_emails:
+                continue
+
+            print("Emails from Gmail Api - count:", len(new_emails), "\n")
+
+            # 7. Send hydrated emails to LLM batches
+            for batch_result in _batch_extract_transactions(new_emails):
+                if not batch_result:
+                    continue
+
+                batch_emails = batch_result.get("emails", [])
+                transactions = batch_result.get("transactions", [])
+                extraction_error = batch_result.get("error")
+
+                if extraction_error:
+                    update_parsed_status_to_db(
+                        user_id,
+                        [],
+                        db,
+                        emails=batch_emails,
+                        error=extraction_error,
+                    )
+                    db.add(user)
+                    db.commit()
+                    existing_gmail_message_ids.update(
+                        email.get("id")
+                        for email in batch_emails
+                        if email.get("id")
+                    )
+                    continue
+
+                try:
+                    # 8. Check for valid transaction with transaction objects only and save parsed transactions to DB
+                    valid_transactions = check_valid_transactions(transactions)
+                    saved_transactions = save_valid_transaction_to_db(
+                        valid_transactions,
+                        user_id,
+                        db,
+                    )
+
+                    # 9. Save parsed/not_transaction/failed status
+                    update_parsed_status_to_db(
+                        user_id,
+                        transactions,
+                        db,
+                        emails=batch_emails,
+                    )
+
+                    # 10. Commit DB batch
+                    db.add(user)
+                    db.commit()
+                except Exception as error:
+                    db.rollback()
+                    safe_error = str(error).encode('ascii', 'replace').decode('ascii')
+                    print(f"Failed to persist extracted batch: {safe_error}")
+                    update_parsed_status_to_db(
+                        user_id,
+                        [],
+                        db,
+                        emails=batch_emails,
+                        error=safe_error,
+                    )
+                    db.add(user)
+                    db.commit()
+                    existing_gmail_message_ids.update(
+                        email.get("id")
+                        for email in batch_emails
+                        if email.get("id")
+                    )
+                    continue
+
+                # 11. Append committed DB rows to Sheets
+                if saved_transactions:
+                    _sync_transactions_to_sheet(
+                        user,
+                        db,
+                        sheets_service=sheets_service,
+                        sheet_title=sheet_title,
+                        transaction_ids=[transaction.id for transaction in saved_transactions],
+                    )
+
+                existing_gmail_message_ids.update(
+                    email.get("id")
+                    for email in batch_emails
+                    if email.get("id")
+                )
 
         _mark_sync_success(user, db)
     except Exception as error:
@@ -329,56 +480,16 @@ def start_background_sync_for_user(user: User, db: Session) -> dict:
         **_sync_metadata_payload(user),
     }
 
-MAX_WORKERS = 3
 
-# def _batch_extract_transactions(emails: list[dict]) -> list[dict]:
-#     def safe_extract(batch_index, batch):
-#         try:
-#             print(f"Batch {batch_index} started")
-#             print("Batch IDs:", [email.get("id") for email in batch])
+def _batch_extract_transactions(
+    emails: list[dict],
+    batch_size: int = EMAIL_EXTRACTION_BATCH_SIZE,
+    max_workers: int = EMAIL_EXTRACTION_MAX_WORKERS,
+    max_in_flight: int = EMAIL_EXTRACTION_MAX_IN_FLIGHT,
+):
+    """ This is the limited-parallel streaming generator, at most 2 LLM calls run at once. As each batch finishes, it yields.
+        This allows the caller to save each batch to DB immediately."""
 
-#             result = extract_transactions(batch)
-
-#             if result is None:
-#                 print(f"Batch {batch_index} returned None")
-#                 return []
-
-#             if not isinstance(result, list):
-#                 print(f"Batch {batch_index} returned non-list:", type(result), result)
-#                 return []
-
-#             print(f"Batch {batch_index} success, transactions:", len(result))
-#             return result
-
-#         except Exception as e:
-#             print(f"Batch {batch_index} extraction failed: {e}")
-#             print("Failed batch IDs:", [email.get("id") for email in batch])
-#             return []
-
-#     batches = [emails[i:i + BATCH_SIZE] for i in range(0, len(emails), BATCH_SIZE)]
-
-#     if not batches:
-#         return []
-
-#     extracted_transactions = []
-
-#     with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(batches))) as executor:
-#         futures = [
-#             executor.submit(safe_extract, index + 1, batch)
-#             for index, batch in enumerate(batches)
-#         ]
-
-#         for future in as_completed(futures):
-#             batch_result = future.result()
-#             extracted_transactions.extend(batch_result)
-
-#     return extracted_transactions
-
-
-
-BATCH_SIZE = 5
-
-def _batch_extract_transactions(emails: list[dict]) -> Generator[list[dict], None, None]:
     def safe_extract(batch_index, batch):
         try:
             print(f"Batch {batch_index} started")
@@ -388,92 +499,65 @@ def _batch_extract_transactions(emails: list[dict]) -> Generator[list[dict], Non
 
             if result is None:
                 print(f"Batch {batch_index} returned None")
-                return []
+                return {"transactions": [], "error": "LLM extractor returned no response."}
 
             if not isinstance(result, list):
                 print(f"Batch {batch_index} returned non-list:", type(result), result)
-                return []
+                return {"transactions": [], "error": f"LLM extractor returned {type(result).__name__} instead of list."}
 
             print(f"Batch {batch_index} success, transactions:", len(result))
-            return result
+            return {"transactions": result, "error": None}
 
         except Exception as e:
             safe_e = str(e).encode('ascii', 'replace').decode('ascii')
             print(f"Batch {batch_index} extraction failed: {safe_e}")
             print("Failed batch IDs:", [email.get("id") for email in batch])
-            return []
+            return {"transactions": [], "error": safe_e}
 
-    batches = [emails[i:i + BATCH_SIZE] for i in range(0, len(emails), BATCH_SIZE)]
+    batches = [
+        emails[i:i + batch_size]
+        for i in range(0, len(emails), batch_size)
+    ]
 
     if not batches:
-        return
+        return 
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        pending = {}
 
-    for index, batch in enumerate(batches):
-        batch_result = safe_extract(index + 1, batch)
-        yield batch_result
+        def submit_batch(index):
+            batch = batches[index]
+            future = executor.submit(safe_extract, index + 1, batch)
+            pending[future] = (index, batch)
 
-        if index < len(batches) - 1:
-            print("Waiting 60 seconds before next batch...")
-            time.sleep(60)
+        next_index = 0
 
-# Incremental Sync Workflow - 2.1
-def parse_emails_for_sheet(transactions: list[dict]) -> list[list[str]]:
-    """Convert extracted transaction data into rows that match REQUIRED_SCHEMA."""
-    return transactions_to_sheet_rows(transactions)
+        while next_index < min(max_in_flight, len(batches)):
+            submit_batch(next_index)
+            next_index += 1
 
+        while pending:
+            done, _ = wait(pending, return_when=FIRST_COMPLETED)
 
+            for future in done:
+                index, batch = pending.pop(future)
 
+                try:
+                    result = future.result()
+                except Exception as error:
+                    safe_error = str(error).encode('ascii', 'replace').decode('ascii')
+                    result = {"transactions": [], "error": safe_error}
 
+                yield {
+                    "batch_index": index + 1,
+                    "emails": batch,
+                    "transactions": result.get("transactions", []),
+                    "error": result.get("error"),
+                }
 
-def fill_sheet_with_emails(user: User, spreadsheet_id: str, sheet_title: str, rows: list[list[str]]) -> dict:
-    """Write email rows into the sheet below the header."""
-
-    # If there are no rows to write, we can skip the API call and return early.
-    if not rows:
-        return {"updated": False, "message": "No email data to write."}
-
-    # Build credentials and initialize the Sheets API client
-    credentials = build_credentials(user)
-    sheets_service = build("sheets", "v4", credentials=credentials)
-    end_row = len(rows) + 1
-    range_name = f"'{sheet_title}'!A2:{TRANSACTION_SHEET_END_COLUMN}{end_row}"
-
-    try:
-        # Write the email data rows into the sheet starting from row 2 (below the header)
-        sheets_service.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id,
-            range=range_name,
-            valueInputOption="RAW",
-            body={"values": rows}
-        ).execute()
-        return {"updated": True, "rows_written": len(rows)}
-    except HttpError as error:
-        raise HTTPException(status_code=500, detail=f"Failed to write emails to sheet: {error}")
-
-def start_email_fetching_process(user: User, spreadsheet_id: str, sheet_title: str) -> dict:
-    """Fetch Gmail emails, cache them, parse them, and fill the sheet."""
-    global CACHED_EMAILS
-
-    # Fetch the user's emails from Gmail using the stored access token. Cache the raw email data in memory for quick access.
-    fetch_result = fetch_user_emails(user, max_results=DEFAULT_EMAIL_FETCH_LIMIT)
-    emails = fetch_result.get("emails", [])
-
-    if not emails:
-        return {"emails_count": 0, "sheetUpdated": {"updated": False, "message": "No emails were found."}}
-
-    extracted_txns = _batch_extract_transactions(emails)
-    CACHED_EMAILS = extracted_txns
-
-    # Parse the extracted transactions into rows that match the required schema and write them into the sheet.
-    parsed_rows = parse_emails_for_sheet(extracted_txns)
-    write_result = fill_sheet_with_emails(user, spreadsheet_id, sheet_title, parsed_rows)
-    return {
-        "emails_count": len(emails),
-        "sheetUpdated": write_result,
-    }
-
-
-
+                if next_index < len(batches):
+                    submit_batch(next_index)
+                    next_index += 1
 
 # ------------- Main function that orchestrates the entire setup process with progress updates for the frontend to consume via SSE.
 
@@ -540,22 +624,10 @@ async def setup_process_with_progress(user: User, db: Session):
             "status": "failed"
         }
 
-def append_sheet_with_emails(user: User, spreadsheet_id: str, sheet_title: str, new_rows: list[list[str]]):
-    """Safely append new rows to the Google Sheet using the append API."""
-    if not new_rows:
-        return {"updated": False, "rows_written": 0}
-
-    credentials = build_credentials(user)
-    sheets_service = build("sheets", "v4", credentials=credentials)
-
-    try:
-        return _append_sheet_rows(sheets_service, spreadsheet_id, sheet_title, new_rows)
-    except HttpError as error:
-        raise HTTPException(status_code=500, detail=f"Failed to append emails: {error}")
-
 # Incremental Sync Workflow - 2
 def perform_incremental_sync(user: User, db: Session):
     """Fetch only the newest Gmail messages after the last synced email date."""
+    
     if not user.is_setup_completed or not user.spreadsheet_id:
         raise HTTPException(status_code=400, detail="Setup must be completed before sync.")
 
@@ -574,33 +646,25 @@ def perform_incremental_sync(user: User, db: Session):
             _mark_sync_failed(user, db)
             db.refresh(user)
 
-    # Fetch the single latest email ID from Gmail and check if it's already in the sheet.
+    # Fetch the single latest email ID from Gmail and check if it already exists in DB.
     try:
-        credentials = build_credentials(user)
-        sheets_service = build("sheets", "v4", credentials=credentials)
-        sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
-        
-        # Fetch the latest email ID from Gmail
         latest_gmail_id = get_latest_gmail_message_id(user)
         if latest_gmail_id:
-            # Check if this ID is already in the sheet
-            existing_gmail_message_ids = _read_existing_column_values(
-                sheets_service,
-                user.spreadsheet_id,
-                sheet_title,
-                GMAIL_MESSAGE_ID_COLUMN,
-            )
+            existing_gmail_message_ids = check_existing_gmail_message_id(user, db)
+            
             if latest_gmail_id in existing_gmail_message_ids:
-                # Up to date!
-                # Mark as success to clear running statuses if any
+                
+                # It fetches only latest Gmail ID. If latest ID already exists in DB, it does not run full sync. But it still calls: So if DB had rows saved but Sheets failed earlier, manual sync can repair Sheets.
+                sheet_result = _sync_transactions_to_sheet(user, db)
                 sync_metadata = _mark_sync_success(user, db)
                 return {
                     "status": "success",
                     "sync_status": SYNC_STATUS_COMPLETED,
-                    "new_rows": 0,
+                    "new_rows": sheet_result.get("rows_written", 0),
                     "message": "Dashboard is already up to date.",
                     **sync_metadata,
                 }
+            
     except Exception as e:
         # If check fails for some API/credentials reasons, fallback to background sync
         safe_error = str(e).encode('ascii', 'replace').decode('ascii')
@@ -608,7 +672,3 @@ def perform_incremental_sync(user: User, db: Session):
 
     return start_background_sync_for_user(user, db)
 
-
-def get_cached_emails() -> list[dict]:
-    """Return the last fetched email payloads."""
-    return CACHED_EMAILS
