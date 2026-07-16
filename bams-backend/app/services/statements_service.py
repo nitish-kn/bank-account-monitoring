@@ -74,7 +74,6 @@ def _normalize_statement_transaction(transaction: dict, source_file: str) -> dic
     parser_metadata = {
         **(parser_metadata if isinstance(parser_metadata, dict) else {}),
         "parsed_status": "parsed",
-        "source": "statement_upload",
         "source_file": source_file,
     }
 
@@ -83,8 +82,7 @@ def _normalize_statement_transaction(transaction: dict, source_file: str) -> dic
     normalized.setdefault("gmail_message_id", "")
     normalized.setdefault("email_metadata", {})
     normalized["parser_metadata"] = parser_metadata
-    normalized.setdefault("raw_data", {"source_file": source_file})
-    normalized.setdefault("is_forwarded", False)
+    normalized.setdefault("source", "statement")
 
     return normalized
 

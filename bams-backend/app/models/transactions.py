@@ -40,7 +40,7 @@ class Transactions(Base):
     dedupe_key = Column(String, nullable=False, index=True)
     email_metadata = Column(JSONB)
     parser_metadata = Column(JSONB)
-    raw_data = Column(JSONB)
+    
     optional_fields = Column(JSONB)
 
     created_at = Column(DateTime(timezone=True), server_default="now()")

@@ -81,7 +81,7 @@ def normalize_transaction_date(raw_date: Any) -> str:
 TRANSACTION_SCHEMA = list(Transaction.model_fields.keys())
 GMAIL_MESSAGE_ID_FIELD = "gmail_message_id"
 GMAIL_MESSAGE_ID_COLUMN = "B"
-JSON_TRANSACTION_FIELDS = {"email_metadata", "parser_metadata", "raw_data"}
+JSON_TRANSACTION_FIELDS = {"email_metadata", "parser_metadata", "optional_fields"}
 VALID_TRANSACTION_TYPES = {"Debit", "Credit", "credit", "debit"}
 
 
@@ -158,21 +158,6 @@ def _parse_json_cell(value: str) -> Any:
         return value
 
 
-def _parse_bool_cell(value: str) -> bool | str | None:
-    normalized_value = str(value).strip().lower()
-
-    if not normalized_value:
-        return None
-
-    if normalized_value in {"true", "yes", "1"}:
-        return True
-
-    if normalized_value in {"false", "no", "0"}:
-        return False
-
-    return value
-
-
 def parse_sheet_transaction_row(
     row: list[str],
     extra_fields: Mapping[str, Any] | None = None,
@@ -189,10 +174,6 @@ def parse_sheet_transaction_row(
 
     for field in JSON_TRANSACTION_FIELDS:
         transaction[field] = _parse_json_cell(transaction.get(field, ""))
-
-    transaction["is_forwarded"] = _parse_bool_cell(
-        transaction.get("is_forwarded", "")
-    )
 
     # Normalize txn_date after reading from sheet
     transaction["txn_date"] = normalize_transaction_date(

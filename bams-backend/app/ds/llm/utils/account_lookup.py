@@ -122,10 +122,9 @@ def fill_missing_account_details(transaction: Dict[str, Any], df: pd.DataFrame =
     if not transaction.get("account_number") or len(str(transaction.get("account_number", ""))) < 10:
         transaction["account_number"] = match["account_number"]
 
-    if (
-        not transaction.get("account_holder_name")
-        or str(transaction.get("account_holder_name", "")).strip().lower() == "customer"
-    ) and match.get("account_holder_name"):
+    # Account number matched a known record — the Excel name always wins,
+    # regardless of whatever name the email/statement itself shows.
+    if match.get("account_holder_name"):
         transaction["account_holder_name"] = match["account_holder_name"]
 
     if not transaction.get("account_type") and match.get("account_type"):
