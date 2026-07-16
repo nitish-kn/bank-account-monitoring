@@ -2,16 +2,17 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .database import init_database
+from .database import init_database, check_connection
 from . import models
 from .routes import auth, family, gmail, invites, sheets, setup, statements
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi import status
-    
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 FRONTEND_DIST_DIR = PROJECT_ROOT / "bams-frontend" / "dist"
 FRONTEND_INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
 
+check_connection()
 init_database()
 
 app = FastAPI()

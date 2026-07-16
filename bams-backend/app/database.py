@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from .config import settings
 
@@ -63,3 +63,13 @@ def init_database():
     if engine.dialect.name == "sqlite":
         Base.metadata.create_all(bind=engine)
         run_migrations()
+
+
+def check_connection():
+    """Print whether the database is reachable on startup."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        print("Database connected")
+    except Exception as e:
+        print(f"Database connection failed: {e}")
