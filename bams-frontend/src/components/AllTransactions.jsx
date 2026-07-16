@@ -38,6 +38,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "bank_name",
       header: "Bank / Account",
+      width: "w-xl",
       render: (transaction) => (
         <div className="min-w-0 ">
           <p className="truncate text-sm max-w-80 text-black" title={transaction?.bank_name} >
@@ -72,6 +73,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "txn_type",
       header: "Credit / Debit",
+      width: "w-80",
       cellClassName: "whitespace-nowrap",
       render: (transaction) => {
         const transactionType = transaction?.txn_type?.toLowerCase();
@@ -152,7 +154,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
         const source = transaction?.gmail_message_id;
 
         return (
-          <div className="flex items-center justify-center w-full gap-1">
+          <a href={`https://mail.google.com/mail/u/0/#inbox/${source}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full gap-1">
             {source ? (
               // Email source
               <div className="flex items-center">
@@ -161,7 +163,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
             ) : 
               <span><FileText className="text-blue-600 w-5 h-5"/></span>
             }
-          </div>
+          </a>
         );
       },
     },

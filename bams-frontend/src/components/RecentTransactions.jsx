@@ -38,7 +38,7 @@ const CategoryBadge = ({ category, type }) => {
 
 const SourceBadge = ({ source }) => {
   return (
-    <div className="flex items-center justify-center w-full gap-1">
+    <a href={`https://mail.google.com/mail/u/0/#inbox/${source}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full gap-1">
       {source ? (
         // Email source
         <div className="flex items-center">
@@ -47,7 +47,7 @@ const SourceBadge = ({ source }) => {
       ) : 
         <span><FileText className="text-blue-600 w-5 h-5"/></span>
       }
-    </div>
+    </a>
   );
 };
 
@@ -76,21 +76,6 @@ const RecentTransactions = ({ transactions = [] }) => {
         },
       },
       {
-        key: "counterparty",
-        header: "Counterparty",
-        width: "w-90",
-        render: (row) => (
-          <div className="max-w-60 w-fit">
-            <p className="font-semibold text-gray-900 text-sm">
-              {row?.counterparty || row?.source_name || "Transaction"}
-            </p>
-            {/* <p className="text-xs text-gray-500 truncate">
-              {row?.ref_number || "No reference"}
-            </p> */}
-          </div>
-        ),
-      },
-      {
         key: "bank_name",
         header: "Bank Name",
         width: "w-72",
@@ -99,6 +84,18 @@ const RecentTransactions = ({ transactions = [] }) => {
             <p className="font-semibold text-gray-900 text-sm"> {row?.bank_name || "Unknown Bank"} </p>
             <p className="text-xs font-medium text-gray-800 truncate"> {row?.account_holder_name || "-"} </p>
             <p className="text-xs text-gray-500 truncate"> {row?.account_number || "-"} </p>
+          </div>
+        ),
+      },
+      {
+        key: "counterparty",
+        header: "Counterparty",
+        width: "w-90",
+        render: (row) => (
+          <div className="max-w-60 w-fit">
+            <p className="font-semibold text-gray-900 text-sm">
+              {row?.counterparty || row?.source_name || "Transaction"}
+            </p>
           </div>
         ),
       },
