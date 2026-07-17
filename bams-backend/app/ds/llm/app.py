@@ -26,7 +26,6 @@ import argparse
 import base64
 import json
 import logging
-import sys
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -35,14 +34,38 @@ from typing import Optional
 import fitz  # PyMuPDF
 from openai import OpenAI
 from PIL import Image
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from ...config import settings
-from .schemas.models import ExtractionLogEntry, Transaction, TransactionBatch
+from .schemas.transaction_schema import Transaction
 from .utils.account_lookup import fill_missing_account_details
 # from tracing import init_tracing
 
 OPENAI_API_KEY = settings.openai_api_key
+
+
+# ------------------------------------------------------------------ #
+# Batch orchestration envelopes                                       #
+# ------------------------------------------------------------------ #
+# These wrap the per-page-batch LLM call/logging and are never persisted;
+# the stored Transaction schema is unified with app/models/transactions.py.
+
+
+class TransactionBatch(BaseModel):
+    transactions: list[Transaction] = Field(default_factory=list)
+    pages_processed: list[int] = Field(default_factory=list)
+    extraction_notes: Optional[str] = None
+
+
+class ExtractionLogEntry(BaseModel):
+    batch_index: int
+    pages: list[int]
+    raw_count: int
+    valid_count: int
+    invalid_count: int
+    invalid_records: list[dict] = Field(default_factory=list)
+    error: Optional[str] = None
+    extraction_notes: Optional[str] = None
 
 # ------------------------------------------------------------------ #
 # Configuration                                                       #
@@ -199,7 +222,20 @@ If direction still cannot be determined:
 
 ## txn_date
 
-* Convert to `YYYY-MM-DD` whenever possible.
+* Format `YYYY-MM-DD` only. Never include a time component, even if one is printed on the statement.
+
+## bank_name
+
+* The issuing bank as printed on the statement letterhead/header. Repeat it on every transaction from that statement.
+
+## account_number
+
+* Extract exactly as printed, including masked forms (e.g. `XX6744`). Usually printed once in the statement header — repeat it on every transaction.
+* If this is a credit card statement (txn_via = `Credit Card`), leave this null — put the card number in optional_fields.credit_card_number instead.
+
+## account_type
+
+* E.g. `Savings`, `Current`, `Credit Card`, only if stated in the header. Otherwise null.
 
 ## amount
 
@@ -238,22 +274,23 @@ Detect from narration:
 
 ## ref_number
 
-Extract:
-
-* UTR
-* RRN
-* Cheque Number
-* Transaction ID
-* Reference Number
-* Similar identifiers
+* Extract the UTR / RRN / cheque number / transaction ID / reference number when it appears in a dedicated column.
+* If there is no dedicated column, look inside the narration for a 12–18 character numeric or alphanumeric code — it is not always present, so return null if you can't find one. Do not confuse it with a phone number, account number, or amount.
+* Common pattern: in narrations like `UPI/P2M/655559022350/CRED Club`, the digits between the slashes are the reference number.
 
 ## txn_via
 
-* Extract the transaction channel, for example `Bank Transaction`, `Credit Card`, or `FASTag`.
+Always exactly one of: `Bank Transaction` | `Credit Card` | `FASTag`
+
+* `Credit Card` — the row belongs to a credit card account or credit card spend/payment/refund.
+  Put the card number (masked or full) in optional_fields.credit_card_number, NOT in account_number.
+* `FASTag` — toll deduction, FASTag recharge or payment.
+* Everything else (UPI, NEFT, RTGS, IMPS, cash, cheque, ECS/NACH, salary, interest, etc.) → `Bank Transaction`.
 
 ## counterparty
 
-* Extract merchant, person, bank, or entity name from narration.
+* Extract ONLY the merchant/person/bank/entity name from the narration.
+* Never include account numbers, masked numbers, reference/UTR numbers, IFSC codes, branch names, IDs, phone numbers, or anything in ()/[]/{}.
 
 ## counterparty_kind
 
@@ -286,13 +323,17 @@ Examples:
 
 * Extract running balance if available.
 
-## balance_label
+## system-assigned fields
 
-* `Cr` or `Dr` if explicitly printed.
+Leave these fields null — they are filled in by our code, not by you:
 
-## parser_metadata.page_number
-
-* 1-based page number.
+* id
+* gmail_message_id
+* source
+* dedupe_key
+* email_metadata (all sub-fields)
+* parser_metadata (all sub-fields)
+* optional_fields.trips_left, optional_fields.vehicle_number (FASTag details only ever come from email, not statements)
 
 ## pages_processed
 
@@ -463,8 +504,7 @@ def extract_transactions_from_pdf(
     dpi: int = DPI,
 ) -> list[Transaction]:
     if not pdf_path.exists():
-        log.error("PDF not found: %s", pdf_path)
-        sys.exit(1)
+        raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -516,6 +556,16 @@ def extract_transactions_from_pdf(
         for tx in batch_result.transactions:
             tx_dict = tx.model_dump()
             enriched_tx = fill_missing_account_details(tx_dict)
+
+            enriched_tx["source"] = "statement"
+
+            parser_metadata = enriched_tx.get("parser_metadata") or {}
+            parser_metadata["parsed_status"] = "parsed"
+            parser_metadata["source_file"] = pdf_path.name
+            enriched_tx["parser_metadata"] = parser_metadata
+
+            # dedupe_key is intentionally left blank for now
+
             enriched_transactions.append(Transaction.model_validate(enriched_tx))
 
         valid, log_entry = validate_transactions(

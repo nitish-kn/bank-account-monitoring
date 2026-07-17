@@ -270,7 +270,7 @@ def _apply_transaction_fields(model: Transactions, transaction: dict, user_id: i
     model.dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
     model.email_metadata = transaction.get("email_metadata") or {}
     model.parser_metadata = transaction.get("parser_metadata") or {}
-    model.raw_data = transaction.get("raw_data") or {}
+    # model.raw_data = transaction.get("raw_data") or {}
     model.optional_fields = _transaction_optional_fields(transaction)
     model.is_flag = bool(transaction.get("is_flag")) or bool(getattr(model, "is_flag", False))
 
@@ -445,9 +445,11 @@ def transaction_to_schema_dict(transaction: Transactions) -> dict:
         ),
         "place": transaction.place,
         "narration": transaction.narration,
+        "source": transaction.source,
+        "dedupe_key": transaction.dedupe_key,
         "email_metadata": transaction.email_metadata or {},
         "parser_metadata": transaction.parser_metadata or {},
-        "raw_data": transaction.raw_data or {},
+        # "raw_data": transaction.raw_data or {},
         "is_flag": transaction.is_flag,
     }
 
@@ -490,3 +492,6 @@ def mark_transactions_sheet_synced(
     for transaction in transactions:
         transaction.sheets_synced_at = synced_at
         db.add(transaction)
+
+
+# def transaction_summary(user_id:int, db:Session):

@@ -42,10 +42,11 @@ from .gmail_service import (
 )
 
 
-from ..utils.sheets_utils import _get_sheet_title, _append_sheet_rows
+from ..utils.sheets_utils import _get_sheet_title, _append_sheet_rows, _read_existing_column_values
 from ..utils.transaction_utils import (
     transactions_to_sheet_rows,
-    check_valid_transactions
+    check_valid_transactions,
+    transaction_column_for_field,
 )
 from ..ds.llm.services.extractor import extract_transactions
 
@@ -136,16 +137,37 @@ def _sync_transactions_to_sheet(
 
     if sheet_title is None:
         sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
+        
+    dedupe_col = transaction_column_for_field("dedupe_key")
+    existing_dedupe_keys = _read_existing_column_values(
+        sheets_service, user.spreadsheet_id, sheet_title, dedupe_col
+    )
+
+    already_synced = []
+    unique_pending = []
+    for txn in pending_transactions:
+        if txn.dedupe_key in existing_dedupe_keys:
+            already_synced.append(txn)
+        else:
+            unique_pending.append(txn)
+            
+    if already_synced:
+        mark_transactions_sheet_synced(already_synced, db)
+        
+    if not unique_pending:
+        db.commit()
+        return {"updated": False, "rows_written": 0}
 
     rows = transactions_to_sheet_rows([
         transaction_to_schema_dict(transaction)
-        for transaction in pending_transactions
+        for transaction in unique_pending
     ])
     if not rows:
+        db.commit()
         return {"updated": False, "rows_written": 0}
 
     result = _append_sheet_rows(sheets_service, user.spreadsheet_id, sheet_title, rows)
-    mark_transactions_sheet_synced(pending_transactions, db)
+    mark_transactions_sheet_synced(unique_pending, db)
     db.commit()
     return result
 

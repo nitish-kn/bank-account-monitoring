@@ -4,16 +4,40 @@ import Sidebar from "./Sidebar";
 import Headers from "./Headers";
 import { useAuthStore } from "../store/authStore";
 import { useSetupStore } from "../store/setupStore";
+import { useGoogleLogin } from "@react-oauth/google";
+import api from "../lib/api";
+import { SetupFlowOverlay } from "./SetupFlowOverlay";
 
 const Layout = () => {
-  const { user, accessToken } = useAuthStore();
-  const { isSyncing, lastSyncAt, syncDashboard, startSyncStatusPolling, } = useSetupStore();
+  const { user, accessToken, setUser } = useAuthStore();
+  const { 
+    isSyncing, lastSyncAt, syncDashboard, startSyncStatusPolling,
+    initializeSetup, isLoading, error: setupError, message, stepHistory, 
+    isSetupComplete, hasDismissedSetup, dismissSetupSuccess, retrySetup 
+  } = useSetupStore();
+  
   const [showMenu, setShowMenu] = useState(false);
   const effectiveLastSyncAt = lastSyncAt || user?.last_synced_at;
   const hasCompletedSetup = user?.is_setup_completed === true || user?.is_setup_completed === "true";
   const userSyncStatus = user?.sync_status || "not_started";
   const showMenuRef = useRef(null);
 
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // Determine which permissions are missing
+  const hasEmailPermissions = user?.has_email_permissions === true || user?.has_email_permissions === "true";
+  const hasSheetsPermissions = user?.has_sheets_permissions === true || user?.has_sheets_permissions === "true";
+  const needsEmail = !hasEmailPermissions;
+  const needsSheets = !hasSheetsPermissions;
+  const permissionsMissing = needsEmail || needsSheets;
+
+  // For the first time login - Auto-start setup when permissions are granted and the user has not completed setup yet
+  useEffect(() => {
+    if ( user && !hasCompletedSetup && !permissionsMissing && !isSetupComplete && !isLoading && !setupError ) {
+      initializeSetup();
+    }
+  }, [ user, hasCompletedSetup, permissionsMissing, isSetupComplete, isLoading, setupError, initializeSetup, ]);
 
   // Keep progress polling alive for setup/manual syncs that are already running.
   // Returning users should sync only when they click the refresh button.
@@ -25,6 +49,38 @@ const Layout = () => {
     startSyncStatusPolling();
   }, [accessToken, hasCompletedSetup, startSyncStatusPolling, userSyncStatus]);
 
+  // For users who haven't given permissions on login, Handle permission grant with both email and sheets scopes
+  const handlePermissionGrant = async (code) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await api.post("/auth/permission", { code });
+      const updatedUser = response?.data?.user;
+      setUser(updatedUser);
+    } catch (err) {
+      console.error("Permission grant failed:", err);
+      setError("Unable to update permissions. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // For users who may have given half permissions on login, Request missing permissions
+  const requestMissingPermissions = useGoogleLogin({
+    flow: "auth-code",
+    onSuccess: async (codeResponse) => {
+      await handlePermissionGrant(codeResponse?.code);
+    },
+    onError: () => setError("Permission request failed. Please try again."),
+    scope:
+      "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets",
+  });
+
+  // Check if user is new or hasn't completed setup yet
+  const showSetupOverlay = Boolean(
+    user && (!hasCompletedSetup || (isSetupComplete && !hasDismissedSetup)),
+  );
 
   // For sidebar to close in small screens, when user touches out of sidebar
   useEffect(() => {
@@ -79,6 +135,24 @@ const Layout = () => {
         </div>
       </div>
       
+      {showSetupOverlay && (
+        <SetupFlowOverlay
+          user={user}
+          permissionsMissing={permissionsMissing}
+          needsEmail={needsEmail}
+          needsSheets={needsSheets}
+          loading={loading}
+          error={error}
+          requestMissingPermissions={requestMissingPermissions}
+          isLoading={isLoading}
+          message={message}
+          stepHistory={stepHistory}
+          setupError={setupError}
+          retrySetup={retrySetup}
+          isSetupComplete={isSetupComplete}
+          onClose={() => dismissSetupSuccess()}
+        />
+      )}
     </div>
   );
 };

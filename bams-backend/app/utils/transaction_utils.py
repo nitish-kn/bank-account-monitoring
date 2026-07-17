@@ -154,21 +154,6 @@ def _parse_json_cell(value: str) -> Any:
         return value
 
 
-def _parse_bool_cell(value: str) -> bool | str | None:
-    normalized_value = str(value).strip().lower()
-
-    if not normalized_value:
-        return None
-
-    if normalized_value in {"true", "yes", "1"}:
-        return True
-
-    if normalized_value in {"false", "no", "0"}:
-        return False
-
-    return value
-
-
 def parse_sheet_transaction_row(
     row: list[str],
     extra_fields: Mapping[str, Any] | None = None,
@@ -185,10 +170,6 @@ def parse_sheet_transaction_row(
 
     for field in JSON_TRANSACTION_FIELDS:
         transaction[field] = _parse_json_cell(transaction.get(field, ""))
-
-    transaction["is_forwarded"] = _parse_bool_cell(
-        transaction.get("is_forwarded", "")
-    )
 
     # Normalize txn_date after reading from sheet
     transaction["txn_date"] = normalize_transaction_date(

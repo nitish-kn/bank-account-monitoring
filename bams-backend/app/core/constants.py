@@ -64,7 +64,7 @@ TRACKED_EMAIL_DOMAINS = [
 TRANSACTION_SCHEMA = list(Transaction.model_fields.keys())
 GMAIL_MESSAGE_ID_FIELD = "gmail_message_id"
 GMAIL_MESSAGE_ID_COLUMN = "B"
-JSON_TRANSACTION_FIELDS = {"email_metadata", "parser_metadata", "raw_data"}
+JSON_TRANSACTION_FIELDS = {"email_metadata", "parser_metadata", "optional_fields"}
 VALID_TRANSACTION_TYPES = {"Debit", "Credit", "credit", "debit"}
 
 
@@ -139,7 +139,6 @@ TRANSACTION_DB_FIELDS = {
     "dedupe_key",
     "email_metadata",
     "parser_metadata",
-    "raw_data",
     "optional_fields",
     "sheets_synced_at",
     "is_flag",

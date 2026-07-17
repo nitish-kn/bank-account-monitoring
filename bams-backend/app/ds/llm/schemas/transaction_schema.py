@@ -3,24 +3,9 @@ from typing import Optional, List
 
 
 class EmailMetadata(BaseModel):
-    forwarded_by_email: Optional[str] = None
-    forwarded_by_name: Optional[str] = None
-    
+
     original_from_email: Optional[str] = None
     original_from_name: Optional[str] = None
-    original_to_email: Optional[str] = None
-    original_subject: Optional[str] = None
-    original_sent_at: Optional[str] = None
-    
-    receiver_from_email: Optional[str] = None
-    receiver_from_name: Optional[str] = None
-    receiver_to_email: Optional[str] = None
-    receiver_subject: Optional[str] = None
-    receiver_received_at: Optional[str] = None
-
-
-
-class RawData(BaseModel):
     subject: Optional[str] = None
     body: Optional[str] = None
 
@@ -29,14 +14,47 @@ class ParserMetadata(BaseModel):
 
     parsed_status: Optional[str] = None
 
-    confidence_score: Optional[float] = None
+    confidence_score: Optional[str] = None
 
     missing_optional_fields: List[str] = Field(
         default_factory=list
     )
 
+    source_file: Optional[str] = None
+
+
+class OptionalFields(BaseModel):
+
+    trips_left: Optional[str] = Field(
+        default=None,
+        description=(
+            "Remaining FASTag/toll-plaza trips left on the tag. "
+            "Only filled via email when the mail is a toll plaza notification."
+        ),
+    )
+
+    vehicle_number: Optional[str] = Field(
+        default=None,
+        description=(
+            "Vehicle registration number tagged to the FASTag. "
+            "Only filled via email when the mail is a toll plaza notification."
+        ),
+    )
+
+    credit_card_number: Optional[str] = Field(
+        default=None,
+        description=(
+            "Card number (masked or full) for credit card transactions. "
+            "Filled only when txn_via is 'Credit Card' — account_number stays null in that case."
+        ),
+    )
+
 
 class Transaction(BaseModel):
+    """
+    Single canonical transaction shape, shared by both the email extractor
+    and the bank-statement extractor. Mirrors app/models/transactions.py.
+    """
 
     id: Optional[str] = None
 
@@ -46,9 +64,9 @@ class Transaction(BaseModel):
 
     account_holder_name: Optional[str] = None
 
-    account_number: Optional[str] = None
-
     account_type: Optional[str] = None
+
+    account_number: Optional[str] = None
 
     txn_type: Optional[str] = None
 
@@ -58,11 +76,7 @@ class Transaction(BaseModel):
 
     amount: Optional[str] = None
 
-    currency: Optional[str] = None
-
-    original_currency: Optional[str] = None
-
-    inr_equivalent: Optional[str] = None
+    currency: Optional[str] = "INR"
 
     txn_date: Optional[str] = None
 
@@ -70,28 +84,31 @@ class Transaction(BaseModel):
 
     counterparty_kind: Optional[str] = None
 
+    narration: Optional[str] = None
+
     txn_via: Optional[str] = None
 
     ref_number: Optional[str] = None
 
-    balance_after_txn: Optional[float] = None
-
-    balance_label: Optional[str] = None
-
     place: Optional[str] = None
 
-    narration: Optional[str] = None
+    balance_after_txn: Optional[float] = None
 
-    is_forwarded: Optional[bool] = None
+    source: Optional[str] = Field(
+        default=None,
+        description="Where this transaction was extracted from: 'email' or 'statement'.",
+    )
 
-    email_metadata: dict = Field(
-        default_factory=dict
+    dedupe_key: Optional[str] = None
+
+    email_metadata: EmailMetadata = Field(
+        default_factory=EmailMetadata
     )
 
     parser_metadata: ParserMetadata = Field(
         default_factory=ParserMetadata
     )
 
-    raw_data: dict = Field(
-        default_factory=dict
+    optional_fields: OptionalFields = Field(
+        default_factory=OptionalFields
     )

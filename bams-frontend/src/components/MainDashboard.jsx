@@ -3,20 +3,73 @@ import DataCard from "../components/ui/DataCard";
 import ChartCard from "../components/charts/ChartCard";
 import { Flex, Tabs } from "@radix-ui/themes";
 import { ArrowDown, ArrowUp, TrendingUp, ReceiptText, TrendingUpDown, TrendingDown, Calendar, ChevronDown, Filter, Loader2 } from "lucide-react";
-import { calculateTransactionSummary, filterTransactionsByDateRange, filterTransactions, formatTransactionDateRangeLabel, getDailyNetCashFlowTrend, getTopCategoryTotals, getTopTransactions, getTransactionFilterOptions, getTransactionTypeCountData, getTransactionsByModeData, hasActiveTransactionFilters, maxCreditAmount, maxDebitAmount, } from "../lib/transactional-helper";
 import { formatCompactINR } from "../lib/helper";
 import CustomButton from "../components/ui/CustomButton";
 import CustomDonutChart from "../components/charts/CustomDonutChart";
 import { CustomBarChart } from "../components/charts/CustomBarChart";
 import CustomAreaTrendChart from "../components/charts/CustomAreaTrendChart";
 import RecentTransactions from "../components/RecentTransactions";
-import DashboardFilter from "../components/DashboardFilter";
+import TransactionFilters from "../components/TransactionFilters";
 import CustomDatePicker from "../components/ui/CustomDatePicker";
 import CustomSelect from "../components/ui/CustomSelect";
 import TopItemList from "../components/ui/TopItemList";
 import { useDashboardFilterStore } from "../store/dashboardfilterStore";
+import { formatTransactionDateRangeLabel } from "../lib/transactional-helper";
+import { transactionApi } from "../api/transactions";
 
-export const MainDashboard = ({ transactions = [], isLoading = false, tabValue, setTabValue }) => {
+export const MainDashboard = ({ tabValue, setTabValue }) => {
+  const [openFilter, setOpenFilter] = useState(false);
+  const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
+  const [cashFlowPeriod, setCashFlowPeriod] = useState("daily");
+  const dateRangePopoverRef = useRef(null);
+  
+  const { filters: appliedFilters, dateRange, applyFilters, resetFilters, setDateRange, } = useDashboardFilterStore();
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [filterOptions, setFilterOptions] = useState({});
+  const [summaryData, setSummaryData] = useState({});
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  
+  // Fetch Filter Options once
+  useEffect(() => {
+    transactionApi.getFilterOptions().then(setFilterOptions).catch(console.error);
+  }, []);
+
+  // Fetch Dashboard data on filter change
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      setIsLoading(true);
+      try {
+        const payloadFilters = {
+          ...appliedFilters,
+          dateRange
+        };
+        const res = await transactionApi.queryTransactions(
+          payloadFilters,
+          { page: 1, pageSize: 10 },
+          { summary: true, transactions: true }
+        );
+        if (res.summary) {
+            setSummaryData(res.summary);
+        }
+        if (res.transactions) {
+            setRecentTransactions(res.transactions);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchDashboard();
+  }, [appliedFilters, dateRange]);
+
+  const maxSelectableDate = useMemo(() => new Date(), []);
+  const dateRangeLabel = useMemo(() => formatTransactionDateRangeLabel(dateRange), [dateRange]);
+
+  const hasActiveFilters = Object.keys(appliedFilters).some(
+    (key) => appliedFilters[key] && appliedFilters[key] !== "all" && appliedFilters[key].length !== 0
+  );
   const [openFilter, setOpenFilter] = useState(false);
   const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
   const [cashFlowPeriod, setCashFlowPeriod] = useState("daily");
@@ -27,54 +80,43 @@ export const MainDashboard = ({ transactions = [], isLoading = false, tabValue, 
   const maxSelectableDate = useMemo(() => new Date(), []);
   const dateRangeLabel = useMemo(() => formatTransactionDateRangeLabel(dateRange), [dateRange]);
 
-  const filterOptions = useMemo(() => getTransactionFilterOptions(records), [records]);
-  const filteredRecords = useMemo(
-    () => filterTransactionsByDateRange(
-      filterTransactions(records, appliedFilters),
-      dateRange,
-    ),
-    [appliedFilters, dateRange, records],
-  );
-  
-  const hasActiveFilters = useMemo(() => hasActiveTransactionFilters(appliedFilters), [appliedFilters]);
-
-  const summaryData = useMemo(() => calculateTransactionSummary(filteredRecords), [filteredRecords]);
+  const formatAmount = (val) => val ? `₹ ${formatCompactINR(val)}` : "₹ 0";
 
   const cards = useMemo(
     () => [
       {
         title: "Total transactions",
-        value: summaryData?.totalTransactions,
+        value: summaryData?.totalTransactions || 0,
         icon: ReceiptText,
         color: "blue",
       },
       {
         title: "Total Credit",
-        value: summaryData?.formatted?.totalCredit,
+        value: formatAmount(summaryData?.totalCredit),
         icon: ArrowDown,
         color: "green",
       },
       {
         title: "Total Debit",
-        value: summaryData?.formatted?.totalDebit,
+        value: formatAmount(summaryData?.totalDebit),
         icon: ArrowUp,
         color: "red",
       },
       {
         title: "Net Cash Flow",
-        value: summaryData?.formatted?.netCashFlow,
+        value: formatAmount(summaryData?.netBalance),
         icon: TrendingUpDown,
-        color: summaryData?.netCashFlow >= 0 ? "purple" : "orange",
+        color: summaryData?.netBalance >= 0 ? "purple" : "orange",
       },
       {
         title: "Credit Count",
-        value: summaryData?.creditCount,
+        value: summaryData?.creditCount || 0,
         icon: ArrowDown,
         color: "green",
       },
       {
         title: "Debit Count",
-        value: summaryData?.debitCount,
+        value: summaryData?.debitCount || 0,
         icon: ArrowUp,
         color: "red",
       },
@@ -82,15 +124,17 @@ export const MainDashboard = ({ transactions = [], isLoading = false, tabValue, 
     [summaryData],
   );
 
-  const MaxCreditAmount = formatCompactINR(maxCreditAmount(filteredRecords));
-  const MaxDebitAmount = formatCompactINR(maxDebitAmount(filteredRecords));
+  const MaxCreditAmount = formatCompactINR(summaryData?.maxCreditAmount || 0);
+  const MaxDebitAmount = formatCompactINR(summaryData?.maxDebitAmount || 0);
 
-  const topTransactions = useMemo(() => getTopTransactions(filteredRecords, 5), [filteredRecords]);
-  const transactionTypeData = useMemo(() => getTransactionTypeCountData(filteredRecords), [filteredRecords]);
-  const topDebitCategories = useMemo(() => getTopCategoryTotals(filteredRecords, "debit"), [filteredRecords]);
-  const topCreditCategories = useMemo(() => getTopCategoryTotals(filteredRecords, "credit"), [filteredRecords]);
-  const cashFlowTrendData = useMemo(() => getDailyNetCashFlowTrend(filteredRecords, dateRange), [dateRange, filteredRecords]);
-  const transactionsByModeData = useMemo(() => getTransactionsByModeData(filteredRecords), [filteredRecords]);
+  const topTransactions = summaryData?.topTransactions || [];
+  const topDebitCategories = summaryData?.topDebitCategories || [];
+  const topCreditCategories = summaryData?.topCreditCategories || [];
+  const flaggedTransactions = summaryData?.flaggedTransactions || [];
+
+  // Disable cash flow and modes for now as they require returning a large payload of daily trends
+  const cashFlowTrendData = []; 
+  const transactionsByModeData = [];
 
   const cashFlowPeriodOptions = useMemo(
     () => [{ label: "Daily", value: "daily" }],
@@ -189,7 +233,7 @@ export const MainDashboard = ({ transactions = [], isLoading = false, tabValue, 
 
       {/* Filter Section */}
       {openFilter && (
-        <DashboardFilter
+        <TransactionFilters
           filters={appliedFilters}
           filterOptions={filterOptions}
           onApply={applyFilters}
@@ -287,14 +331,14 @@ export const MainDashboard = ({ transactions = [], isLoading = false, tabValue, 
 
       {/* Top Transactions */}
       <div className="flex flex-col md:flex-row gap-3 md:gap-4">
-      <TopItemList title="Top 5 Transactions" showBtn={true} btnText="View All" data={topTransactions} />
-      <TopItemList title="Transactions Flagged for Review" flagged={true} titleColor="text-red-800" btnText="View All" data={topTransactions} />
+      <TopItemList title="Top 3 Transactions" showBtn={true} btnText="View All" data={topTransactions} />
+      <TopItemList title="Transactions Flagged for Review" flagged={true} titleColor="text-red-800" btnText="View All" data={flaggedTransactions} />
 
       </div>
 
       
       {/* Recent Transactions */}
-      <RecentTransactions transactions={filteredRecords} />
+      <RecentTransactions transactions={recentTransactions} />
     </main>
   );
 };
