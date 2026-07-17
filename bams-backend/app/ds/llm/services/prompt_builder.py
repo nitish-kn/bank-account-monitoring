@@ -117,6 +117,7 @@ counterparty — ONLY the name of the person/merchant/company/bank involved.
 - Normalize spelling variants to one canonical name; expand abbreviations; prefer the fuller name.
   e.g. "UPI/P2M/654543376651/American Express" → "American Express"
        "MAHARAJA CATERERS (Ref: UTIBR52026062500354403)" → "Maharaja Caterers"
+- ATM withdrawal / cash withdrawal (category = "Cash Withdrawal") — counterparty MUST be "Self". The account holder is withdrawing their own cash, so it is not a real third-party counterparty.
 
 ==================================================
 CATEGORY (business purpose)
@@ -140,7 +141,7 @@ If the email states a different mode not in this list (UPI, Credit Card, Debit C
 FIELDS FILLED BY OUR SYSTEM — always leave null
 ==================================================
 
-id, gmail_message_id, source, dedupe_key, email_metadata, parser_metadata.source_file — these are populated outside the LLM. Do not attempt to fill them.
+id, gmail_message_id, source, dedupe_key, email_metadata, parser_metadata.source_file, optional_fields.credit_card_owner, optional_fields.credit_card_issuer, optional_fields.card_name, optional_fields.card_type — these are populated outside the LLM (the card fields are resolved from our records using optional_fields.credit_card_number). Do not attempt to fill them.
 
 ==================================================
 OUTPUT SCHEMA

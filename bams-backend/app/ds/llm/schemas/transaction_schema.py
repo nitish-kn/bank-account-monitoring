@@ -45,8 +45,30 @@ class OptionalFields(BaseModel):
         default=None,
         description=(
             "Card number (masked or full) for credit card transactions. "
-            "Filled only when txn_via is 'Credit Card' — account_number stays null in that case."
+            "Filled only when txn_via is 'Credit Card' — account_number stays null in that case. "
+            "The LLM fills in whatever digits the email shows; our code resolves it to the full "
+            "number via the credit card mapping sheet."
         ),
+    )
+
+    credit_card_owner: Optional[str] = Field(
+        default=None,
+        description="Card owner name, resolved from the credit card mapping sheet. Filled by our code, not the LLM.",
+    )
+
+    credit_card_issuer: Optional[str] = Field(
+        default=None,
+        description="Card issuer (e.g. 'Axis Bank', 'American Express'), resolved from the mapping sheet. Filled by our code, not the LLM.",
+    )
+
+    card_name: Optional[str] = Field(
+        default=None,
+        description="Card product name (e.g. 'Regalia', 'Platinum'), resolved from the mapping sheet. Filled by our code, not the LLM.",
+    )
+
+    card_type: Optional[str] = Field(
+        default=None,
+        description="Card network (e.g. 'Visa', 'Mastercard', 'Rupay'), resolved from the mapping sheet. Filled by our code, not the LLM.",
     )
 
 

@@ -8,6 +8,7 @@ from .prompt_builder import build_batch_prompt
 from .llm_client import call_llm
 
 from ..utils.account_lookup import fill_missing_account_details
+from ..utils.credit_card_lookup import fill_missing_credit_card_details
 
 from ..schemas.transaction_schema import Transaction
 
@@ -95,6 +96,13 @@ def extract_transactions(emails):
             ] = "Customer"
 
         result = fill_missing_account_details(result)
+        result = fill_missing_credit_card_details(result)
+
+        # Cash withdrawal has no real counterparty — it's the account
+        # holder withdrawing their own money, so "same acc to same acc"
+        # would otherwise look like a conflicting transfer.
+        if str(result.get("category") or "").strip().lower() == "cash withdrawal":
+            result["counterparty"] = "Self"
 
         # Confidence score to string
 
