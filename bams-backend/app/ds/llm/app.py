@@ -39,6 +39,7 @@ from pydantic import BaseModel, Field, ValidationError
 from ...config import settings
 from .schemas.transaction_schema import Transaction
 from .utils.account_lookup import fill_missing_account_details
+from .utils.credit_card_lookup import fill_missing_credit_card_details
 # from tracing import init_tracing
 
 OPENAI_API_KEY = settings.openai_api_key
@@ -291,6 +292,7 @@ Always exactly one of: `Bank Transaction` | `Credit Card` | `FASTag`
 
 * Extract ONLY the merchant/person/bank/entity name from the narration.
 * Never include account numbers, masked numbers, reference/UTR numbers, IFSC codes, branch names, IDs, phone numbers, or anything in ()/[]/{}.
+* ATM withdrawal / cash withdrawal rows (category = `Cash Withdrawal`) — counterparty MUST be `Self`. The account holder is withdrawing their own cash, so it is not a real third-party counterparty.
 
 ## counterparty_kind
 
@@ -334,6 +336,7 @@ Leave these fields null — they are filled in by our code, not by you:
 * email_metadata (all sub-fields)
 * parser_metadata (all sub-fields)
 * optional_fields.trips_left, optional_fields.vehicle_number (FASTag details only ever come from email, not statements)
+* optional_fields.credit_card_owner, optional_fields.credit_card_issuer, optional_fields.card_name, optional_fields.card_type (resolved from our records using optional_fields.credit_card_number)
 
 ## pages_processed
 
@@ -556,6 +559,13 @@ def extract_transactions_from_pdf(
         for tx in batch_result.transactions:
             tx_dict = tx.model_dump()
             enriched_tx = fill_missing_account_details(tx_dict)
+            enriched_tx = fill_missing_credit_card_details(enriched_tx)
+
+            # Cash withdrawal has no real counterparty — it's the account
+            # holder withdrawing their own money, so "same acc to same acc"
+            # would otherwise look like a conflicting transfer.
+            if str(enriched_tx.get("category") or "").strip().lower() == "cash withdrawal":
+                enriched_tx["counterparty"] = "Self"
 
             enriched_tx["source"] = "statement"
 
