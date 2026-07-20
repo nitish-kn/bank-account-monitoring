@@ -6,14 +6,30 @@ const CustomTable = ({
   columns = [],
   data = [],
   minWidth = "900px",
+  tableLayout = "fixed",
   size = "2",
   variant = "surface",
   getRowKey,
   emptyMessage = "No data found",
+  sort,
+  onSort,
 }) => {
   return (
-    <Table.Root size={size} variant={variant} style={{ minWidth }}>
-      <CustomTableHeader columns={columns} />
+    <Table.Root
+      size={size}
+      variant={variant}
+      style={{ minWidth, width: "100%", tableLayout }}
+    >
+      <colgroup>
+        {columns.map((column) => (
+          <col
+            key={column.key}
+            style={column.columnWidth ? { width: column.columnWidth } : undefined}
+          />
+        ))}
+      </colgroup>
+
+      <CustomTableHeader columns={columns} sort={sort} onSort={onSort} />
 
       <Table.Body>
         {data.length === 0 ? (

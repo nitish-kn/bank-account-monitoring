@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Badge, Button, Spinner } from "@radix-ui/themes";
-import { FileSpreadsheet, FileText, TriangleAlert, Filter } from "lucide-react";
+import { FileSpreadsheet, FileText, TriangleAlert, Filter, Calendar, ChevronDown } from "lucide-react";
 import CustomTable from "./ui/CustomTable";
 import { cleanText, formatAmount, formatCompactINR, formatDateAndTime, getStatusColor } from "../lib/helper";
 import { EmptyMails } from "../utils/EmptyStates";
@@ -8,6 +8,9 @@ import Pagination from "./Pagination";
 import { transactionApi } from "../api/transactions";
 import TransactionFilters from "./TransactionFilters";
 import CustomButton from "./ui/CustomButton";
+import { useSetupStore } from "../store/setupStore";
+import { getTransactionFilterOptionsFromBackend, formatTransactionDateRangeLabel, getDefaultTransactionDateRange } from "../lib/transactional-helper";
+import CustomDatePicker from "./ui/CustomDatePicker";
 
 export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, syncDashboard }) {
   const [emailPage, setEmailPage] = useState(1);
@@ -15,24 +18,73 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
   const [transactions, setTransactions] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
   const [filterOptions, setFilterOptions] = useState({});
   const [appliedFilters, setAppliedFilters] = useState({});
   const [openFilter, setOpenFilter] = useState(false);
+  const refreshTrigger = useSetupStore((state) => state.refreshTrigger);
+  const [sort, setSort] = useState({ field: "date", order: "desc" });
+
+  const [dateRange, setDateRange] = useState(getDefaultTransactionDateRange(new Date(), 30));
+  const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
+  const dateRangePopoverRef = useRef(null);
+
+  const maxSelectableDate = useMemo(() => new Date(), []);
+  const dateRangeLabel = useMemo(() => formatTransactionDateRangeLabel(dateRange), [dateRange]);
+
+  const handleSort = (field) => {
+    setSort((prev) => ({
+      field,
+      order: prev.field === field && prev.order === "desc" ? "asc" : "desc",
+    }));
+    setEmailPage(1);
+  };
 
   useEffect(() => {
-    transactionApi.getFilterOptions().then(setFilterOptions).catch(console.error);
-  }, []);
+    if (!openDateRangeFilter) return undefined;
+
+    const handleOutsideClick = (event) => {
+      if (
+        dateRangePopoverRef.current && !dateRangePopoverRef.current.contains(event.target)) {
+        setOpenDateRangeFilter(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [openDateRangeFilter]);
+
+  useEffect(() => {
+    transactionApi.getFilterOptions()
+      .then((res) => {
+        setFilterOptions(getTransactionFilterOptionsFromBackend(res));
+      })
+      .catch(console.error);
+  }, [refreshTrigger]);
 
   useEffect(() => {
     const fetchTransactions = async () => {
-      setLoading(true);
+      const shouldShowInitialLoader = transactions.length === 0;
+      setError(null);
+      setLoading(shouldShowInitialLoader);
+      setIsRefreshing(!shouldShowInitialLoader);
       try {
+        const payloadFilters = {
+          ...appliedFilters,
+          dateRange
+        };
         const res = await transactionApi.queryTransactions(
-          appliedFilters,
+          payloadFilters,
           { page: emailPage, pageSize: emailPageSize },
-          { summary: false, transactions: true }
+          { summary: false, transactions: true },
+          sort
         );
         if (res.transactions) {
           setTransactions(res.transactions);
@@ -42,10 +94,11 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
         setError(err.message || "Failed to fetch transactions");
       } finally {
         setLoading(false);
+        setIsRefreshing(false);
       }
     };
     fetchTransactions();
-  }, [appliedFilters, emailPage, emailPageSize]);
+  }, [appliedFilters, emailPage, emailPageSize, refreshTrigger, sort, dateRange]);
 
   const totalEmailPages = Math.max(Math.ceil(totalCount / emailPageSize), 1);
   
@@ -57,7 +110,10 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "txn_date",
       header: "Date",
+      columnWidth: "120px",
       cellClassName: "whitespace-nowrap",
+      sortable: true,
+      sortKey: "date",
       render: (transaction) => (
         <p className="text-xs text-gray-700">
           {formatDateAndTime(transaction?.txn_date).date || "-"}
@@ -67,6 +123,9 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "bank_name",
       header: "Bank / Account",
+      columnWidth: "260px",
+      sortable: true,
+      sortKey: "bank",
       render: (transaction) => (
         <div className="min-w-0 ">
           <p className="truncate text-sm max-w-80 text-black" title={transaction?.bank_name} >
@@ -101,18 +160,22 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "txn_type",
       header: "Credit / Debit",
+      columnWidth: "130px",
       cellClassName: "whitespace-nowrap",
+      sortable: true,
+      sortKey: "type",
       render: (transaction) => {
-        const transactionType = transaction?.txn_type?.toLowerCase();
-        const status = transaction?.parser_metadata?.parsed_status?.toLowerCase();
-        const statusColor = status === "not_transaction"
-          ? "gray"
-          : transactionType === "debit"
-            ? "red"
-            : transactionType === "credit"
-              ? "green"
-              : getStatusColor(status);
-        const label = transaction?.txn_type || transaction?.parser_metadata?.parsed_status || "Parsed";
+        const transactionType = String(transaction?.txn_type || "").toLowerCase();
+        const statusColor = transactionType === "debit"
+          ? "red"
+          : transactionType === "credit"
+            ? "green"
+            : "gray";
+        const label = transactionType === "debit"
+          ? "Debit"
+          : transactionType === "credit"
+            ? "Credit"
+            : "-";
 
         return (
           <Badge
@@ -129,7 +192,9 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "amount",
       header: "Amount",
+      columnWidth: "140px",
       cellClassName: "whitespace-nowrap",
+      sortable: true,
       render: (transaction) => {
         const amount = transaction?.amount || transaction?.inr_equivalent;
         return (
@@ -142,7 +207,9 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "counterparty",
       header: "Counterparty",
+      columnWidth: "240px",
       cellClassName: "max-w-[280px]",
+      sortable: true,
       render: (transaction) => {
         const counterparty = cleanText(transaction?.counterparty);
 
@@ -159,7 +226,9 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "narration",
       header: "Narration",
+      columnWidth: "340px",
       cellClassName: "max-w-[420px]",
+      sortable: true,
       render: (transaction) => {
         const narration = cleanText(transaction?.narration || transaction?.email_metadata?.subject);
 
@@ -176,7 +245,9 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "source",
       header: "Source",
+      columnWidth: "90px",
       cellClassName: "whitespace-nowrap",
+      sortable: true,
       render: (transaction) => {
         const isEmail = transaction?.source === "email";
 
@@ -221,6 +292,47 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto mt-2 lg:mt-0">
+            {/* Date Range Filter */}
+            <div ref={dateRangePopoverRef} className="relative">
+              <CustomButton color="gray" radius="large" className="text-gray-800!" variant="outline" size="2" onClick={() => setOpenDateRangeFilter((prev) => !prev)} >
+                <Calendar className="mr-1 h-4 w-4" /> 
+                <span className="hidden sm:inline">{dateRangeLabel.long}</span>
+                <span className="sm:hidden">{dateRangeLabel.short}</span>
+                <ChevronDown className="ml-1 h-4 w-4" />
+              </CustomButton>
+
+              {openDateRangeFilter && (
+                <>
+                  <div
+                    className="lg:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2"
+                    onClick={() => setOpenDateRangeFilter(false)}
+                  >
+                    <div className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+                      <CustomDatePicker
+                        value={dateRange}
+                        onChange={(val) => {
+                          setDateRange(val);
+                          setEmailPage(1);
+                        }}
+                        maxDate={maxSelectableDate}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="hidden lg:flex z-20 absolute top-10 right-0 justify-end">
+                    <CustomDatePicker
+                      value={dateRange}
+                      onChange={(val) => {
+                        setDateRange(val);
+                        setEmailPage(1);
+                      }}
+                      maxDate={maxSelectableDate}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
             <CustomButton
               color={hasActiveFilters ? "blue" : "gray"}
               radius="large"
@@ -313,7 +425,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
         <div className="overflow-x-auto">
 
           {/* Loading State */}
-          {loading ? (
+          {loading && transactions.length === 0 ? (
 
             <div className="flex w-full flex-col items-center justify-center gap-3 py-16">
               <Spinner size="3" />
@@ -355,13 +467,23 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
 
             // The main table to show the parsed data
             <>
-              <CustomTable
-                columns={emailColumns}
-                data={transactions}
-                minWidth="900px"
-                getRowKey={(transaction, idx) => transaction.id || transaction.gmail_message_id || transaction.ref_number || idx}
-                emptyMessage="No synced transactions found"
-              />
+              <div className="relative">
+                {isRefreshing && (
+                  <div className="absolute right-4 top-3 z-20 rounded-full border border-blue-100 bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                    Updating...
+                  </div>
+                )}
+
+                <CustomTable
+                  columns={emailColumns}
+                  data={transactions}
+                  minWidth="1320px"
+                  getRowKey={(transaction, idx) => transaction.id || transaction.gmail_message_id || transaction.ref_number || idx}
+                  emptyMessage="No synced transactions found"
+                  sort={sort}
+                  onSort={handleSort}
+                />
+              </div>
 
               <Pagination
                 currentPage={emailPage}

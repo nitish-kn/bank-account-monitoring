@@ -8,7 +8,7 @@ from uuid import uuid4
 class BankAccounts(Base):
     __tablename__ = "bank_accounts"
 
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid4()))
+    id = Column(ID_TYPE, primary_key=True)
     user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
     bank_name = Column(String, nullable=False)
     account_holder_name = Column(String, nullable=False)

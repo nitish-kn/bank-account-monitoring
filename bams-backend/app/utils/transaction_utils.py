@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Any, Mapping
+from decimal import Decimal, InvalidOperation
 
 from ..core.constants import (
     GMAIL_MESSAGE_ID_COLUMN,
@@ -214,9 +215,25 @@ def transaction_timestamp(transaction: dict) -> float:
 
 def check_valid_transactions(transactions: list[dict]) -> list[dict]:
     """Return only rows that the parser classified as real transactions."""
-
-    return [
-        row 
-        for row in transactions
-        if row.get("parser_metadata", {}).get("parsed_status") == "parsed"
-    ]
+    valid = []
+    for row in transactions or []:
+        if row.get("parser_metadata", {}).get("parsed_status") == "parsed":
+            amount_val = row.get("amount")
+            is_valid = False
+            if amount_val is not None:
+                text = str(amount_val).strip()
+                if text:
+                    text = text.replace(",", "").replace("₹", "").replace("INR", "").strip()
+                    try:
+                        Decimal(text)
+                        is_valid = True
+                    except (InvalidOperation, ValueError):
+                        pass
+            if is_valid:
+                valid.append(row)
+            else:
+                if "parser_metadata" not in row:
+                    row["parser_metadata"] = {}
+                row["parser_metadata"]["parsed_status"] = "failed"
+                row["parser_metadata"]["error"] = "Parsed transaction is missing a valid amount."
+    return valid

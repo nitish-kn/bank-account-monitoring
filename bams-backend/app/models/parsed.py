@@ -12,7 +12,7 @@ class Parsed(Base):
         UniqueConstraint("user_id", "gmail_message_id", name="uq_parsed_user_gmail_message_id"),
     )
 
-    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid4()))
+    id = Column(ID_TYPE, primary_key=True)
     user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
     gmail_message_id = Column(String, nullable=False)
     status = Column(String, nullable=False)

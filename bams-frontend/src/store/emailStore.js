@@ -1,9 +1,7 @@
 import { create } from "zustand";
 import { useAuthStore } from "./authStore";
 import api from "../lib/api";
-import { create } from "zustand";
-import { useAuthStore } from "./authStore";
-import api from "../lib/api";
+
 
 export const useEmailStore = create((set, get) => ({
   emailData: null,

@@ -66,6 +66,15 @@ GMAIL_MESSAGE_ID_FIELD = "gmail_message_id"
 GMAIL_MESSAGE_ID_COLUMN = "B"
 JSON_TRANSACTION_FIELDS = {"email_metadata", "parser_metadata", "optional_fields"}
 VALID_TRANSACTION_TYPES = {"Debit", "Credit", "credit", "debit"}
+TRANSACTION_REVIEW_CONFIDENCE_THRESHOLD = 0.85
+TRANSACTION_REVIEW_REQUIRED_FIELDS = (
+    "txn_type",
+    "txn_date",
+    "bank_name",
+    "counterparty",
+    "txn_via",
+    "narration",
+)
 
 
 def _column_name(column_number: int) -> str:
@@ -83,7 +92,7 @@ TRANSACTION_DATA_RANGE = f"A2:{TRANSACTION_SHEET_END_COLUMN}"
 
 # Sync/setup flow
 REQUIRED_SCHEMA = TRANSACTION_SCHEMA
-SHEET_NAME = "Dashboard Data Sheet"
+SHEET_NAME = "Transaction Data"
 SYNC_STATUS_NOT_STARTED = "not_started"
 SYNC_STATUS_RUNNING = "running"
 SYNC_STATUS_COMPLETED = "completed"

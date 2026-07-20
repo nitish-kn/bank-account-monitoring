@@ -311,7 +311,7 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
             start_date = user.last_synced_email_date - timedelta(days=1)
 
         # 4. Ask Gmail for message ID pages
-        for message_page in iter_user_message_pages(user, start_date=start_date):
+        for message_page, page_idx, total_pages in iter_user_message_pages(user, start_date=start_date):
             
             # 5. Remove IDs already in DB
             new_messages = [
@@ -357,7 +357,7 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
             if not new_emails:
                 continue
 
-            print("Emails from Gmail Api - count:", len(new_emails), "\n")
+            print(f"Emails from Gmail Api - Page {page_idx}/{total_pages} (count: {len(new_emails)})\n")
 
             # 7. Send hydrated emails to LLM batches
             for batch_result in _batch_extract_transactions(new_emails):

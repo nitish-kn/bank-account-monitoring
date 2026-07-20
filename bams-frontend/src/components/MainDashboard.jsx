@@ -14,46 +14,63 @@ import CustomDatePicker from "../components/ui/CustomDatePicker";
 import CustomSelect from "../components/ui/CustomSelect";
 import TopItemList from "../components/ui/TopItemList";
 import { useDashboardFilterStore } from "../store/dashboardfilterStore";
-import { formatTransactionDateRangeLabel } from "../lib/transactional-helper";
+import { formatTransactionDateRangeLabel, getTransactionFilterOptionsFromBackend } from "../lib/transactional-helper";
 import { transactionApi } from "../api/transactions";
+import { useSetupStore } from "../store/setupStore";
 
-export const MainDashboard = ({ tabValue, setTabValue }) => {
+export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage }) => {
   const [openFilter, setOpenFilter] = useState(false);
   const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
   const [cashFlowPeriod, setCashFlowPeriod] = useState("daily");
   const dateRangePopoverRef = useRef(null);
   
   const { filters: appliedFilters, dateRange, applyFilters, resetFilters, setDateRange, } = useDashboardFilterStore();
+  const refreshTrigger = useSetupStore((state) => state.refreshTrigger);
 
   const [isLoading, setIsLoading] = useState(false);
   const [filterOptions, setFilterOptions] = useState({});
   const [summaryData, setSummaryData] = useState({});
   const [recentTransactions, setRecentTransactions] = useState([]);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [recentSort, setRecentSort] = useState({ field: "date", order: "desc" });
+
+  const handleSort = (field) => {
+    setRecentSort((prev) => ({
+      field,
+      order: prev.field === field && prev.order === "desc" ? "asc" : "desc",
+    }));
+  };
   
   // Fetch Filter Options once
   useEffect(() => {
-    transactionApi.getFilterOptions().then(setFilterOptions).catch(console.error);
-  }, []);
+    transactionApi.getFilterOptions()
+      .then((res) => {
+        setFilterOptions(getTransactionFilterOptionsFromBackend(res));
+      })
+      .catch(console.error);
+  }, [refreshTrigger]);
 
-  // Fetch Dashboard data on filter change
+  const queryFilters = useMemo(
+    () => ({
+      ...appliedFilters,
+      dateRange,
+      tab: tabValue,
+    }),
+    [appliedFilters, dateRange, tabValue],
+  );
+
+  // Fetch dashboard summary on filter change
   useEffect(() => {
-    const fetchDashboard = async () => {
+    const fetchSummary = async () => {
       setIsLoading(true);
       try {
-        const payloadFilters = {
-          ...appliedFilters,
-          dateRange
-        };
         const res = await transactionApi.queryTransactions(
-          payloadFilters,
-          { page: 1, pageSize: 10 },
-          { summary: true, transactions: true }
+          queryFilters,
+          { page: 1, pageSize: 1 },
+          { summary: true, transactions: false },
         );
         if (res.summary) {
             setSummaryData(res.summary);
-        }
-        if (res.transactions) {
-            setRecentTransactions(res.transactions);
         }
       } catch (err) {
         console.error(err);
@@ -61,8 +78,31 @@ export const MainDashboard = ({ tabValue, setTabValue }) => {
         setIsLoading(false);
       }
     };
-    fetchDashboard();
-  }, [appliedFilters, dateRange]);
+    fetchSummary();
+  }, [queryFilters, refreshTrigger]);
+
+  // Fetch recent transactions separately so sorting does not reload the full dashboard.
+  useEffect(() => {
+    const fetchRecentTransactions = async () => {
+      setRecentLoading(true);
+      try {
+        const res = await transactionApi.queryTransactions(
+          queryFilters,
+          { page: 1, pageSize: 10 },
+          { summary: false, transactions: true },
+          recentSort,
+        );
+        if (res.transactions) {
+            setRecentTransactions(res.transactions);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setRecentLoading(false);
+      }
+    };
+    fetchRecentTransactions();
+  }, [queryFilters, refreshTrigger, recentSort]);
 
   const maxSelectableDate = useMemo(() => new Date(), []);
   const dateRangeLabel = useMemo(() => formatTransactionDateRangeLabel(dateRange), [dateRange]);
@@ -70,15 +110,8 @@ export const MainDashboard = ({ tabValue, setTabValue }) => {
   const hasActiveFilters = Object.keys(appliedFilters).some(
     (key) => appliedFilters[key] && appliedFilters[key] !== "all" && appliedFilters[key].length !== 0
   );
-  const [openFilter, setOpenFilter] = useState(false);
-  const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
-  const [cashFlowPeriod, setCashFlowPeriod] = useState("daily");
-  const dateRangePopoverRef = useRef(null);
-  const { filters: appliedFilters, dateRange, applyFilters, resetFilters, setDateRange, } = useDashboardFilterStore();
 
-  const records = useMemo(() => Array.isArray(transactions) ? transactions : [], [transactions]);
-  const maxSelectableDate = useMemo(() => new Date(), []);
-  const dateRangeLabel = useMemo(() => formatTransactionDateRangeLabel(dateRange), [dateRange]);
+  // const records = useMemo(() => Array.isArray(transactions) ? transactions : [], [transactions]);
 
   const formatAmount = (val) => val ? `₹ ${formatCompactINR(val)}` : "₹ 0";
 
@@ -132,9 +165,8 @@ export const MainDashboard = ({ tabValue, setTabValue }) => {
   const topCreditCategories = summaryData?.topCreditCategories || [];
   const flaggedTransactions = summaryData?.flaggedTransactions || [];
 
-  // Disable cash flow and modes for now as they require returning a large payload of daily trends
-  const cashFlowTrendData = []; 
-  const transactionsByModeData = [];
+  const cashFlowTrendData = summaryData?.cashFlowTrend || []; 
+  const transactionsByModeData = summaryData?.transactionsByMode || [];
 
   const cashFlowPeriodOptions = useMemo(
     () => [{ label: "Daily", value: "daily" }],
@@ -242,6 +274,11 @@ export const MainDashboard = ({ tabValue, setTabValue }) => {
         />
       )}
 
+      {isSyncing && (
+        <div className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-700">
+          {syncMessage || "Syncing your last 30 days of emails in the background. New rows may appear gradually."}
+        </div>
+      )}
 
       <Tabs.Root value={tabValue} className="w-full" onValueChange={(value) => setTabValue(value)}>
         <Tabs.List className="flex! w-full! gap-2 items-stretch! border-none! shadow-none! rounded-md! h-12!" style={{ boxShadow: "none" }}>
@@ -266,79 +303,77 @@ export const MainDashboard = ({ tabValue, setTabValue }) => {
         align="center"
         justify="start"
       >
-        {cards?.map((card) => (
+        {cards?.filter(c => tabValue !== 'fastag' || c.title === 'Total transactions').map((card) => (
           <DataCard key={card?.title} title={card?.title} value={card?.value} icon={card?.icon} color={card?.color} description={card?.description} />
         ))}
 
-        <DataCard title="Max Credit Amount" value={MaxCreditAmount} icon={TrendingUp} color="green" description="" />
-        <DataCard title="Max Debit Amount" value={MaxDebitAmount} icon={TrendingDown} color="red" description="" />
-        {/* <DataCard title="Total Accounts" value={TotalAccounts} icon={Building} color="blue" description="" /> */}
+        {tabValue !== 'fastag' && (
+          <>
+            <DataCard title="Max Credit Amount" value={MaxCreditAmount} icon={TrendingUp} color="green" description="" />
+            <DataCard title="Max Debit Amount" value={MaxDebitAmount} icon={TrendingDown} color="red" description="" />
+          </>
+        )}
       </Flex>
 
       {/* Charts */}
-      <Flex direction={{initial:"column", sm:"row"}} wrap="wrap" className="gap-3 md:gap-4">
-        {/* <ChartCard id="pie-chart" className="xl:flex-1" title="Credit vs Debit (Total)">
-          <CustomDonutChart
-            chartHeight="240"
-            data={transactionTypeData}
-            totalLabel={`${summaryData?.totalTransactions ?? 0}`}
-            innerLabel="Total"
-            centerTextclassName="top-2 whitespace-wrap"
-          />
-        </ChartCard> */}
+      {tabValue !== 'fastag' && (
+        <>
+          <Flex direction={{initial:"column", sm:"row"}} wrap="wrap" className="gap-3 md:gap-4">
+            <ChartCard className="w-auto flex-1" title="Top Debit Categories">
+              <CustomBarChart data={topDebitCategories} color="#dc2626" />
+            </ChartCard>
 
-        <ChartCard className="w-auto flex-1" title="Top Debit Categories">
-          <CustomBarChart data={topDebitCategories} color="#dc2626" />
-        </ChartCard>
+            <ChartCard className="w-auto flex-1" title="Top Credit Categories">
+              <CustomBarChart data={topCreditCategories} color="#16a34a" />
+            </ChartCard>
+          </Flex>
 
-        <ChartCard className="w-auto flex-1" title="Top Credit Categories">
-          <CustomBarChart data={topCreditCategories} color="#16a34a" />
-        </ChartCard>
-      </Flex>
+          {/* Cash Flow and Mode Charts */}
+          <div className="grid grid-cols-1 gap-3 md:gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(320px,0.8fr)]">
+            <ChartCard
+              title="Daily Net Cash Flow Trend"
+              action={
+                <CustomSelect
+                  value={cashFlowPeriod}
+                  options={cashFlowPeriodOptions}
+                  onValueChange={setCashFlowPeriod}
+                  showSearch={false}
+                  triggerClassName="h-8 min-w-24 text-sm"
+                  contentClassName="min-w-24"
+                />
+              }
+            >
+              <CustomAreaTrendChart data={cashFlowTrendData} />
+            </ChartCard>
 
-      {/* Cash Flow and Mode Charts */}
-      <div className="grid grid-cols-1 gap-3 md:gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(320px,0.8fr)]">
-        <ChartCard
-          title="Daily Net Cash Flow Trend"
-          action={
-            <CustomSelect
-              value={cashFlowPeriod}
-              options={cashFlowPeriodOptions}
-              onValueChange={setCashFlowPeriod}
-              showSearch={false}
-              triggerClassName="h-8 min-w-24 text-sm"
-              contentClassName="min-w-24"
-            />
-          }
-        >
-          <CustomAreaTrendChart data={cashFlowTrendData} />
-        </ChartCard>
-
-        <ChartCard title="Transactions by Mode (Debit)">
-          <CustomDonutChart
-            data={transactionsByModeData}
-            totalLabel={(transactionsByModeData.length || 0).toLocaleString("en-IN")}
-            innerLabel="Total"
-            showLegend
-            showLabels={false}
-            chartHeight="300"
-            innerRadius="54%"
-            outerRadius="78%"
-            legendValueFormatter={(item) => `${item.percentLabel} (${item.count})`}
-          />
-        </ChartCard>
-      </div>
+            <ChartCard title="Transactions by Mode (Debit)">
+              <CustomDonutChart
+                data={transactionsByModeData}
+                totalLabel={(transactionsByModeData.length || 0).toLocaleString("en-IN")}
+                innerLabel="Total"
+                showLegend
+                showLabels={false}
+                chartHeight="300"
+                innerRadius="54%"
+                outerRadius="78%"
+                legendValueFormatter={(item) => `${item.percentLabel} (${item.count})`}
+              />
+            </ChartCard>
+          </div>
+        </>
+      )}
 
       {/* Top Transactions */}
       <div className="flex flex-col md:flex-row gap-3 md:gap-4">
-      <TopItemList title="Top 3 Transactions" showBtn={true} btnText="View All" data={topTransactions} />
-      <TopItemList title="Transactions Flagged for Review" flagged={true} titleColor="text-red-800" btnText="View All" data={flaggedTransactions} />
-
+      <TopItemList title="Top 5 Transactions" showBtn={true} btnText="View All" data={topTransactions} />
+      {tabValue !== 'fastag' && (
+        <TopItemList title="Transactions Flagged for Review" flagged={true} titleColor="text-red-800" btnText="View All" data={flaggedTransactions} />
+      )}
       </div>
 
       
       {/* Recent Transactions */}
-      <RecentTransactions transactions={recentTransactions} />
+      <RecentTransactions transactions={recentTransactions} tabValue={tabValue} sort={recentSort} onSort={handleSort} isLoading={recentLoading} />
     </main>
   );
 };

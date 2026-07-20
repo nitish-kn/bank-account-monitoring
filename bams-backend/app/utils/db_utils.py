@@ -13,7 +13,10 @@ from ..core.constants import (
     PARSED_STATUS,
     STATUS_ALIASES,
     TRANSACTION_DB_FIELDS,
+    TRANSACTION_REVIEW_CONFIDENCE_THRESHOLD,
+    TRANSACTION_REVIEW_REQUIRED_FIELDS,
     TRANSACTION_SCHEMA,
+    VALID_TRANSACTION_TYPES,
 )
 from ..models.parsed import Parsed
 from ..models.transactions import Transactions
@@ -96,6 +99,41 @@ def _amount_key(value) -> str:
     if amount is None:
         return ""
     return str(amount.quantize(Decimal("0.01")))
+
+
+def _confidence_score(transaction: dict) -> float | None:
+    parser_metadata = transaction.get("parser_metadata") or {}
+    raw_score = (
+        parser_metadata.get("confidence_score")
+        if "confidence_score" in parser_metadata
+        else parser_metadata.get("confidence")
+    )
+
+    if raw_score in (None, ""):
+        return None
+
+    try:
+        return float(raw_score)
+    except (TypeError, ValueError):
+        return None
+
+
+def transaction_needs_review(transaction: dict) -> bool:
+    """Return True when a parsed transaction should stay out of normal dashboards."""
+
+    for field in TRANSACTION_REVIEW_REQUIRED_FIELDS:
+        if _clean_text(transaction.get(field)) == "":
+            return True
+
+    valid_types = {_normal_key(txn_type) for txn_type in VALID_TRANSACTION_TYPES}
+    if _normal_key(transaction.get("txn_type")) not in valid_types:
+        return True
+
+    confidence_score = _confidence_score(transaction)
+    return (
+        confidence_score is not None
+        and confidence_score < TRANSACTION_REVIEW_CONFIDENCE_THRESHOLD
+    )
 
 
 def _dates_close(left, right, max_days: int = 1) -> bool:
@@ -247,6 +285,8 @@ def _apply_transaction_fields(model: Transactions, transaction: dict, user_id: i
     if amount is None:
         raise ValueError("Parsed transaction is missing a valid amount.")
 
+    needs_review = transaction_needs_review(transaction)
+
     model.user_id = user_id
     model.gmail_message_id = _clean_text(transaction.get("gmail_message_id")) or None
     model.bank_name = _clean_text(transaction.get("bank_name"))
@@ -272,7 +312,11 @@ def _apply_transaction_fields(model: Transactions, transaction: dict, user_id: i
     model.parser_metadata = transaction.get("parser_metadata") or {}
     # model.raw_data = transaction.get("raw_data") or {}
     model.optional_fields = _transaction_optional_fields(transaction)
-    model.is_flag = bool(transaction.get("is_flag")) or bool(getattr(model, "is_flag", False))
+    model.is_flag = (
+        bool(transaction.get("is_flag"))
+        or bool(getattr(model, "is_flag", False))
+        or needs_review
+    )
 
 
 def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Session) -> list[Transactions]:
@@ -458,7 +502,7 @@ def transaction_to_schema_dict(transaction: Transactions) -> dict:
             data[field] = optional_fields.get(field)
 
     result = {field: data.get(field) for field in TRANSACTION_SCHEMA}
-    result["is_flag"] = bool(data.get("is_flag"))
+    result["is_flag"] = bool(data.get("is_flag")) or transaction_needs_review(result)
     return result
 
 

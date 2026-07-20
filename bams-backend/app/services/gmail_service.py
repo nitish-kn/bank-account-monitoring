@@ -315,6 +315,7 @@ def iter_user_message_pages(
     page_token = None
     fetch_limit = max(1, min(page_size, 500))
 
+    page_index = 1
     while True:
         headers = _auth_headers_for_credentials(creds)
         if not headers:
@@ -338,14 +339,17 @@ def iter_user_message_pages(
 
         payload = response.json()
         messages = payload.get("messages", [])
+        estimate = payload.get("resultSizeEstimate", len(messages))
+        total_pages = max(1, (estimate + fetch_limit - 1) // fetch_limit)
 
         if messages:
-            yield messages
+            yield messages, page_index, total_pages
 
         page_token = payload.get("nextPageToken")
         if not page_token:
             break
 
+        page_index += 1
         time.sleep(PAGE_THROTTLE_SECONDS)
 
 

@@ -10,8 +10,14 @@ const CustomTableCell = ({
   const itemsClass = align === "top" ? "items-start" : align === "bottom" ? "items-end" : "items-center";
 
   return (
-    <Table.Cell className={`p-4 ${width || ""} ${className}`} title={title}>
-      <div className={`flex ${itemsClass} h-full`}>{children}</div>
+    <Table.Cell
+      style={width ? { width } : undefined}
+      className={`p-4 ${className}`}
+      title={title}
+    >
+      <div className={`flex min-w-0 ${itemsClass} h-full w-full`}>
+        {children}
+      </div>
     </Table.Cell>
   );
 };
@@ -29,7 +35,7 @@ const CustomTableRow = ({ row, columns = [], rowIndex, getRowKey }) => {
         return (
           <CustomTableCell
             key={column.key}
-            width={column.width}
+            width={column.columnWidth}
             className={column.cellClassName}
             title={
               typeof rawValue === "string" || typeof rawValue === "number"

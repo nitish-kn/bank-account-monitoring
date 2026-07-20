@@ -8,15 +8,27 @@ import CustomSearchBar from "./ui/CustomSearchBar";
 import DialogPopup from "./ui/DialogPopup";
 
 const TypeBadge = ({ type }) => {
-  const isCredit = String(type).toLowerCase() === "credit";
+  const normalizedType = String(type || "").trim().toLowerCase();
+  const isCredit = normalizedType === "credit";
+  const isDebit = normalizedType === "debit";
+
+  if (!isCredit && !isDebit) {
+    return (
+      <span className="inline-flex items-center rounded-md! bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500">
+        -
+      </span>
+    );
+  }
+
   const bgColor = isCredit ? "bg-green-100" : "bg-red-100";
   const textColor = isCredit ? "text-green-600" : "text-red-600";
+  const label = isCredit ? "Credit" : "Debit";
 
   return (
     <span
       className={`inline-flex items-center rounded-md! px-2.5 py-1 text-xs font-semibold ${bgColor} ${textColor}`}
     >
-      {type.charAt(0).toUpperCase() + type.slice(1)}
+      {label}
     </span>
   );
 };
@@ -51,19 +63,22 @@ const SourceBadge = ({ source }) => {
   );
 };
 
-const RecentTransactions = ({ transactions = [] }) => {
+const RecentTransactions = ({ transactions = [], tabValue, sort, onSort, isLoading = false }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [openDialog, setOpenDialog] = useState(false);
   const [data, setData] = useState({});
-
-  const columns = useMemo(
-    () => [
+  
+  const columns = useMemo(() => {
+    let baseCols = [
       {
         key: "date",
         header: "Date",
+        columnWidth: "120px",
         width: "w-28",
+        sortable: true,
+        sortKey: "date",
         render: (row) => {
           const { date, time } = formatDateAndTime(row.txn_date);
 
@@ -78,22 +93,24 @@ const RecentTransactions = ({ transactions = [] }) => {
       {
         key: "counterparty",
         header: "Counterparty",
+        columnWidth: "260px",
         width: "w-90",
+        sortable: true,
         render: (row) => (
           <div className="max-w-60 w-fit">
             <p className="font-semibold text-gray-900 text-sm">
               {row?.counterparty || row?.source_name || "Transaction"}
             </p>
-            {/* <p className="text-xs text-gray-500 truncate">
-              {row?.ref_number || "No reference"}
-            </p> */}
           </div>
         ),
       },
       {
         key: "bank_name",
         header: "Bank Name",
+        columnWidth: "270px",
         width: "w-72",
+        sortable: true,
+        sortKey: "bank",
         render: (row) => (
           <div className="max-w-60 w-fit">
             <p className="font-semibold text-gray-900 text-sm"> {row?.bank_name || "Unknown Bank"} </p>
@@ -102,19 +119,11 @@ const RecentTransactions = ({ transactions = [] }) => {
           </div>
         ),
       },
-      // {
-      //   key: "account_number",
-      //   header: "Account",
-      //   width: "w-28",
-      //   render: (row) => (
-      //     <div className="text-xs font-medium text-gray-600">
-      //       {row?.account_number}
-      //     </div>
-      //   ),
-      // },
       {
         key: "category",
         header: "Category",
+        columnWidth: "170px",
+        sortable: true,
         render: (row) => (
           <CategoryBadge category={row.category} type={row.txn_type} />
         ),
@@ -122,18 +131,25 @@ const RecentTransactions = ({ transactions = [] }) => {
       {
         key: "txn_type",
         header: "Type",
+        columnWidth: "110px",
         width: "w-28",
+        sortable: true,
+        sortKey: "type",
         render: (row) => <TypeBadge type={row.txn_type} />,
       },
       {
         key: "amount",
         header: "Amount",
+        columnWidth: "150px",
         width: "w-40",
+        sortable: true,
         render: (row) => {
-          const isCredit = String(row.txn_type).toLowerCase() === "credit";
+          const normalizedType = String(row.txn_type || "").trim().toLowerCase();
+          const isCredit = normalizedType === "credit";
+          const isDebit = normalizedType === "debit";
           const amountValue = parseFloat(row.amount || 0);
           const sign = isCredit ? "+" : "−";
-          const color = isCredit ? "text-green-600" : "text-red-500";
+          const color = isCredit ? "text-green-600" : isDebit ? "text-red-500" : "text-gray-700";
 
           return (
             <div className={`text-sm font-semibold w-full text-right ${color}`}>
@@ -145,7 +161,10 @@ const RecentTransactions = ({ transactions = [] }) => {
       {
         key: "balance_after_txn",
         header: "Balance",
+        columnWidth: "150px",
         width: "w-36",
+        sortable: true,
+        sortKey: "balance",
         render: (row) => (
           <div className="text-sm w-full text-right text-gray-700 font-medium">
             ₹ {formatAmount(row.balance_after_txn) || "-"}
@@ -155,12 +174,16 @@ const RecentTransactions = ({ transactions = [] }) => {
       {
         key: "source_name",
         header: "Source",
+        columnWidth: "90px",
         width: "w-16",
+        sortable: true,
+        sortKey: "source",
         render: (row) => <SourceBadge source={row?.gmail_message_id} />,
       },
       {
         key: "actions",
         header: "Actions",
+        columnWidth: "90px",
         width: "w-20",
         render: (row) => (
           <Button
@@ -176,9 +199,40 @@ const RecentTransactions = ({ transactions = [] }) => {
           </Button>
         ),
       },
-    ],
-    [],
-  );
+    ];
+
+    if (tabValue === "fastag") {
+      baseCols = baseCols.filter(c => !["txn_type", "amount", "balance_after_txn"].includes(c.key));
+      
+      const actionsIdx = baseCols.findIndex(c => c.key === "actions");
+      const newCols = [
+        {
+          key: "vehicle_number",
+          header: "Vehicle Number",
+          columnWidth: "150px",
+          render: (row) => (
+            <div className="font-semibold text-gray-900 text-sm">
+              {row?.optional_fields?.vehicle_number || "-"}
+            </div>
+          ),
+        },
+        {
+          key: "trips_left",
+          header: "Trips Left",
+          columnWidth: "120px",
+          render: (row) => (
+            <div className="text-sm text-gray-700">
+              {row?.optional_fields?.trips_left || "-"}
+            </div>
+          ),
+        },
+      ];
+      
+      baseCols.splice(actionsIdx, 0, ...newCols);
+    }
+
+    return baseCols;
+  }, [tabValue]);
 
   const filteredTransactions = useMemo(() => {
     if (!searchTerm) return transactions;
@@ -197,7 +251,7 @@ const RecentTransactions = ({ transactions = [] }) => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, pageSize]);
+  }, [searchTerm, pageSize, sort]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -215,6 +269,11 @@ const RecentTransactions = ({ transactions = [] }) => {
           <h2 className="text-lg font-bold text-gray-900">Recent Transactions</h2>
 
           <div className="hidden lg:flex items-center gap-3">
+            {isLoading && (
+              <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
+                Updating...
+              </span>
+            )}
             <CustomSearchBar
               value={searchTerm}
               onChange={setSearchTerm}
@@ -228,9 +287,11 @@ const RecentTransactions = ({ transactions = [] }) => {
           <CustomTable
             columns={columns}
             data={paginatedTransactions}
-            minWidth="1200px"
+            minWidth="1410px"
             emptyMessage="No transactions found"
             getRowKey={(row, idx) => row?.primary_dedupe_key || idx}
+            sort={sort}
+            onSort={onSort}
           />
         </div>
         <Pagination

@@ -6,11 +6,12 @@ export const transactionApi = {
     return response.data;
   },
   
-  queryTransactions: async (filters, pagination, include) => {
+  queryTransactions: async (filters, pagination, include, sort) => {
     const response = await api.post("/transactions/query", {
       filters,
       pagination,
-      include
+      include,
+      sort
     });
     return response.data;
   }
