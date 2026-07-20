@@ -35,6 +35,11 @@ const all_account_holder_names_ = [
 ];
 
 const all_account_types = [
+  { name: "Business", value: "business" },
+  { name: "Common", value: "common" },
+  { name: "HUF", value: "huf" },
+  { name: "Personal", value: "personal" },
+  { name: "Firm", value: "firm" },
   { name: "SBPRV", value: "sbprv" },
   { name: "SBSPA", value: "sbspa" },
   { name: "SBEZY", value: "sbezy" },
@@ -348,6 +353,23 @@ export const getTransactionFilterOptions = (records = []) => ({
   individualAccounts: buildSelectOptions(
     individual_account,
     "All Individual Accounts",
+  ),
+});
+
+export const getAccountFilterOptions = () => ({
+  banks: buildSelectOptions(all_banks, "All Banks"),
+  accounts: buildSelectOptions(all_account_numbers, "All Accounts"),
+  individualAccounts: buildSelectOptions(
+    individual_account,
+    "All Individual Accounts",
+  ),
+  accountHolderNames: buildSelectOptions(
+    all_account_holder_names_,
+    "All Account Holders",
+  ),
+  accountTypes: buildSelectOptions(
+    all_account_types,
+    "All Account Types",
   ),
 });
 
