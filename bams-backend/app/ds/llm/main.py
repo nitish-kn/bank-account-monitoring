@@ -46,16 +46,16 @@ async def process_emails(
         emails_data
     )
 
+    # Updates bank_accounts running balances only. Never writes to the
+    # transactions table — persist_transactions_batch mutates each dict in
+    # `transactions` in place with its computed balance_after_txn.
     db = SessionLocal()
     try:
-        ledger = persist_transactions_batch(db, transactions)
+        persist_transactions_batch(db, transactions)
     finally:
         db.close()
 
-    return {
-        "transactions": transactions,
-        "ledger": ledger,
-    }
+    return transactions
 
 
 @app.post("/process-statement")
@@ -68,9 +68,11 @@ async def process_statement(
     Provide either a PDF file upload ("file") or a path to a PDF
     already on disk ("file_path") — not both.
 
-    Statement transactions are reconciled against whatever's already in the
-    DB (from email alerts) rather than blindly inserted — see
-    reconcile_statement_batch.
+    Statement transactions are matched (read-only) against whatever's
+    already in the DB (from e.g. an email flow) purely to enrich the
+    returned transaction dicts — see reconcile_statement_batch. Only
+    bank_accounts is ever written to; the transactions table is never
+    inserted into or updated.
     """
 
     if not file and not file_path:
@@ -98,14 +100,11 @@ async def process_statement(
 
         db = SessionLocal()
         try:
-            ledger = reconcile_statement_batch(db, transactions)
+            reconcile_statement_batch(db, transactions)
         finally:
             db.close()
 
-        return {
-            "transactions": transactions,
-            "ledger": ledger,
-        }
+        return transactions
 
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(
@@ -124,13 +123,11 @@ async def process_statement(
 
         db = SessionLocal()
         try:
-            ledger = reconcile_statement_batch(db, transactions)
+            reconcile_statement_batch(db, transactions)
         finally:
             db.close()
 
-        return {
-            "transactions": transactions,
-            "ledger": ledger,
-        }
+        return transactions
+
     finally:
         tmp_path.unlink(missing_ok=True)

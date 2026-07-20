@@ -1,7 +1,9 @@
 """
-Ledger service — persists extracted transactions (from either the email or
-statement pipeline, same unified schema) into the `transactions` table, and
-maintains a day-by-day running balance per account in `bank_accounts`.
+Ledger service — maintains a day-by-day running balance per account in
+`bank_accounts`. This service NEVER writes to the `transactions` table.
+Extracted/parsed transactions are only ever returned back to the caller
+(as plain dicts), fully calculated and deduplicated/merged in memory —
+persisting them anywhere else is the caller's responsibility.
 
 Two distinct flows:
 
@@ -9,17 +11,20 @@ Two distinct flows:
   ever see one alert at a time, with no authoritative balance. Each
   transaction's amount is applied incrementally (+credit/-debit) on top of
   whatever the account's running balance already is. A brand-new account
-  with no prior day-row starts from 0.
+  with no prior day-row starts from 0. The resulting `balance_after_txn` is
+  written back onto the transaction dict (in place) — not to any DB row.
 
 - Statement flow (`reconcile_statement_batch`): a bank statement carries its
   own ground-truth `balance_after_txn` for every row, so we never compute it
-  ourselves here. Statement rows are matched against transactions already
-  inserted via the email flow (by ref_number, falling back to
-  amount+txn_date+txn_time) — a match gets its balance corrected and any
-  still-missing fields filled in, rather than being duplicated. Every day
-  touched by the statement has its bank_accounts.current_balance overwritten
-  with that day's true closing balance, correcting any drift from earlier
-  incremental email-based estimates.
+  ourselves here. Statement rows are still matched (read-only) against
+  transactions already present in the `transactions` table — by ref_number,
+  falling back to amount+txn_date+txn_time — purely so we can enrich the
+  in-memory transaction dict with any fields it's missing that the matched
+  row already has. Nothing is written back to that matched row, and no new
+  row is ever inserted. Every day touched by the statement has its
+  bank_accounts.current_balance overwritten with that day's true closing
+  balance, correcting any drift from earlier incremental email-based
+  estimates.
 
 Day-bucketing rule: a `bank_accounts` row represents one account's balance
 for one calendar day, keyed off the TRANSACTION's own txn_date — not the
@@ -36,7 +41,6 @@ reconciliation pass if that drift matters in practice.
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -46,20 +50,10 @@ from ..utils.transaction_utils import normalize_transaction_date
 
 PLACEHOLDER_TEXT = "N/A"
 
-# transactions columns that are NOT NULL in the DB but not always filled by the LLM
-REQUIRED_TEXT_FIELDS = (
-    "bank_name",
-    "account_holder_name",
-    "account_number",
-    "txn_type",
-    "counterparty",
-    "narration",
-    "txn_via",
-    "ref_number",
-)
-
-# fields a statement can fill in on an existing (email-sourced) row, but only
-# where that row is currently empty/placeholder — never overwrites real data
+# fields a matched, already-recorded transaction can fill in on the
+# in-memory transaction dict being returned, but only where the dict is
+# currently empty/placeholder for that field — never overwrites data the
+# incoming transaction already carries
 FILLABLE_FIELDS = (
     "bank_name",
     "account_holder_name",
@@ -75,11 +69,6 @@ FILLABLE_FIELDS = (
     "ref_number",
     "txn_time",
 )
-
-
-def _text(value: Any) -> str:
-    text = str(value).strip() if value is not None else ""
-    return text or PLACEHOLDER_TEXT
 
 
 def _as_day(value: Any) -> Optional[date]:
@@ -114,8 +103,12 @@ def _day_start(day: date) -> datetime:
     return datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
 
 
+def _is_empty(value: Any) -> bool:
+    return value is None or value == "" or value == PLACEHOLDER_TEXT
+
+
 # ------------------------------------------------------------------ #
-# Daily balance ledger                                                #
+# Daily balance ledger (the only thing this module writes to DB)      #
 # ------------------------------------------------------------------ #
 
 
@@ -231,57 +224,21 @@ def set_daily_closing_balance(
 
 
 # ------------------------------------------------------------------ #
-# Shared row construction                                             #
+# Email flow — incremental balance, transaction dict returned in-place#
 # ------------------------------------------------------------------ #
 
 
-def _build_transaction_row(transaction: Dict[str, Any], balance_after_txn: Optional[Decimal]) -> Transactions:
-    parser_metadata = transaction.get("parser_metadata") or {}
-    amount = _as_decimal(transaction.get("amount"))
-    txn_day = _as_day(transaction.get("txn_date"))
-    ref_number = _text(transaction.get("ref_number"))
-
-    return Transactions(
-        id=uuid4().hex,
-        gmail_message_id=transaction.get("gmail_message_id"),
-        bank_name=_text(transaction.get("bank_name")),
-        account_holder_name=_text(transaction.get("account_holder_name")),
-        account_type=transaction.get("account_type"),
-        account_number=_text(transaction.get("account_number")),
-        txn_type=_text(transaction.get("txn_type")),
-        mode=transaction.get("mode"),
-        category=transaction.get("category"),
-        amount=amount,
-        currency=transaction.get("currency") or "INR",
-        txn_date=_day_start(txn_day) if txn_day else None,
-        txn_time=transaction.get("txn_time"),
-        counterparty=_text(transaction.get("counterparty")),
-        counterparty_kind=transaction.get("counterparty_kind"),
-        narration=_text(transaction.get("narration")),
-        txn_via=_text(transaction.get("txn_via")),
-        ref_number=ref_number,
-        place=transaction.get("place"),
-        balance_after_txn=balance_after_txn,
-        source=transaction.get("source") or "",
-        dedupe_key=ref_number,
-        email_metadata=transaction.get("email_metadata") or {},
-        parser_metadata=parser_metadata,
-        optional_fields=transaction.get("optional_fields") or {},
-    )
-
-
-# ------------------------------------------------------------------ #
-# Email flow — incremental balance                                    #
-# ------------------------------------------------------------------ #
-
-
-def persist_transaction(db: Session, transaction: Dict[str, Any]) -> Optional[Transactions]:
+def persist_transaction(db: Session, transaction: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    Insert one extracted transaction into `transactions`, updating the
-    account's running balance in `bank_accounts` incrementally and writing
-    that back as `balance_after_txn`.
+    Process one extracted transaction: update the account's running balance
+    in `bank_accounts` incrementally, and write the resulting balance back
+    onto `transaction["balance_after_txn"]` (mutated in place).
 
-    Returns None (no DB write) if:
+    Does NOT write anything to the `transactions` table — the transaction
+    dict itself (never a DB row) is returned so the caller can hand back a
+    fully-calculated transaction without ever persisting it there.
+
+    Returns None (and applies no ledger update) if:
       - it isn't a real parsed transaction, or
       - `amount` can't be parsed as a number (never fabricate a financial amount).
     """
@@ -310,45 +267,44 @@ def persist_transaction(db: Session, transaction: Dict[str, Any]) -> Optional[Tr
             account_type=transaction.get("account_type"),
         )
 
-    row = _build_transaction_row(transaction, balance_after_txn)
-
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-
     if balance_after_txn is not None:
         transaction["balance_after_txn"] = float(balance_after_txn)
 
-    return row
+    # Only the bank_accounts changes above need committing.
+    db.commit()
+
+    return transaction
 
 
 def persist_transactions_batch(db: Session, transactions: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Persist a batch of extracted email transactions. One bad row never
-    aborts the rest of the batch.
+    Process a batch of extracted email transactions, updating bank_accounts
+    only. One bad row never aborts the rest of the batch. Each transaction
+    dict in `transactions` is mutated in place with its computed
+    `balance_after_txn` where applicable.
     """
-    persisted_ids: List[str] = []
+    persisted_refs: List[Any] = []
     skipped: List[Dict[str, Any]] = []
 
     for transaction in transactions:
         try:
-            row = persist_transaction(db, transaction)
+            result = persist_transaction(db, transaction)
         except Exception as exc:
             db.rollback()
             skipped.append({"reason": str(exc), "ref_number": transaction.get("ref_number")})
             continue
 
-        if row is None:
+        if result is None:
             skipped.append({
                 "reason": "not a parsed transaction, or amount could not be parsed",
                 "ref_number": transaction.get("ref_number"),
             })
         else:
-            persisted_ids.append(row.id)
+            persisted_refs.append(transaction.get("ref_number"))
 
     return {
-        "persisted_count": len(persisted_ids),
-        "persisted_ids": persisted_ids,
+        "persisted_count": len(persisted_refs),
+        "persisted_refs": persisted_refs,
         "skipped_count": len(skipped),
         "skipped": skipped,
     }
@@ -374,9 +330,10 @@ def _find_matching_transaction(
     occurrence_counter: Dict[tuple, int],
 ) -> Optional[Transactions]:
     """
-    Look for an existing transactions row (typically inserted earlier from an
-    email alert, or from a previous run of this same statement) that this
-    statement row corresponds to.
+    Look for an existing transactions row (typically inserted earlier by some
+    other process, e.g. an email alert pipeline) that this statement row
+    corresponds to. This is a READ-ONLY lookup used purely to enrich the
+    returned transaction dict — nothing is written back to this row.
 
     Primary key: ref_number.
 
@@ -385,10 +342,10 @@ def _find_matching_transaction(
     legitimately contain multiple transactions that share the same amount on
     the same day — so instead of matching "any" row with that key, we match
     the Nth occurrence of that key in this batch to the Nth existing row with
-    that key (both ordered by id). This is what makes reprocessing the exact
-    same statement idempotent (every row lines up with the one already
-    inserted, no duplicates) while still keeping genuinely-distinct
-    same-amount/same-day transactions from colliding with each other.
+    that key (both ordered by id). This is what keeps reprocessing the exact
+    same statement idempotent (every row lines up with the same match every
+    time) while still keeping genuinely-distinct same-amount/same-day
+    transactions from colliding with each other.
     """
     account_number = transaction.get("account_number")
     if not account_number:
@@ -432,27 +389,34 @@ def _find_matching_transaction(
     return None
 
 
-def _fill_missing_fields(existing_row: Transactions, transaction: Dict[str, Any]) -> None:
-    """Fill gaps on an existing row from the statement's version — never overwrites real data."""
+def _fill_transaction_gaps_from_existing(transaction: Dict[str, Any], existing_row: Transactions) -> None:
+    """
+    Enrich the in-memory transaction dict with any fields it's missing,
+    pulled from a previously-matched, already-recorded transaction row —
+    never overwrites data the transaction dict already carries, and never
+    writes anything back to `existing_row` / the DB.
+    """
     for field in FILLABLE_FIELDS:
-        current = getattr(existing_row, field, None)
-        if current is not None and current != PLACEHOLDER_TEXT and current != "":
+        if not _is_empty(transaction.get(field)):
             continue
 
-        new_value = transaction.get(field)
-        if new_value:
-            setattr(existing_row, field, new_value)
+        existing_value = getattr(existing_row, field, None)
+        if not _is_empty(existing_value):
+            transaction[field] = existing_value
 
 
 def reconcile_statement_batch(db: Session, transactions: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Reconcile a batch of statement-extracted transactions (typically a full
-    month, uploaded at month-end) against what's already in `transactions`:
+    month, uploaded at month-end) against bank_accounts only:
 
-      - Matches an existing (email-sourced) row -> corrects balance_after_txn
-        to the statement's true value and fills in any still-missing fields.
-      - No match -> inserts a new row, trusting the statement's own balance
-        directly (no incremental math needed).
+      - Each transaction dict is matched (read-only) against whatever's
+        already in `transactions` (by ref_number, falling back to
+        amount+txn_date+txn_time) and, on a match, filled in with any
+        missing fields from that match — mutated in place, nothing written
+        back to the DB and nothing inserted.
+      - `transaction["balance_after_txn"]` is normalized from the
+        statement's own value.
 
     Every (account, day) touched by the statement then has its
     bank_accounts.current_balance overwritten with that day's true closing
@@ -465,8 +429,6 @@ def reconcile_statement_batch(db: Session, transactions: List[Dict[str, Any]]) -
 
     ordered = sorted(transactions, key=_sort_key)
 
-    updated_ids: List[str] = []
-    inserted_ids: List[str] = []
     skipped: List[Dict[str, Any]] = []
 
     # (account_number, day) -> latest known true closing balance for that day
@@ -498,24 +460,14 @@ def reconcile_statement_batch(db: Session, transactions: List[Dict[str, Any]]) -
             }
 
         existing = _find_matching_transaction(db, transaction, occurrence_counter)
-
         if existing:
-            if statement_balance is not None:
-                existing.balance_after_txn = statement_balance
-            _fill_missing_fields(existing, transaction)
-            db.add(existing)
-            db.flush()
-            updated_ids.append(existing.id)
-        else:
-            row = _build_transaction_row(transaction, statement_balance)
-            db.add(row)
-            db.flush()
-            inserted_ids.append(row.id)
+            _fill_transaction_gaps_from_existing(transaction, existing)
 
         if statement_balance is not None:
+            transaction["balance_after_txn"] = float(statement_balance)
             day_closing_balance[(account_number, txn_day)] = statement_balance
 
-    # Repair every day-row the statement actually covers.
+    # Repair every day-row the statement actually covers (bank_accounts only).
     last_day_per_account: Dict[str, date] = {}
     for (account_number, day), closing_balance in day_closing_balance.items():
         meta = account_meta.get(account_number, {})
@@ -544,10 +496,6 @@ def reconcile_statement_batch(db: Session, transactions: List[Dict[str, Any]]) -
     db.commit()
 
     return {
-        "updated_count": len(updated_ids),
-        "updated_ids": updated_ids,
-        "inserted_count": len(inserted_ids),
-        "inserted_ids": inserted_ids,
         "skipped_count": len(skipped),
         "skipped": skipped,
         "days_reconciled": [
