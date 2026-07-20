@@ -23,6 +23,7 @@ class Transactions(Base):
     currency = Column(String, default="INR")
 
     txn_date = Column(DateTime(timezone=True))
+    txn_time = Column(String)
 
     counterparty = Column(String, nullable=False)
     counterparty_kind = Column(String)

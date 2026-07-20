@@ -225,6 +225,10 @@ If direction still cannot be determined:
 
 * Format `YYYY-MM-DD` only. Never include a time component, even if one is printed on the statement.
 
+## txn_time
+
+* If the statement shows a time for the transaction, extract it as `HH:MM` or `HH:MM:SS` (24-hour) into this separate field. Null if no time is printed.
+
 ## bank_name
 
 * The issuing bank as printed on the statement letterhead/header. Repeat it on every transaction from that statement.

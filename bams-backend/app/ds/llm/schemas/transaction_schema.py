@@ -102,6 +102,11 @@ class Transaction(BaseModel):
 
     txn_date: Optional[str] = None
 
+    txn_time: Optional[str] = Field(
+        default=None,
+        description="Time of the transaction as printed, format HH:MM or HH:MM:SS (24-hour). Null if no time is shown.",
+    )
+
     counterparty: Optional[str] = None
 
     counterparty_kind: Optional[str] = None

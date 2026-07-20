@@ -14,6 +14,7 @@ def build_batch_prompt(emails):
         "amount": None,
         "currency": None,
         "txn_date": None,
+        "txn_time": None,
         "counterparty": None,
         "counterparty_kind": None,
         "txn_via": None,
@@ -93,6 +94,8 @@ FIELD RULES
 amount / balance_after_txn — numeric strings, no currency symbol/commas. e.g. "1700.00", never 1700.
 
 txn_date — date only, format YYYY-MM-DD. Never include a time component even if the email shows one.
+
+txn_time — the time of the transaction if the email states one, format HH:MM or HH:MM:SS (24-hour). e.g. "Date & Time: 08-07-26, 18:40:48 IST" → txn_time = "18:40:48". Null if no time is shown anywhere.
 
 account_holder_name — best-effort name from the email; use "Customer" if truly unavailable. Never null.
 
