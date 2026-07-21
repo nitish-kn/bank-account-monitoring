@@ -70,6 +70,10 @@ def check_connection():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+        print("-----------------------------------------------------\n")
         print("Database connected")
+        print("-----------------------------------------------------")
     except Exception as e:
+        print("-----------------------------------------------------\n")
         print(f"Database connection failed: {e}")
+        print("-----------------------------------------------------")

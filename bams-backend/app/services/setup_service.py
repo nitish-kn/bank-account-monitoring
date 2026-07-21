@@ -48,7 +48,7 @@ from ..utils.transaction_utils import (
     check_valid_transactions,
     transaction_column_for_field,
 )
-from ..ds.llm.services.extractor import extract_transactions
+from ..ds.llm.main import process_emails
 
 # Thread tracking for stuck-sync detection
 # Maps user_id -> {"thread": Thread, "started_at": float (time.time())}
@@ -360,7 +360,7 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
             print(f"Emails from Gmail Api - Page {page_idx}/{total_pages} (count: {len(new_emails)})\n")
 
             # 7. Send hydrated emails to LLM batches
-            for batch_result in _batch_extract_transactions(new_emails):
+            for batch_result in _batch_extract_transactions(new_emails, user_id=user_id):
                 if not batch_result:
                     continue
 
@@ -505,6 +505,7 @@ def start_background_sync_for_user(user: User, db: Session) -> dict:
 
 def _batch_extract_transactions(
     emails: list[dict],
+    user_id: int | None = None,
     batch_size: int = EMAIL_EXTRACTION_BATCH_SIZE,
     max_workers: int = EMAIL_EXTRACTION_MAX_WORKERS,
     max_in_flight: int = EMAIL_EXTRACTION_MAX_IN_FLIGHT,
@@ -517,7 +518,7 @@ def _batch_extract_transactions(
             print(f"Batch {batch_index} started")
             print("Batch IDs:", [email.get("id") for email in batch])
 
-            result = extract_transactions(batch)
+            result = asyncio.run(process_emails(batch, user_id=user_id))
 
             if result is None:
                 print(f"Batch {batch_index} returned None")

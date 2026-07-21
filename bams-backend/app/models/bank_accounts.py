@@ -3,12 +3,11 @@ from ..database import Base
 from .types import ID_TYPE
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from uuid import uuid4
 
 class BankAccounts(Base):
     __tablename__ = "bank_accounts"
 
-    id = Column(ID_TYPE, primary_key=True)
+    id = Column(String, primary_key=True)
     user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
     bank_name = Column(String, nullable=False)
     account_holder_name = Column(String, nullable=False)
@@ -19,6 +18,6 @@ class BankAccounts(Base):
     last_synced_at = Column(DateTime(timezone=True))
     source = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate="now()")
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="bank_accounts")

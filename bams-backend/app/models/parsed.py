@@ -12,12 +12,12 @@ class Parsed(Base):
         UniqueConstraint("user_id", "gmail_message_id", name="uq_parsed_user_gmail_message_id"),
     )
 
-    id = Column(ID_TYPE, primary_key=True)
+    id = Column(String, primary_key=True)
     user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
     gmail_message_id = Column(String, nullable=False)
     status = Column(String, nullable=False)
     optional = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate="now()")
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="parsed")  # or appropriate name

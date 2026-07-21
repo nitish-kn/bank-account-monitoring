@@ -21,10 +21,10 @@ from .setup_service import _sync_transactions_to_sheet
 
 
 # -------------------------- Main function which calls LLM ------------
-def _parse_statement_pdf(pdf_path: Path) -> list[dict]:
-    """ Main function to parse pdf calling the LLM """
+async def _parse_statement_pdf(pdf_path: Path, user_id: int) -> list[dict]:
+    """Parse a statement PDF through the shared LLM statement function."""
     try:
-        from ..ds.llm.app import run
+        from ..ds.llm.main import process_statement
     except ModuleNotFoundError as error:
         missing_dependency = error.name or "PDF extraction dependency"
         raise HTTPException(
@@ -35,7 +35,7 @@ def _parse_statement_pdf(pdf_path: Path) -> list[dict]:
             ),
         ) from error
 
-    return run(pdf_path)
+    return await process_statement(file_path=str(pdf_path), user_id=user_id)
 
 
 # --------------------------- Helper function -------------------------
@@ -191,7 +191,7 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
     for original_filename, saved_path in saved_files:
         try:
             # 5. Parse statement PDF using app.ds.llm.app.run(Path)
-            extracted_txns = _parse_statement_pdf(saved_path)
+            extracted_txns = await _parse_statement_pdf(saved_path, user.id)
             if not extracted_txns:
                 processed_files.append({
                     "filename": original_filename,

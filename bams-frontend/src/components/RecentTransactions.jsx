@@ -91,20 +91,6 @@ const RecentTransactions = ({ transactions = [], tabValue, sort, onSort, isLoadi
         },
       },
       {
-        key: "counterparty",
-        header: "Counterparty",
-        columnWidth: "260px",
-        width: "w-90",
-        sortable: true,
-        render: (row) => (
-          <div className="max-w-60 w-fit">
-            <p className="font-semibold text-gray-900 text-sm">
-              {row?.counterparty || row?.source_name || "Transaction"}
-            </p>
-          </div>
-        ),
-      },
-      {
         key: "bank_name",
         header: "Bank Name",
         columnWidth: "270px",
@@ -116,6 +102,20 @@ const RecentTransactions = ({ transactions = [], tabValue, sort, onSort, isLoadi
             <p className="font-semibold text-gray-900 text-sm"> {row?.bank_name || "Unknown Bank"} </p>
             <p className="text-xs font-medium text-gray-800 truncate"> {row?.account_holder_name || "-"} </p>
             <p className="text-xs text-gray-500 truncate"> {row?.account_number || "-"} </p>
+          </div>
+        ),
+      },
+      {
+        key: "counterparty",
+        header: "Counterparty",
+        columnWidth: "260px",
+        width: "w-90",
+        sortable: true,
+        render: (row) => (
+          <div className="max-w-60 w-fit">
+            <p className="font-semibold text-gray-900 text-sm">
+              {row?.counterparty || row?.source_name || "Transaction"}
+            </p>
           </div>
         ),
       },

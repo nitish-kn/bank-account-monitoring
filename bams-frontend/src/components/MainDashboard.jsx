@@ -113,7 +113,7 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
 
   // const records = useMemo(() => Array.isArray(transactions) ? transactions : [], [transactions]);
 
-  const formatAmount = (val) => val ? `₹ ${formatCompactINR(val)}` : "₹ 0";
+  const formatAmount = (val) => val ? `${formatCompactINR(val)}` : "₹ 0";
 
   const cards = useMemo(
     () => [

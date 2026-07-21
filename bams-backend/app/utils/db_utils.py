@@ -173,6 +173,23 @@ def _refs_have_subset_match(left, right, min_partial_len: int = 4) -> bool:
     return shorter in longer
 
 
+def _preferred_ref_number(existing_ref, incoming_ref) -> str:
+    """Keep the fuller reference number when a partial/full ref pair is matched."""
+
+    existing_text = _clean_text(existing_ref)
+    incoming_text = _clean_text(incoming_ref)
+    existing_key = _compact_key(existing_text)
+    incoming_key = _compact_key(incoming_text)
+
+    if not existing_key:
+        return incoming_text
+    if not incoming_key:
+        return existing_text
+    if existing_key in incoming_key and len(incoming_key) > len(existing_key):
+        return incoming_text
+    return existing_text
+
+
 def build_transaction_dedupe_key(transaction: dict, user_id: int) -> str:
     """It makes the dedupe key hashing them using some fields with sha256"""
 
@@ -254,12 +271,14 @@ def _transaction_core_matches(candidate: Transactions, transaction: dict) -> boo
     return True
 
 
-def _find_ref_subset_matches(transaction: dict, user_id: int, db: Session) -> list[Transactions]:
+def _find_ref_number_match(transaction: dict, user_id: int, db: Session) -> Transactions | None:
+    """Find an existing row by exact/subset ref before building a new dedupe key."""
+
     amount = _decimal_or_none(transaction.get("amount"))
     ref_number = transaction.get("ref_number")
 
     if amount is None or not _compact_key(ref_number):
-        return []
+        return None
 
     query = db.query(Transactions).filter(
         Transactions.user_id == user_id,
@@ -272,12 +291,28 @@ def _find_ref_subset_matches(transaction: dict, user_id: int, db: Session) -> li
 
     candidates = query.all()
 
-    return [
+    exact_matches = [
+        candidate
+        for candidate in candidates
+        if _compact_key(candidate.ref_number) == _compact_key(ref_number)
+        and _transaction_core_matches(candidate, transaction)
+    ]
+    if exact_matches:
+        return exact_matches[0]
+
+    subset_matches = [
         candidate
         for candidate in candidates
         if _refs_have_subset_match(candidate.ref_number, ref_number)
         and _transaction_core_matches(candidate, transaction)
     ]
+    if not subset_matches:
+        return None
+
+    return max(
+        subset_matches,
+        key=lambda candidate: len(_compact_key(candidate.ref_number)),
+    )
 
 
 def _apply_transaction_fields(model: Transactions, transaction: dict, user_id: int) -> None:
@@ -331,28 +366,35 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
         if status != PARSED_STATUS:
             continue
 
-        # It checks existing transaction by: user_id + dedupe_key
-        # If found, it updates. If not found, it inserts a new Transactions row
-        dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
-        existing = (
-            db.query(Transactions)
-            .filter(
-                Transactions.user_id == user_id,
-                Transactions.dedupe_key == dedupe_key,
+        ref_match = _find_ref_number_match(transaction, user_id, db)
+        if ref_match:
+            transaction = {
+                **transaction,
+                "dedupe_key": ref_match.dedupe_key,
+                "ref_number": _preferred_ref_number(
+                    ref_match.ref_number,
+                    transaction.get("ref_number"),
+                ),
+                "is_flag": (
+                    bool(transaction.get("is_flag"))
+                    or _refs_have_subset_match(ref_match.ref_number, transaction.get("ref_number"))
+                ),
+            }
+            model = ref_match
+        else:
+            # If no ref overlap exists, fall back to the normal stable dedupe key.
+            dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
+            existing = (
+                db.query(Transactions)
+                .filter(
+                    Transactions.user_id == user_id,
+                    Transactions.dedupe_key == dedupe_key,
+                )
+                .first()
             )
-            .first()
-        )
+            transaction = {**transaction, "dedupe_key": dedupe_key}
+            model = existing or Transactions(id=str(uuid4()))
 
-        ref_subset_matches = [] if existing else _find_ref_subset_matches(transaction, user_id, db)
-        model = existing or Transactions(id=str(uuid4()))
-
-        if ref_subset_matches:
-            transaction = {**transaction, "is_flag": True}
-            for flagged_transaction in ref_subset_matches:
-                flagged_transaction.is_flag = True
-                db.add(flagged_transaction)
-
-        transaction = {**transaction, "dedupe_key": dedupe_key}
         _apply_transaction_fields(model, transaction, user_id)
 
         db.add(model)
