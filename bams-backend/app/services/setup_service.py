@@ -319,6 +319,13 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                 for message in message_page
                 if message.get("id") and message.get("id") not in existing_gmail_message_ids
             ]
+            already_parsed_count = len(message_page) - len(new_messages)
+            print(
+                "Email sync page: "
+                f"user={user_id} page={page_idx}/{total_pages} "
+                f"gmail_ids={len(message_page)} already_parsed={already_parsed_count} "
+                f"new={len(new_messages)}"
+            )
 
             if not new_messages:
                 db.add(user)
@@ -338,6 +345,11 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                 for message in new_messages
                 if message.get("id") and message.get("id") not in hydrated_email_ids
             ]
+            print(
+                "Email hydrate: "
+                f"user={user_id} requested={len(new_messages)} "
+                f"hydrated={len(new_emails)} failed={len(missing_hydrated_messages)}"
+            )
             if missing_hydrated_messages:
                 update_parsed_status_to_db(
                     user_id,
@@ -369,6 +381,10 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                 extraction_error = batch_result.get("error")
 
                 if extraction_error:
+                    print(
+                        "Email extraction batch failed: "
+                        f"user={user_id} emails={len(batch_emails)}"
+                    )
                     update_parsed_status_to_db(
                         user_id,
                         [],
@@ -387,6 +403,13 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
 
                 try:
                     # 8. Check for valid transaction with transaction objects only and save parsed transactions to DB
+                    parsed_result_count = sum(
+                        1
+                        for transaction in transactions
+                        if str(
+                            (transaction.get("parser_metadata") or {}).get("parsed_status") or ""
+                        ).strip().lower() == "parsed"
+                    )
                     valid_transactions = check_valid_transactions(transactions)
                     saved_transactions = save_valid_transaction_to_db(
                         valid_transactions,
@@ -405,10 +428,17 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                     # 10. Commit DB batch
                     db.add(user)
                     db.commit()
+                    print(
+                        "Email batch saved: "
+                        f"user={user_id} emails={len(batch_emails)} "
+                        f"llm_rows={len(transactions)} parsed={parsed_result_count} "
+                        f"valid_for_db={len(valid_transactions)} "
+                        f"transactions_saved={len(saved_transactions)}"
+                    )
                 except Exception as error:
                     db.rollback()
                     safe_error = str(error).encode('ascii', 'replace').decode('ascii')
-                    print(f"Failed to persist extracted batch: {safe_error}")
+                    print(f"Failed to persist extracted batch: {safe_error[:300]}")
                     update_parsed_status_to_db(
                         user_id,
                         [],
@@ -444,7 +474,7 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
         _mark_sync_success(user, db)
     except Exception as error:
         safe_error = str(error).encode('ascii', 'replace').decode('ascii')
-        print(f"Background sync failed for user {user_id}: {safe_error}")
+        print(f"Background sync failed for user {user_id}: {safe_error[:300]}")
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             _mark_sync_failed(user, db)
@@ -515,26 +545,30 @@ def _batch_extract_transactions(
 
     def safe_extract(batch_index, batch):
         try:
-            print(f"Batch {batch_index} started")
-            print("Batch IDs:", [email.get("id") for email in batch])
+            print(f"Email LLM batch started: batch={batch_index} emails={len(batch)}")
 
             result = asyncio.run(process_emails(batch, user_id=user_id))
 
             if result is None:
-                print(f"Batch {batch_index} returned None")
+                print(f"Email LLM batch returned no response: batch={batch_index}")
                 return {"transactions": [], "error": "LLM extractor returned no response."}
 
             if not isinstance(result, list):
-                print(f"Batch {batch_index} returned non-list:", type(result), result)
+                print(
+                    "Email LLM batch returned invalid type: "
+                    f"batch={batch_index} type={type(result).__name__}"
+                )
                 return {"transactions": [], "error": f"LLM extractor returned {type(result).__name__} instead of list."}
 
-            print(f"Batch {batch_index} success, transactions:", len(result))
+            print(f"Email LLM batch success: batch={batch_index} transactions={len(result)}")
             return {"transactions": result, "error": None}
 
         except Exception as e:
             safe_e = str(e).encode('ascii', 'replace').decode('ascii')
-            print(f"Batch {batch_index} extraction failed: {safe_e}")
-            print("Failed batch IDs:", [email.get("id") for email in batch])
+            print(
+                "Email LLM batch failed: "
+                f"batch={batch_index} emails={len(batch)} error={safe_e[:300]}"
+            )
             return {"transactions": [], "error": safe_e}
 
     batches = [
@@ -676,6 +710,11 @@ def perform_incremental_sync(user: User, db: Session):
             existing_gmail_message_ids = check_existing_gmail_message_id(user, db)
             
             if latest_gmail_id in existing_gmail_message_ids:
+                print(
+                    "Incremental sync: "
+                    f"user={user.id} latest_already_parsed=1 "
+                    f"known_gmail_ids={len(existing_gmail_message_ids)}"
+                )
                 
                 # It fetches only latest Gmail ID. If latest ID already exists in DB, it does not run full sync. But it still calls: So if DB had rows saved but Sheets failed earlier, manual sync can repair Sheets.
                 sheet_result = _sync_transactions_to_sheet(user, db)
@@ -691,7 +730,7 @@ def perform_incremental_sync(user: User, db: Session):
     except Exception as e:
         # If check fails for some API/credentials reasons, fallback to background sync
         safe_error = str(e).encode('ascii', 'replace').decode('ascii')
-        print(f"Latest email check failed, falling back to full sync: {safe_error}")
+        print(f"Latest email check failed, falling back to full sync: {safe_error[:300]}")
 
     return start_background_sync_for_user(user, db)
 

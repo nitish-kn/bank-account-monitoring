@@ -72,6 +72,17 @@ async def process_emails(
     transactions = extract_transactions(
         emails_data
     )
+    parsed_count = sum(
+        1
+        for transaction in transactions or []
+        if str(
+            (transaction.get("parser_metadata") or {}).get("parsed_status") or ""
+        ).strip().lower() == "parsed"
+    )
+    print(
+        "Email parse result: "
+        f"emails={len(emails_data)} rows={len(transactions or [])} parsed={parsed_count}"
+    )
 
     # Updates bank_accounts running balances only. Never writes to the
     # transactions table — persist_transactions_batch mutates each dict in
@@ -130,6 +141,10 @@ async def process_statement(
             )
 
         transactions = extract_statement_transactions(pdf_path)
+        print(
+            "Statement parse result: "
+            f"source=file_path rows={len(transactions or [])}"
+        )
 
         if resolved_user_id is not None:
             db = SessionLocal()
@@ -154,6 +169,10 @@ async def process_statement(
 
     try:
         transactions = extract_statement_transactions(tmp_path)
+        print(
+            "Statement parse result: "
+            f"source=upload rows={len(transactions or [])}"
+        )
 
         if resolved_user_id is not None:
             db = SessionLocal()

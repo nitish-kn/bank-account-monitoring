@@ -189,6 +189,4 @@ def extract_transactions(emails):
         for member in g["members"]:
             member["counterparty"] = canonical or member.get("counterparty")
 
-    print(final_results)
-
     return final_results

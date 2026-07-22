@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import difflib
+from collections import Counter
 from hashlib import sha256
 import re
 from uuid import uuid4
@@ -362,14 +363,20 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
     """Insert or update valid parsed transactions. Caller owns commit/rollback.
     It only saves transaction with parsed_status == "parsed" """
     saved_transactions: list[Transactions] = []
+    parsed_input_count = 0
+    inserted_count = 0
+    updated_count = 0
+    skipped_count = 0
 
     for transaction in transactions or []:
         status = normalize_parsed_status(
             (transaction.get("parser_metadata") or {}).get("parsed_status")
         )
         if status != PARSED_STATUS:
+            skipped_count += 1
             continue
 
+        parsed_input_count += 1
         ref_match = _find_ref_number_match(transaction, user_id, db)
         if ref_match:
             transaction = {
@@ -385,6 +392,7 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
                 ),
             }
             model = ref_match
+            is_insert = False
         else:
             # If no ref overlap exists, fall back to the normal stable dedupe key.
             dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
@@ -398,12 +406,25 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
             )
             transaction = {**transaction, "dedupe_key": dedupe_key}
             model = existing or Transactions(id=str(uuid4()))
+            is_insert = existing is None
 
         _apply_transaction_fields(model, transaction, user_id)
 
         db.add(model)
         db.flush()
         saved_transactions.append(model)
+        if is_insert:
+            inserted_count += 1
+        else:
+            updated_count += 1
+
+    if transactions:
+        print(
+            "Transactions DB: "
+            f"user={user_id} parsed_valid={parsed_input_count} "
+            f"inserted={inserted_count} updated={updated_count} "
+            f"skipped_non_parsed={skipped_count}"
+        )
 
     return saved_transactions
 
@@ -491,7 +512,30 @@ def update_parsed_status_to_db(
                 {"error": "LLM response did not include this Gmail message ID."},
             )
 
+    existing_message_ids = set()
+    if status_by_message_id:
+        message_ids = list(status_by_message_id.keys())
+        existing_message_ids = {
+            row.gmail_message_id
+            for row in db.query(Parsed.gmail_message_id)
+            .filter(
+                Parsed.user_id == user_id,
+                Parsed.gmail_message_id.in_(message_ids),
+            )
+            .all()
+        }
+
+    inserted_count = 0
+    updated_count = 0
+    status_counts = Counter()
+
     for gmail_message_id, (status, optional) in status_by_message_id.items():
+        if gmail_message_id in existing_message_ids:
+            updated_count += 1
+        else:
+            inserted_count += 1
+
+        status_counts[status] += 1
         parsed_rows.append(
             _upsert_parsed_status(
                 user_id=user_id,
@@ -500,6 +544,17 @@ def update_parsed_status_to_db(
                 db=db,
                 optional=optional,
             )
+        )
+
+    if status_by_message_id:
+        status_summary = " ".join(
+            f"{status}={count}"
+            for status, count in sorted(status_counts.items())
+        )
+        print(
+            "Parsed status DB: "
+            f"user={user_id} inserted={inserted_count} updated={updated_count} "
+            f"{status_summary}"
         )
 
     return parsed_rows

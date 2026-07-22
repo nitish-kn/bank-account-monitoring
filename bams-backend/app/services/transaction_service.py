@@ -152,19 +152,7 @@ def apply_transaction_filters(query, filters: dict):
             )
         )
     elif tab_val == "transactions":
-        query = query.filter(
-            and_(
-                ~func.coalesce(func.lower(Transactions.txn_via), "").like("%credit%"),
-                ~func.coalesce(func.lower(Transactions.txn_via), "").like("%card%"),
-                ~func.coalesce(func.lower(Transactions.txn_via), "").like("%fastag%"),
-                ~func.coalesce(func.lower(Transactions.mode), "").like("%credit%"),
-                ~func.coalesce(func.lower(Transactions.mode), "").like("%card%"),
-                ~func.coalesce(func.lower(Transactions.mode), "").like("%fastag%"),
-                ~func.coalesce(func.lower(Transactions.account_type), "").like("%credit%"),
-                ~func.coalesce(func.lower(Transactions.account_type), "").like("%card%"),
-                ~func.coalesce(func.lower(Transactions.account_type), "").like("%fastag%")
-            )
-        )
+        pass
 
     # Ensure user_id is already applied by the caller
     

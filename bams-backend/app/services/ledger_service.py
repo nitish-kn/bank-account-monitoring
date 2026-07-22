@@ -120,7 +120,7 @@ def get_or_create_daily_balance(
     account_holder_name: Optional[str] = None,
     account_type: Optional[str] = None,
     source: Optional[str] = None,
-) -> BankAccounts:
+) -> tuple[BankAccounts, bool]:
     """
     Fetch (or create) the bank_accounts row representing `account_number`'s
     balance on `day`. A new row's opening balance is carried forward from the
@@ -149,7 +149,7 @@ def get_or_create_daily_balance(
             existing.account_type = account_type
         if source:
             existing.source = source
-        return existing
+        return existing, False
 
     previous = (
         db.query(BankAccounts)
@@ -181,7 +181,7 @@ def get_or_create_daily_balance(
     )
     db.add(new_row)
     db.flush()
-    return new_row
+    return new_row, True
 
 
 def apply_transaction_to_ledger(
@@ -194,6 +194,7 @@ def apply_transaction_to_ledger(
     bank_name: Optional[str] = None,
     account_holder_name: Optional[str] = None,
     account_type: Optional[str] = None,
+    stats: dict[str, int] | None = None,
 ) -> Decimal:
     """
     Apply one transaction's amount to the account's day-row and return the
@@ -201,7 +202,7 @@ def apply_transaction_to_ledger(
     "debit". Used by the email flow only — statements carry their own
     authoritative balance and never go through this.
     """
-    day_row = get_or_create_daily_balance(
+    day_row, created = get_or_create_daily_balance(
         db,
         user_id=user_id,
         account_number=account_number,
@@ -217,6 +218,10 @@ def apply_transaction_to_ledger(
     day_row.updated_at = datetime.now(timezone.utc)
 
     db.flush()
+    if stats is not None:
+        key = "bank_accounts_inserted" if created else "bank_accounts_updated"
+        stats[key] = stats.get(key, 0) + 1
+
     return day_row.current_balance
 
 
@@ -229,12 +234,13 @@ def set_daily_closing_balance(
     bank_name: Optional[str] = None,
     account_holder_name: Optional[str] = None,
     account_type: Optional[str] = None,
+    stats: dict[str, int] | None = None,
 ) -> BankAccounts:
     """
     Overwrite the day-row's current_balance with a known-true closing balance
     (from a statement), rather than computing it incrementally.
     """
-    day_row = get_or_create_daily_balance(
+    day_row, created = get_or_create_daily_balance(
         db,
         user_id=user_id,
         account_number=account_number,
@@ -249,6 +255,10 @@ def set_daily_closing_balance(
     day_row.last_synced_at = _day_start(day)
     day_row.updated_at = datetime.now(timezone.utc)
     db.flush()
+    if stats is not None:
+        key = "bank_accounts_inserted" if created else "bank_accounts_updated"
+        stats[key] = stats.get(key, 0) + 1
+
     return day_row
 
 
@@ -261,6 +271,7 @@ def persist_transaction(
     db: Session,
     transaction: Dict[str, Any],
     user_id: int,
+    stats: dict[str, int] | None = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Process one extracted transaction: update the account's running balance
@@ -299,6 +310,7 @@ def persist_transaction(
             bank_name=transaction.get("bank_name"),
             account_holder_name=transaction.get("account_holder_name"),
             account_type=transaction.get("account_type"),
+            stats=stats,
         )
 
     if balance_after_txn is not None:
@@ -323,11 +335,17 @@ def persist_transactions_batch(
     """
     persisted_refs: List[Any] = []
     skipped: List[Dict[str, Any]] = []
+    stats: dict[str, int] = {
+        "bank_accounts_inserted": 0,
+        "bank_accounts_updated": 0,
+    }
 
     for transaction in transactions:
+        before_stats = dict(stats)
         try:
-            result = persist_transaction(db, transaction, user_id)
+            result = persist_transaction(db, transaction, user_id, stats=stats)
         except Exception as exc:
+            stats.update(before_stats)
             db.rollback()
             skipped.append({"reason": str(exc), "ref_number": transaction.get("ref_number")})
             continue
@@ -340,11 +358,20 @@ def persist_transactions_batch(
         else:
             persisted_refs.append(transaction.get("ref_number"))
 
+    print(
+        "Email ledger DB: "
+        f"user={user_id} transactions_applied={len(persisted_refs)} "
+        f"bank_accounts_inserted={stats['bank_accounts_inserted']} "
+        f"bank_accounts_updated={stats['bank_accounts_updated']} "
+        f"skipped={len(skipped)}"
+    )
+
     return {
         "persisted_count": len(persisted_refs),
         "persisted_refs": persisted_refs,
         "skipped_count": len(skipped),
         "skipped": skipped,
+        **stats,
     }
 
 
@@ -479,6 +506,10 @@ def reconcile_statement_batch(
     account_meta: Dict[str, Dict[str, Any]] = {}
     # (account, amount, day, time) -> how many times we've matched this key so far
     occurrence_counter: Dict[tuple, int] = {}
+    stats: dict[str, int] = {
+        "bank_accounts_inserted": 0,
+        "bank_accounts_updated": 0,
+    }
 
     for transaction in ordered:
         amount = _as_decimal(transaction.get("amount"))
@@ -521,6 +552,7 @@ def reconcile_statement_batch(
             bank_name=meta.get("bank_name"),
             account_holder_name=meta.get("account_holder_name"),
             account_type=meta.get("account_type"),
+            stats=stats,
         )
         if account_number not in last_day_per_account or day > last_day_per_account[account_number]:
             last_day_per_account[account_number] = day
@@ -544,9 +576,17 @@ def reconcile_statement_batch(
 
     db.commit()
 
+    print(
+        "Statement ledger DB: "
+        f"user={user_id} bank_accounts_inserted={stats['bank_accounts_inserted']} "
+        f"bank_accounts_updated={stats['bank_accounts_updated']} "
+        f"days_reconciled={len(day_closing_balance)} skipped={len(skipped)}"
+    )
+
     return {
         "skipped_count": len(skipped),
         "skipped": skipped,
+        **stats,
         "days_reconciled": [
             {"account_number": acc, "day": day.isoformat(), "closing_balance": float(bal)}
             for (acc, day), bal in day_closing_balance.items()

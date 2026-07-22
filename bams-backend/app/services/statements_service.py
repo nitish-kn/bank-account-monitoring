@@ -192,6 +192,10 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
         try:
             # 5. Parse statement PDF using app.ds.llm.app.run(Path)
             extracted_txns = await _parse_statement_pdf(saved_path, user.id)
+            print(
+                "Statement parsed: "
+                f"user={user.id} file={original_filename} rows={len(extracted_txns or [])}"
+            )
             if not extracted_txns:
                 processed_files.append({
                     "filename": original_filename,
@@ -204,6 +208,7 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
 
             # 6. Filter out transactions that already exist in the DB dedupe set.
             unique_txns = []
+            file_duplicates = 0
             for txn in extracted_txns:
 
                 normalized_txn = _normalize_statement_transaction(txn, original_filename)           # Make statement transactions look like your normal transaction objects
@@ -214,6 +219,7 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
                 # 7. This checks the DB-loaded set, it is been ignore and increment the counter
                 if dedupe_key in existing_dedupe_keys:
                     skipped_duplicates += 1
+                    file_duplicates += 1
                     continue
                 
                 # 8. This adds the unique transactions and add the processed transactions dedupe key in the set for checking for rest of the rows
@@ -221,6 +227,11 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
                 existing_dedupe_keys.add(dedupe_key)
 
             if not unique_txns:
+                print(
+                    "Statement DB: "
+                    f"user={user.id} file={original_filename} "
+                    f"new=0 duplicates={file_duplicates} transactions_inserted=0"
+                )
                 processed_files.append({
                     "filename": original_filename,
                     "stored_path": str(saved_path),
@@ -238,6 +249,12 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
                 saved_transactions = save_valid_transaction_to_db(unique_txns, user.id, db)
                 update_parsed_status_to_db(user.id, unique_txns, db)
                 db.commit()
+                print(
+                    "Statement DB: "
+                    f"user={user.id} file={original_filename} "
+                    f"parsed_valid={len(unique_txns)} duplicates={file_duplicates} "
+                    f"transactions_saved={len(saved_transactions)}"
+                )
             except Exception as e:
                 db.rollback()
                 raise HTTPException(
@@ -255,6 +272,10 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
             )
             rows_written = sync_result.get("rows_written", 0)
             total_rows_written += rows_written
+            print(
+                "Statement sheet sync: "
+                f"user={user.id} file={original_filename} rows_written={rows_written}"
+            )
 
             processed_files.append({
                 "filename": original_filename,
