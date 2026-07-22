@@ -33,8 +33,12 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [recentLoading, setRecentLoading] = useState(false);
   const [recentSort, setRecentSort] = useState({ field: "date", order: "desc" });
+  const [recentPage, setRecentPage] = useState(1);
+  const [recentPageSize, setRecentPageSize] = useState(10);
+  const [recentTotalCount, setRecentTotalCount] = useState(0);
 
   const handleSort = (field) => {
+    setRecentPage(1);
     setRecentSort((prev) => ({
       field,
       order: prev.field === field && prev.order === "desc" ? "asc" : "desc",
@@ -58,6 +62,10 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
     }),
     [appliedFilters, dateRange, tabValue],
   );
+
+  useEffect(() => {
+    setRecentPage(1);
+  }, [queryFilters]);
 
   // Fetch dashboard summary on filter change
   useEffect(() => {
@@ -88,13 +96,14 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
       try {
         const res = await transactionApi.queryTransactions(
           queryFilters,
-          { page: 1, pageSize: 10 },
+          { page: recentPage, pageSize: recentPageSize },
           { summary: false, transactions: true },
           recentSort,
         );
         if (res.transactions) {
             setRecentTransactions(res.transactions);
         }
+        setRecentTotalCount(res.totalCount || 0);
       } catch (err) {
         console.error(err);
       } finally {
@@ -102,7 +111,7 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
       }
     };
     fetchRecentTransactions();
-  }, [queryFilters, refreshTrigger, recentSort]);
+  }, [queryFilters, refreshTrigger, recentSort, recentPage, recentPageSize]);
 
   const maxSelectableDate = useMemo(() => new Date(), []);
   const dateRangeLabel = useMemo(() => formatTransactionDateRangeLabel(dateRange), [dateRange]);
@@ -163,7 +172,6 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
   const topTransactions = summaryData?.topTransactions || [];
   const topDebitCategories = summaryData?.topDebitCategories || [];
   const topCreditCategories = summaryData?.topCreditCategories || [];
-  const flaggedTransactions = summaryData?.flaggedTransactions || [];
 
   const cashFlowTrendData = summaryData?.cashFlowTrend || []; 
   const transactionsByModeData = summaryData?.transactionsByMode || [];
@@ -366,14 +374,25 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
       {/* Top Transactions */}
       <div className="flex flex-col md:flex-row gap-3 md:gap-4">
       <TopItemList title="Top 5 Transactions" showBtn={true} btnText="View All" data={topTransactions} />
-      {tabValue !== 'fastag' && (
-        <TopItemList title="Transactions Flagged for Review" flagged={true} titleColor="text-red-800" btnText="View All" data={flaggedTransactions} />
-      )}
       </div>
 
       
       {/* Recent Transactions */}
-      <RecentTransactions transactions={recentTransactions} tabValue={tabValue} sort={recentSort} onSort={handleSort} isLoading={recentLoading} />
+      <RecentTransactions
+        transactions={recentTransactions}
+        tabValue={tabValue}
+        sort={recentSort}
+        onSort={handleSort}
+        isLoading={recentLoading}
+        currentPage={recentPage}
+        pageSize={recentPageSize}
+        totalCount={recentTotalCount}
+        onPageChange={setRecentPage}
+        onPageSizeChange={(nextPageSize) => {
+          setRecentPageSize(nextPageSize);
+          setRecentPage(1);
+        }}
+      />
     </main>
   );
 };

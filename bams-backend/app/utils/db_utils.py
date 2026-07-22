@@ -14,15 +14,12 @@ from ..core.constants import (
     PARSED_STATUS,
     STATUS_ALIASES,
     TRANSACTION_DB_FIELDS,
-    TRANSACTION_REVIEW_CONFIDENCE_THRESHOLD,
-    TRANSACTION_REVIEW_REQUIRED_FIELDS,
     TRANSACTION_SCHEMA,
-    VALID_TRANSACTION_TYPES,
 )
 from ..models.parsed import Parsed
 from ..models.transactions import Transactions
 from .date_utils import utc_now
-from .transaction_utils import normalize_transaction_date, transaction_allows_missing_amount
+from .transaction_utils import normalize_transaction_date
 
 
 def normalize_parsed_status(status: str | None) -> str:
@@ -102,41 +99,6 @@ def _amount_key(value) -> str:
     return str(amount.quantize(Decimal("0.01")))
 
 
-def _confidence_score(transaction: dict) -> float | None:
-    parser_metadata = transaction.get("parser_metadata") or {}
-    raw_score = (
-        parser_metadata.get("confidence_score")
-        if "confidence_score" in parser_metadata
-        else parser_metadata.get("confidence")
-    )
-
-    if raw_score in (None, ""):
-        return None
-
-    try:
-        return float(raw_score)
-    except (TypeError, ValueError):
-        return None
-
-
-def transaction_needs_review(transaction: dict) -> bool:
-    """Return True when a parsed transaction should stay out of normal dashboards."""
-
-    for field in TRANSACTION_REVIEW_REQUIRED_FIELDS:
-        if _clean_text(transaction.get(field)) == "":
-            return True
-
-    valid_types = {_normal_key(txn_type) for txn_type in VALID_TRANSACTION_TYPES}
-    if _normal_key(transaction.get("txn_type")) not in valid_types:
-        return True
-
-    confidence_score = _confidence_score(transaction)
-    return (
-        confidence_score is not None
-        and confidence_score < TRANSACTION_REVIEW_CONFIDENCE_THRESHOLD
-    )
-
-
 def _dates_close(left, right, max_days: int = 1) -> bool:
     left_dt = _datetime_or_none(left)
     right_dt = _datetime_or_none(right)
@@ -160,6 +122,27 @@ def _similar_text(left, right, threshold: float = 0.70) -> bool:
     return difflib.SequenceMatcher(None, left_key, right_key).ratio() >= threshold
 
 
+def _account_numbers_compatible(left, right) -> bool:
+    left_key = _compact_key(left)
+    right_key = _compact_key(right)
+
+    if not left_key or not right_key:
+        return True
+    if left_key == right_key:
+        return True
+    if len(left_key) >= 4 and len(right_key) >= 4 and (
+        left_key in right_key or right_key in left_key
+    ):
+        return True
+
+    left_digits = re.sub(r"\D+", "", left_key)
+    right_digits = re.sub(r"\D+", "", right_key)
+    if len(left_digits) >= 4 and len(right_digits) >= 4:
+        return left_digits[-4:] == right_digits[-4:]
+
+    return False
+
+
 def _refs_have_subset_match(left, right, min_partial_len: int = 4) -> bool:
     left_ref = _compact_key(left)
     right_ref = _compact_key(right)
@@ -172,6 +155,19 @@ def _refs_have_subset_match(left, right, min_partial_len: int = 4) -> bool:
         return False
 
     return shorter in longer
+
+
+def _ref_match_kind(left, right) -> str | None:
+    left_ref = _compact_key(left)
+    right_ref = _compact_key(right)
+
+    if not left_ref or not right_ref:
+        return None
+    if left_ref == right_ref:
+        return "exact"
+    if _refs_have_subset_match(left_ref, right_ref):
+        return "subset"
+    return None
 
 
 def _preferred_ref_number(existing_ref, incoming_ref) -> str:
@@ -247,116 +243,200 @@ def _transaction_optional_fields(transaction: dict) -> dict:
 
 
 def _transaction_core_matches(candidate: Transactions, transaction: dict) -> bool:
-    amount = _decimal_or_none(transaction.get("amount"))
-    if amount is None or candidate.amount != amount:
-        return False
-
     txn_type = _normal_key(transaction.get("txn_type"))
-    if txn_type and _normal_key(candidate.txn_type) != txn_type:
+    candidate_txn_type = _normal_key(candidate.txn_type)
+    if txn_type and candidate_txn_type and candidate_txn_type != txn_type:
         return False
 
-    account_number = _normal_key(transaction.get("account_number"))
-    if account_number and _normal_key(candidate.account_number) != account_number:
+    if not _account_numbers_compatible(candidate.account_number, transaction.get("account_number")):
         return False
 
     bank_name = _normal_key(transaction.get("bank_name"))
-    if bank_name and candidate.bank_name and _normal_key(candidate.bank_name) != bank_name:
+    if (
+        bank_name
+        and candidate.bank_name
+        and _normal_key(candidate.bank_name) != bank_name
+        and not _similar_text(candidate.bank_name, transaction.get("bank_name"), threshold=0.85)
+    ):
         return False
 
-    if not _dates_close(candidate.txn_date, transaction.get("txn_date")):
-        return False
-
-    if not _similar_text(candidate.counterparty, transaction.get("counterparty")):
+    if not _dates_close(candidate.txn_date, transaction.get("txn_date"), max_days=3):
         return False
 
     return True
 
 
+def _candidate_ref_match_score(
+    candidate: Transactions,
+    transaction: dict,
+    match_kind: str,
+) -> int | None:
+    if not _transaction_core_matches(candidate, transaction):
+        return None
+
+    score = 100 if match_kind == "exact" else 70
+    amount = _decimal_or_none(transaction.get("amount"))
+    account_number = _normal_key(transaction.get("account_number"))
+    bank_name = _normal_key(transaction.get("bank_name"))
+    txn_type = _normal_key(transaction.get("txn_type"))
+
+    if amount is not None and candidate.amount is not None and candidate.amount == amount:
+        score += 10
+    if account_number and _normal_key(candidate.account_number) == account_number:
+        score += 8
+    if txn_type and _normal_key(candidate.txn_type) == txn_type:
+        score += 6
+    if bank_name and _normal_key(candidate.bank_name) == bank_name:
+        score += 4
+    if _datetime_or_none(transaction.get("txn_date")) and candidate.txn_date:
+        score += 2
+    if _similar_text(candidate.counterparty, transaction.get("counterparty")):
+        score += 1
+
+    return score
+
+
 def _find_ref_number_match(transaction: dict, user_id: int, db: Session) -> Transactions | None:
     """Find an existing row by exact/subset ref before building a new dedupe key."""
 
-    amount = _decimal_or_none(transaction.get("amount"))
     ref_number = transaction.get("ref_number")
 
-    if amount is None or not _compact_key(ref_number):
+    if not _compact_key(ref_number):
         return None
 
     query = db.query(Transactions).filter(
         Transactions.user_id == user_id,
-        Transactions.amount == amount,
+        Transactions.ref_number.isnot(None),
     )
-
-    account_number = _clean_text(transaction.get("account_number"))
-    if account_number:
-        query = query.filter(Transactions.account_number == account_number)
 
     candidates = query.all()
+    matches: list[tuple[int, int, Transactions]] = []
 
-    exact_matches = [
-        candidate
-        for candidate in candidates
-        if _compact_key(candidate.ref_number) == _compact_key(ref_number)
-        and _transaction_core_matches(candidate, transaction)
-    ]
-    if exact_matches:
-        return exact_matches[0]
+    for candidate in candidates:
+        match_kind = _ref_match_kind(candidate.ref_number, ref_number)
+        if not match_kind:
+            continue
 
-    subset_matches = [
-        candidate
-        for candidate in candidates
-        if _refs_have_subset_match(candidate.ref_number, ref_number)
-        and _transaction_core_matches(candidate, transaction)
-    ]
-    if not subset_matches:
+        score = _candidate_ref_match_score(candidate, transaction, match_kind)
+        if score is None:
+            continue
+
+        matches.append((score, len(_compact_key(candidate.ref_number)), candidate))
+
+    if not matches:
         return None
 
-    return max(
-        subset_matches,
-        key=lambda candidate: len(_compact_key(candidate.ref_number)),
-    )
+    return max(matches, key=lambda item: (item[0], item[1]))[2]
 
 
-def _apply_transaction_fields(model: Transactions, transaction: dict, user_id: int) -> None:
+TEXT_PLACEHOLDERS_BY_FIELD = {
+    "account_holder_name": {"customer"},
+    "counterparty": {"unknown"},
+    "narration": {"bank transaction"},
+    "txn_via": {"bank transaction"},
+}
+
+
+def _field_value_missing(field_name: str, value) -> bool:
+    if value is None:
+        return True
+
+    if isinstance(value, str):
+        normalized = _normal_key(value)
+        if not normalized:
+            return True
+        return normalized in TEXT_PLACEHOLDERS_BY_FIELD.get(field_name, set())
+
+    return False
+
+
+def _assign_model_field(
+    model: Transactions,
+    field_name: str,
+    value,
+    fill_missing_only: bool,
+) -> None:
+    if fill_missing_only:
+        if _field_value_missing(field_name, value):
+            return
+        if not _field_value_missing(field_name, getattr(model, field_name)):
+            return
+
+    setattr(model, field_name, value)
+
+
+def _merge_missing_dict_values(existing, incoming) -> dict:
+    merged = dict(existing or {})
+
+    for key, value in dict(incoming or {}).items():
+        if _field_value_missing(str(key), value):
+            continue
+        if _field_value_missing(str(key), merged.get(key)):
+            merged[key] = value
+
+    return merged
+
+
+def _apply_transaction_fields(
+    model: Transactions,
+    transaction: dict,
+    user_id: int,
+    fill_missing_only: bool = False,
+) -> None:
     amount = _decimal_or_none(transaction.get("amount"))
-    missing_amount_needs_review = (
-        amount is None
-        and not transaction_allows_missing_amount(transaction)
-    )
-    if missing_amount_needs_review:
-        transaction = {**transaction, "is_flag": True}
-
-    needs_review = transaction_needs_review(transaction)
 
     model.user_id = user_id
-    model.gmail_message_id = _clean_text(transaction.get("gmail_message_id")) or None
-    model.bank_name = _clean_text(transaction.get("bank_name"))
-    model.account_holder_name = _clean_text(transaction.get("account_holder_name")) or "Customer"
-    model.account_type = _clean_text(transaction.get("account_type")) or None
-    model.account_number = _clean_text(transaction.get("account_number"))
-    model.txn_type = _clean_text(transaction.get("txn_type"))
-    model.mode = _clean_text(transaction.get("mode")) or None
-    model.category = _clean_text(transaction.get("category")) or None
-    model.amount = amount
-    model.currency = _clean_text(transaction.get("currency")) or "INR"
-    model.txn_date = _datetime_or_none(transaction.get("txn_date"))
-    model.counterparty = _clean_text(transaction.get("counterparty")) or "Unknown"
-    model.counterparty_kind = _clean_text(transaction.get("counterparty_kind")) or None
-    model.narration = _clean_text(transaction.get("narration")) or "Bank transaction"
-    model.txn_via = _clean_text(transaction.get("txn_via")) or "Bank Transaction"
-    model.ref_number = _clean_text(transaction.get("ref_number"))
-    model.place = _clean_text(transaction.get("place")) or None
-    model.balance_after_txn = _decimal_or_none(transaction.get("balance_after_txn"))
-    model.source = _clean_text(transaction.get("source")) or "email"
-    model.dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
-    model.email_metadata = transaction.get("email_metadata") or {}
-    model.parser_metadata = transaction.get("parser_metadata") or {}
-    # model.raw_data = transaction.get("raw_data") or {}
-    model.optional_fields = _transaction_optional_fields(transaction)
-    model.is_flag = (
-        bool(transaction.get("is_flag"))
-        or bool(getattr(model, "is_flag", False))
-        or needs_review
-    )
+    field_values = {
+        "gmail_message_id": _clean_text(transaction.get("gmail_message_id")) or None,
+        "bank_name": _clean_text(transaction.get("bank_name")),
+        "account_holder_name": _clean_text(transaction.get("account_holder_name")) or "Customer",
+        "account_type": _clean_text(transaction.get("account_type")) or None,
+        "account_number": _clean_text(transaction.get("account_number")),
+        "txn_type": _clean_text(transaction.get("txn_type")),
+        "mode": _clean_text(transaction.get("mode")) or None,
+        "category": _clean_text(transaction.get("category")) or None,
+        "amount": amount,
+        "currency": _clean_text(transaction.get("currency")) or "INR",
+        "txn_date": _datetime_or_none(transaction.get("txn_date")),
+        "counterparty": _clean_text(transaction.get("counterparty")) or "Unknown",
+        "counterparty_kind": _clean_text(transaction.get("counterparty_kind")) or None,
+        "narration": _clean_text(transaction.get("narration")) or "Bank transaction",
+        "txn_via": _clean_text(transaction.get("txn_via")) or "Bank Transaction",
+        "place": _clean_text(transaction.get("place")) or None,
+        "balance_after_txn": _decimal_or_none(transaction.get("balance_after_txn")),
+        "source": _clean_text(transaction.get("source")) or "email",
+    }
+
+    for field_name, value in field_values.items():
+        _assign_model_field(model, field_name, value, fill_missing_only)
+
+    incoming_ref_number = _clean_text(transaction.get("ref_number"))
+    if fill_missing_only:
+        preferred_ref = _preferred_ref_number(model.ref_number, incoming_ref_number)
+        if preferred_ref:
+            model.ref_number = preferred_ref
+    else:
+        model.ref_number = incoming_ref_number
+        model.dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
+
+    if not fill_missing_only and not getattr(model, "dedupe_key", None):
+        model.dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
+
+    incoming_email_metadata = transaction.get("email_metadata") or {}
+    incoming_parser_metadata = transaction.get("parser_metadata") or {}
+    incoming_optional_fields = _transaction_optional_fields(transaction)
+
+    if fill_missing_only:
+        model.email_metadata = _merge_missing_dict_values(model.email_metadata, incoming_email_metadata)
+        model.parser_metadata = _merge_missing_dict_values(model.parser_metadata, incoming_parser_metadata)
+        model.optional_fields = _merge_missing_dict_values(model.optional_fields, incoming_optional_fields)
+    else:
+        model.email_metadata = incoming_email_metadata
+        model.parser_metadata = incoming_parser_metadata
+        # model.raw_data = transaction.get("raw_data") or {}
+        model.optional_fields = incoming_optional_fields
+
+    model.is_flag = False
 
 
 def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Session) -> list[Transactions]:
@@ -386,10 +466,6 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
                     ref_match.ref_number,
                     transaction.get("ref_number"),
                 ),
-                "is_flag": (
-                    bool(transaction.get("is_flag"))
-                    or _refs_have_subset_match(ref_match.ref_number, transaction.get("ref_number"))
-                ),
             }
             model = ref_match
             is_insert = False
@@ -408,7 +484,12 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
             model = existing or Transactions(id=str(uuid4()))
             is_insert = existing is None
 
-        _apply_transaction_fields(model, transaction, user_id)
+        _apply_transaction_fields(
+            model,
+            transaction,
+            user_id,
+            fill_missing_only=not is_insert,
+        )
 
         db.add(model)
         db.flush()
@@ -595,15 +676,15 @@ def transaction_to_schema_dict(transaction: Transactions) -> dict:
         "email_metadata": transaction.email_metadata or {},
         "parser_metadata": transaction.parser_metadata or {},
         # "raw_data": transaction.raw_data or {},
-        "is_flag": transaction.is_flag,
+        "is_flag": False,
     }
 
-    for field in [*TRANSACTION_SCHEMA, "is_flag"]:
+    for field in TRANSACTION_SCHEMA:
         if field not in data or data[field] in (None, ""):
             data[field] = optional_fields.get(field)
 
     result = {field: data.get(field) for field in TRANSACTION_SCHEMA}
-    result["is_flag"] = bool(data.get("is_flag")) or transaction_needs_review(result)
+    result["is_flag"] = False
     return result
 
 

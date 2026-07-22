@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { Badge, Button, Spinner } from "@radix-ui/themes";
+import { Badge, Button, Spinner, Tabs } from "@radix-ui/themes";
 import { FileSpreadsheet, FileText, TriangleAlert, Filter, Calendar, ChevronDown } from "lucide-react";
 import CustomTable from "./ui/CustomTable";
 import { cleanText, formatAmount, formatCompactINR, formatDateAndTime, getStatusColor } from "../lib/helper";
@@ -11,6 +11,8 @@ import CustomButton from "./ui/CustomButton";
 import { useSetupStore } from "../store/setupStore";
 import { getTransactionFilterOptionsFromBackend, formatTransactionDateRangeLabel, getDefaultTransactionDateRange } from "../lib/transactional-helper";
 import CustomDatePicker from "./ui/CustomDatePicker";
+
+const tabTriggerClassName = "flex-1! justify-center! bg-white! hover:bg-gray-50! border border-gray-50! shadow-md! rounded-md! text-sm font-medium text-gray-900! transition-colors! data-[state=active]:border-b-2! data-[state=active]:border-blue-600! data-[state=active]:text-blue-600! data-[state=active]:hover:bg-white! [&_.rt-BaseTabListTriggerInner]:bg-transparent!";
 
 export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, syncDashboard }) {
   const [emailPage, setEmailPage] = useState(1);
@@ -26,6 +28,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
   const [openFilter, setOpenFilter] = useState(false);
   const refreshTrigger = useSetupStore((state) => state.refreshTrigger);
   const [sort, setSort] = useState({ field: "date", order: "desc" });
+  const [tabValue, setTabValue] = useState("transactions");
 
   const [dateRange, setDateRange] = useState(getDefaultTransactionDateRange(new Date(), 30));
   const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
@@ -78,7 +81,8 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
       try {
         const payloadFilters = {
           ...appliedFilters,
-          dateRange
+          dateRange,
+          tab: tabValue,
         };
         const res = await transactionApi.queryTransactions(
           payloadFilters,
@@ -98,7 +102,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
       }
     };
     fetchTransactions();
-  }, [appliedFilters, emailPage, emailPageSize, refreshTrigger, sort, dateRange]);
+  }, [appliedFilters, emailPage, emailPageSize, refreshTrigger, sort, dateRange, tabValue]);
 
   const totalEmailPages = Math.max(Math.ceil(totalCount / emailPageSize), 1);
   
@@ -379,6 +383,32 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
               </Button>
             )}
           </div>
+        </div>
+
+        <div className="border-b border-gray-100 bg-gray-50/60 px-4 py-3">
+          <Tabs.Root
+            value={tabValue}
+            className="w-full"
+            onValueChange={(value) => {
+              setTabValue(value);
+              setEmailPage(1);
+            }}
+          >
+            <Tabs.List
+              className="flex! w-full! gap-2 items-stretch! border-none! shadow-none! rounded-md! h-12!"
+              style={{ boxShadow: "none" }}
+            >
+              <Tabs.Trigger value="transactions" className={tabTriggerClassName}>
+                Transactions
+              </Tabs.Trigger>
+              <Tabs.Trigger value="credit-card" className={tabTriggerClassName}>
+                Credit Card
+              </Tabs.Trigger>
+              <Tabs.Trigger value="fastag" className={tabTriggerClassName}>
+                Fastag
+              </Tabs.Trigger>
+            </Tabs.List>
+          </Tabs.Root>
         </div>
 
         {/* Filter UI */}

@@ -66,15 +66,6 @@ GMAIL_MESSAGE_ID_FIELD = "gmail_message_id"
 GMAIL_MESSAGE_ID_COLUMN = "B"
 JSON_TRANSACTION_FIELDS = {"email_metadata", "parser_metadata", "optional_fields"}
 VALID_TRANSACTION_TYPES = {"Debit", "Credit", "credit", "debit"}
-TRANSACTION_REVIEW_CONFIDENCE_THRESHOLD = 0.85
-TRANSACTION_REVIEW_REQUIRED_FIELDS = (
-    "txn_type",
-    "txn_date",
-    "bank_name",
-    "counterparty",
-    "txn_via",
-    "narration",
-)
 
 
 def _column_name(column_number: int) -> str:
