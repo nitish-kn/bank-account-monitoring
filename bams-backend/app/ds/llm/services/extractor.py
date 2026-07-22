@@ -86,17 +86,16 @@ def extract_transactions(emails):
                 result["balance_after_txn"]
             )
 
-        # Default account holder
-
-        if not result.get(
-            "account_holder_name"
-        ):
-            result[
-                "account_holder_name"
-            ] = "Customer"
-
         result = fill_missing_account_details(result)
         result = fill_missing_credit_card_details(result)
+
+        # Placeholder holder name only when we actually have a (validated) own
+        # account. For beneficiary debits and accounts not in Bank Accounts V1,
+        # fill_missing_account_details has already nulled account_number +
+        # account_holder_name, and we must leave the name null rather than
+        # attribute the transaction to "Customer".
+        if result.get("account_number") and not result.get("account_holder_name"):
+            result["account_holder_name"] = "Customer"
 
         # Cash withdrawal has no real counterparty — it's the account
         # holder withdrawing their own money, so "same acc to same acc"
