@@ -109,11 +109,16 @@ def fill_missing_account_details(transaction: Dict[str, Any], df: pd.DataFrame =
         return transaction
 
     last_four = extract_last_four_digits(account_number)
-    if not last_four:
-        return transaction
+    match = find_account_in_excel(last_four, df) if last_four else None
 
-    match = find_account_in_excel(last_four, df)
+    # The account number in the email must belong to one of our own monitored
+    # accounts (Bank Accounts V1). If it isn't in that file, it's a
+    # counterparty's / unknown account — discard the account identity entirely
+    # so we never attribute a transaction to an account we don't own.
     if not match:
+        transaction["account_number"] = None
+        transaction["account_holder_name"] = None
+        transaction["account_type"] = None
         return transaction
 
     if not transaction.get("bank_name") and match.get("bank_name"):

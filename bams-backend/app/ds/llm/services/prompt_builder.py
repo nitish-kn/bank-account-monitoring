@@ -65,17 +65,32 @@ NOT transactions — mark parser_metadata.parsed_status = "not_transaction" and 
 - Any transaction described as Failed, Declined, Cancelled, Reversed, Timed out, Expired, Aborted, Unsuccessful, Pending, or Awaiting confirmation
 
 ==================================================
-SPECIAL RULE — NEFT / IMPS / RTGS "credited to beneficiary"
+SPECIAL RULE — "credited to the beneficiary" (money the customer SENT)
 ==================================================
 
-"Your NEFT transaction ... has been successfully credited to the beneficiary: X" means money LEFT the customer's account.
+Emails like "Your NEFT transaction ... has been successfully credited to the beneficiary: X, A/c No XXXX"
+(also IMPS / RTGS / UPI "transferred to" / "sent to" / "paid to" a beneficiary) mean money LEFT the customer's account.
+
 → txn_type = "Debit", NOT Credit.
+
+In this case every account detail printed in the email (the name, the "A/c No ...", the account type)
+describes the BENEFICIARY / COUNTERPARTY — it is NOT the customer's own account. So:
+- account_holder_name = null
+- account_number      = null
+- account_type        = null
+- Put the beneficiary's name in counterparty, and set counterparty_kind accordingly (e.g. "Beneficiary", person, or merchant).
+
+Never copy a beneficiary's account number into account_number — that field is only ever the customer's own account.
 
 ==================================================
 txn_via CLASSIFICATION (drives downstream routing — must be exact)
 ==================================================
 
-Always exactly one of: "Bank Transaction" | "Credit Card" | "FASTag"
+txn_via MUST be exactly one of these three literal strings, and NOTHING else:
+    "Bank Transaction" | "Credit Card" | "FASTag"
+
+Never output any other value (not "UPI", "NEFT", "IMPS", "RTGS", "Wallet", "Debit Card", "POS", "Toll", null, or anything else).
+If none of the three obviously applies, default to "Bank Transaction".
 
 - "Credit Card" — credit card purchase, POS spend, payment, refund, or EMI.
   Put the card number (masked or full) in optional_fields.credit_card_number, NOT in account_number. account_number MUST be null for credit card transactions.
@@ -94,11 +109,11 @@ amount / balance_after_txn — numeric strings, no currency symbol/commas. e.g. 
 
 txn_date — date only, format YYYY-MM-DD. Never include a time component even if the email shows one.
 
-account_holder_name — best-effort name from the email; use "Customer" if truly unavailable. Never null.
+account_holder_name — the name of the CUSTOMER's OWN account this email is about (best-effort from the email). Set it to null when the only name shown belongs to the counterparty/beneficiary (see the "credited to the beneficiary" rule) rather than to the customer's own account.
 
 bank_name — the issuing bank. Look for it in the message body/signature, or infer it from the sender's email domain (e.g. alerts@axis.bank.in → "Axis Bank", alerts@hdfcbank.net → "HDFC Bank"). Only return null if there is truly no evidence.
 
-account_number — extract exactly as shown, including masked forms (e.g. "XX6744", "XXXXXX1234"). Look for labels like "A/c No", "Account Number", "Account ending", "linked to a/c". Return null only if no account number appears anywhere in the email. For credit card transactions (txn_via = "Credit Card"), leave this null — the card number goes in optional_fields.credit_card_number instead.
+account_number — the CUSTOMER's OWN account number, extracted exactly as shown, including masked forms (e.g. "XX6744", "XXXXXX1234"). Look for labels like "A/c No", "Account Number", "Account ending", "linked to a/c". Return null only if no account number for the customer's own account appears anywhere in the email. Never put a beneficiary's / counterparty's account number here (see the "credited to the beneficiary" rule). For credit card transactions (txn_via = "Credit Card"), leave this null — the card number goes in optional_fields.credit_card_number instead.
 
 account_type — e.g. "Savings", "Current", "Credit Card", only if explicitly stated. Otherwise null.
 
