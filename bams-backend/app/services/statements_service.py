@@ -8,11 +8,9 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from ..core.constants import UPLOAD_DIR
-from ..models.transactions import Transactions
 from ..models.user import User
 from ..services.credentials import build_credentials
 from ..utils.db_utils import (
-    build_transaction_dedupe_key,
     save_valid_transaction_to_db,
     update_parsed_status_to_db,
 )
@@ -166,26 +164,14 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
         sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
 
 
-        # 3. Load existing dedupe keys from DB into memory
-        existing_dedupe_keys = {
-            row.dedupe_key
-            for row in db.query(Transactions.dedupe_key)
-            .filter(
-                Transactions.user_id == user.id,
-                Transactions.dedupe_key.isnot(None),
-            )
-            .all()
-            if row.dedupe_key
-        }
     except Exception as e:
         for _, saved_path in saved_files:
             _delete_saved_statement(saved_path)
         raise HTTPException(status_code=500, detail=f"Failed to connect to Google Sheets or database: {str(e)}")
 
-    all_extracted_txns = []             # Stores all unique transactions processed across all PDFs
+    all_extracted_txns = []             # Stores all transactions processed across all PDFs
     total_rows_written = 0              # Tracks how many rows were added to Google Sheets.
     processed_files = []                # Stores per-file summary information.
-    skipped_duplicates = 0              # Counts duplicate transactions.
 
     # 4. Iterate and process saved statement PDFs one-by-one
     for original_filename, saved_path in saved_files:
@@ -206,53 +192,40 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
                 })
                 continue
 
-            # 6. Filter out transactions that already exist in the DB dedupe set.
-            unique_txns = []
-            file_duplicates = 0
-            for txn in extracted_txns:
+            # 6. Normalize every statement row and let the DB upsert layer handle
+            # ref-number matching first, with dedupe-key matching as fallback.
+            statement_txns = [
+                _normalize_statement_transaction(txn, original_filename)
+                for txn in extracted_txns
+            ]
 
-                normalized_txn = _normalize_statement_transaction(txn, original_filename)           # Make statement transactions look like your normal transaction objects
-                dedupe_key = build_transaction_dedupe_key(normalized_txn, user.id)                  # This creates a unique identity for the transaction
-                normalized_txn["dedupe_key"] = dedupe_key
-                normalized_txn["gmail_message_id"] = f"stmt_{dedupe_key}"
-
-                # 7. This checks the DB-loaded set, it is been ignore and increment the counter
-                if dedupe_key in existing_dedupe_keys:
-                    skipped_duplicates += 1
-                    file_duplicates += 1
-                    continue
-                
-                # 8. This adds the unique transactions and add the processed transactions dedupe key in the set for checking for rest of the rows
-                unique_txns.append(normalized_txn)
-                existing_dedupe_keys.add(dedupe_key)
-
-            if not unique_txns:
+            if not statement_txns:
                 print(
                     "Statement DB: "
                     f"user={user.id} file={original_filename} "
-                    f"new=0 duplicates={file_duplicates} transactions_inserted=0"
+                    f"transactions_saved=0"
                 )
                 processed_files.append({
                     "filename": original_filename,
                     "stored_path": str(saved_path),
                     "transactions_found": len(extracted_txns),
                     "rows_written": 0,
-                    "duplicates_skipped": len(extracted_txns),
+                    "duplicates_skipped": 0,
                 })
                 continue
             
-            # 9. Add unique transactions to overall list
-            all_extracted_txns.extend(unique_txns)
+            # 7. Add normalized transactions to overall list
+            all_extracted_txns.extend(statement_txns)
 
             try:
-                # 10. Add the valid transactions to the db 
-                saved_transactions = save_valid_transaction_to_db(unique_txns, user.id, db)
-                update_parsed_status_to_db(user.id, unique_txns, db)
+                # 8. Add/update parsed transactions in DB.
+                saved_transactions = save_valid_transaction_to_db(statement_txns, user.id, db)
+                update_parsed_status_to_db(user.id, statement_txns, db)
                 db.commit()
                 print(
                     "Statement DB: "
                     f"user={user.id} file={original_filename} "
-                    f"parsed_valid={len(unique_txns)} duplicates={file_duplicates} "
+                    f"parsed_valid={len(statement_txns)} "
                     f"transactions_saved={len(saved_transactions)}"
                 )
             except Exception as e:
@@ -262,7 +235,7 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
                     detail=f"Failed saving statement transactions for '{original_filename}': {str(e)}"
                 )
 
-            # 11. Add those valid transaction to the sheets
+            # 9. Add newly saved unsynced transactions to the sheets.
             sync_result = _sync_transactions_to_sheet(
                 user,
                 db,
@@ -282,7 +255,7 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
                 "stored_path": str(saved_path),
                 "transactions_found": len(extracted_txns),
                 "rows_written": rows_written,
-                "duplicates_skipped": len(extracted_txns) - len(unique_txns),
+                "duplicates_skipped": 0,
             })
                 
         except HTTPException:
@@ -302,6 +275,6 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
         "message": f"Successfully parsed and appended {total_rows_written} transactions from {len(saved_files)} files.",
         "transactions_count": len(all_extracted_txns),
         "rows_written": total_rows_written,
-        "duplicates_skipped": skipped_duplicates,
+        "duplicates_skipped": 0,
         "files": processed_files,
     }

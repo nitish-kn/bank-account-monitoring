@@ -1,23 +1,35 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_, Date, cast, case, String, Float
+from sqlalchemy import func, or_, and_, Date, cast, case, String
 from datetime import datetime, timedelta, time
 
-from ..core.constants import (
-    TRANSACTION_REVIEW_CONFIDENCE_THRESHOLD,
-    TRANSACTION_REVIEW_REQUIRED_FIELDS,
-    VALID_TRANSACTION_TYPES,
-)
 from ..models.transactions import Transactions
 from ..utils.db_utils import transaction_to_schema_dict
-
-
-VALID_TXN_TYPES_NORMALIZED = {
-    str(txn_type).strip().lower() for txn_type in VALID_TRANSACTION_TYPES
-}
+from ..utils.transaction_utils import normalize_txn_via
 
 
 def _lower_text(column):
     return func.lower(func.coalesce(cast(column, String), ""))
+
+
+def _compact_text_expr(column):
+    value = _lower_text(column)
+    for old in (" ", "-", "_", ".", "/", "\\"):
+        value = func.replace(value, old, "")
+    return value
+
+
+def _normalized_txn_via_expr():
+    compact_value = _compact_text_expr(Transactions.txn_via)
+    return case(
+        (compact_value == "creditcard", "credit_card"),
+        (compact_value == "fastag", "fastag"),
+        else_=compact_value,
+    )
+
+
+def _txn_via_is(*values: str):
+    normalized_values = [normalize_txn_via(value) for value in values]
+    return _normalized_txn_via_expr().in_(normalized_values)
 
 
 def _parse_date_bound(value, end_of_day: bool = False):
@@ -91,41 +103,6 @@ def _match_terms(value: str, filter_kind: str | None = None) -> list[str]:
     return list(dict.fromkeys(term for term in terms if term))
 
 
-def _missing_required_condition(field_name: str):
-    column = getattr(Transactions, field_name)
-    if field_name == "txn_date":
-        return column.is_(None)
-    return or_(column.is_(None), func.length(func.trim(cast(column, String))) == 0)
-
-
-def _low_confidence_condition():
-    confidence_text = Transactions.parser_metadata["confidence_score"].astext
-    confidence_value = case(
-        (
-            confidence_text.op("~")(r"^[0-9]+(\.[0-9]+)?$"),
-            cast(confidence_text, Float),
-        ),
-        else_=None,
-    )
-    return func.coalesce(
-        confidence_value < TRANSACTION_REVIEW_CONFIDENCE_THRESHOLD,
-        False,
-    )
-
-
-def _review_filter():
-    txn_type = _lower_text(Transactions.txn_type)
-    return or_(
-        Transactions.is_flag.is_(True),
-        txn_type.notin_(VALID_TXN_TYPES_NORMALIZED),
-        *[
-            _missing_required_condition(field_name)
-            for field_name in TRANSACTION_REVIEW_REQUIRED_FIELDS
-        ],
-        _low_confidence_condition(),
-    )
-
-
 def apply_transaction_filters(query, filters: dict):
     if not filters:
         return query
@@ -133,26 +110,11 @@ def apply_transaction_filters(query, filters: dict):
     # Tab value (transactions, credit-card, fastag)
     tab_val = filters.get("tab")
     if tab_val == "credit-card":
-        query = query.filter(
-            or_(
-                func.lower(Transactions.txn_via).like("%credit%"),
-                func.lower(Transactions.txn_via).like("%card%"),
-                func.lower(Transactions.mode).like("%credit%"),
-                func.lower(Transactions.mode).like("%card%"),
-                func.lower(Transactions.account_type).like("%credit%"),
-                func.lower(Transactions.account_type).like("%card%")
-            )
-        )
+        query = query.filter(_txn_via_is("Credit Card"))
     elif tab_val == "fastag":
-        query = query.filter(
-            or_(
-                func.lower(Transactions.txn_via).like("%fastag%"),
-                func.lower(Transactions.mode).like("%fastag%"),
-                func.lower(Transactions.account_type).like("%fastag%")
-            )
-        )
+        query = query.filter(_txn_via_is("FASTag"))
     elif tab_val == "transactions":
-        pass
+        query = query.filter(~_txn_via_is("Credit Card", "FASTag"))
 
     # Ensure user_id is already applied by the caller
     
@@ -290,13 +252,9 @@ def build_base_query(
     only_review: bool = False,
 ):
     query = db.query(Transactions).filter(Transactions.user_id == user_id)
-    review_filter = _review_filter()
 
     if only_review:
-        return query.filter(review_filter)
-
-    if not include_review:
-        return query.filter(~review_filter)
+        return query.filter(False)
 
     return query
 
@@ -343,10 +301,6 @@ def get_paginated_transactions(db: Session, user_id: int, filters: dict, page: i
 
 def get_dashboard_summary(db: Session, user_id: int, filters: dict):
     query = apply_transaction_filters(build_base_query(db, user_id), filters)
-    review_query = apply_transaction_filters(
-        build_base_query(db, user_id, only_review=True),
-        filters,
-    )
     
     # 1. Basic Stats
     stats = query.with_entities(
@@ -390,10 +344,6 @@ def get_dashboard_summary(db: Session, user_id: int, filters: dict):
     )
     top_transactions = [transaction_to_schema_dict(t) for t in top_txns]
     
-    # 6. Flagged Transactions
-    flagged = review_query.order_by(Transactions.txn_date.desc().nulls_last()).limit(10).all()
-    flagged_transactions = [transaction_to_schema_dict(t) for t in flagged]
-
     # 7. Daily Net Cash Flow Trend
     trend_rows = query.with_entities(
         cast(Transactions.txn_date, Date).label("date"),
@@ -509,7 +459,7 @@ def get_dashboard_summary(db: Session, user_id: int, filters: dict):
         "topCreditCategories": top_credit_categories,
         "topDebitCategories": top_debit_categories,
         "topTransactions": top_transactions,
-        "flaggedTransactions": flagged_transactions,
+        "flaggedTransactions": [],
         "cashFlowTrend": cash_flow_trend,
         "transactionsByMode": modes_data
     }

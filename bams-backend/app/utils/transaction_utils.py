@@ -2,7 +2,6 @@ import json
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from typing import Any, Mapping
-from decimal import Decimal, InvalidOperation
 
 from ..core.constants import (
     GMAIL_MESSAGE_ID_COLUMN,
@@ -213,42 +212,19 @@ def transaction_timestamp(transaction: dict) -> float:
         return 0
     
 
-def _normalized_lookup_text(value: Any) -> str:
-    return str(value or "").strip().lower()
+def normalize_txn_via(value: Any) -> str:
+    compact_value = "".join(
+        ch for ch in str(value or "").strip().lower()
+        if ch.isalnum()
+    )
+
+    if compact_value == "creditcard":
+        return "credit_card"
+    if compact_value == "fastag":
+        return "fastag"
+
+    return compact_value
 
 
 def is_fastag_transaction(transaction: dict) -> bool:
-    return _normalized_lookup_text(transaction.get("txn_via")) == "fastag"
-
-
-def transaction_allows_missing_amount(transaction: dict) -> bool:
-    return is_fastag_transaction(transaction)
-
-
-def check_valid_transactions(transactions: list[dict]) -> list[dict]:
-    """Return only rows that the parser classified as real transactions."""
-    valid = []
-    for row in transactions or []:
-        if row.get("parser_metadata", {}).get("parsed_status") == "parsed":
-            amount_val = row.get("amount")
-            is_valid = False
-            if amount_val is not None:
-                text = str(amount_val).strip()
-                if text:
-                    text = text.replace(",", "").replace("₹", "").replace("INR", "").strip()
-                    try:
-                        Decimal(text)
-                        is_valid = True
-                    except (InvalidOperation, ValueError):
-                        pass
-            if is_valid:
-                valid.append(row)
-            elif transaction_allows_missing_amount(row):
-                valid.append(row)
-            else:
-                parser_metadata = row.setdefault("parser_metadata", {})
-                parser_metadata["parsed_status"] = "parsed"
-                parser_metadata["error"] = "Parsed transaction is missing a valid amount."
-                row["is_flag"] = True
-                valid.append(row)
-    return valid
+    return normalize_txn_via(transaction.get("txn_via")) == "fastag"

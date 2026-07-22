@@ -63,10 +63,19 @@ const SourceBadge = ({ source, gmail_msg_id }) => {
   );
 };
 
-const RecentTransactions = ({ transactions = [], tabValue, sort, onSort, isLoading = false }) => {
+const RecentTransactions = ({
+  transactions = [],
+  tabValue,
+  sort,
+  onSort,
+  isLoading = false,
+  currentPage = 1,
+  pageSize = 10,
+  totalCount = transactions.length,
+  onPageChange,
+  onPageSizeChange,
+}) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const [openDialog, setOpenDialog] = useState(false);
   const [data, setData] = useState({});
   
@@ -247,20 +256,18 @@ const RecentTransactions = ({ transactions = [], tabValue, sort, onSort, isLoadi
     );
   }, [transactions, searchTerm]);
 
-  const totalPages = Math.max(Math.ceil(filteredTransactions.length / pageSize), 1);
+  const totalItems = searchTerm ? filteredTransactions.length : totalCount;
+  const totalPages = Math.max(Math.ceil(totalItems / pageSize), 1);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, pageSize, sort]);
+    onPageChange?.(1);
+  }, [onPageChange, searchTerm]);
 
   useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
-  }, [totalPages]);
-
-  const paginatedTransactions = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredTransactions.slice(start, start + pageSize);
-  }, [currentPage, filteredTransactions, pageSize]);
+    if (currentPage > totalPages) {
+      onPageChange?.(totalPages);
+    }
+  }, [currentPage, onPageChange, totalPages]);
 
   return (
     <>
@@ -286,7 +293,7 @@ const RecentTransactions = ({ transactions = [], tabValue, sort, onSort, isLoadi
         <div className="overflow-x-auto">
           <CustomTable
             columns={columns}
-            data={paginatedTransactions}
+            data={filteredTransactions}
             minWidth="1410px"
             emptyMessage="No transactions found"
             getRowKey={(row, idx) => row?.primary_dedupe_key || idx}
@@ -296,11 +303,11 @@ const RecentTransactions = ({ transactions = [], tabValue, sort, onSort, isLoadi
         </div>
         <Pagination
           currentPage={currentPage}
-          totalItems={filteredTransactions.length}
+          totalItems={totalItems}
           pageSize={pageSize}
           itemLabel="transactions"
-          onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
         />
       </div>
 

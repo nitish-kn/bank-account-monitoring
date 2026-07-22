@@ -46,7 +46,6 @@ from .ledger_service import recalculate_ledgers_for_transactions
 from ..utils.sheets_utils import _get_sheet_title, _append_sheet_rows, _read_existing_column_values
 from ..utils.transaction_utils import (
     transactions_to_sheet_rows,
-    check_valid_transactions,
     transaction_column_for_field,
 )
 from ..ds.llm.main import process_emails
@@ -403,7 +402,7 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                     continue
 
                 try:
-                    # 8. Check for valid transaction with transaction objects only and save parsed transactions to DB
+                    # 8. Save parsed transaction objects to DB as returned by the extractor
                     parsed_result_count = sum(
                         1
                         for transaction in transactions
@@ -411,9 +410,8 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                             (transaction.get("parser_metadata") or {}).get("parsed_status") or ""
                         ).strip().lower() == "parsed"
                     )
-                    valid_transactions = check_valid_transactions(transactions)
                     saved_transactions = save_valid_transaction_to_db(
-                        valid_transactions,
+                        transactions,
                         user_id,
                         db,
                     )
@@ -439,7 +437,6 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                         "Email batch saved: "
                         f"user={user_id} emails={len(batch_emails)} "
                         f"llm_rows={len(transactions)} parsed={parsed_result_count} "
-                        f"valid_for_db={len(valid_transactions)} "
                         f"transactions_saved={len(saved_transactions)} "
                         f"ledger_rows={ledger_result.get('accounts_recalculated', 0)}"
                     )
