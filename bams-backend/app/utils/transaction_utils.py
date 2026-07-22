@@ -213,6 +213,18 @@ def transaction_timestamp(transaction: dict) -> float:
         return 0
     
 
+def _normalized_lookup_text(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def is_fastag_transaction(transaction: dict) -> bool:
+    return _normalized_lookup_text(transaction.get("txn_via")) == "fastag"
+
+
+def transaction_allows_missing_amount(transaction: dict) -> bool:
+    return is_fastag_transaction(transaction)
+
+
 def check_valid_transactions(transactions: list[dict]) -> list[dict]:
     """Return only rows that the parser classified as real transactions."""
     valid = []
@@ -231,9 +243,12 @@ def check_valid_transactions(transactions: list[dict]) -> list[dict]:
                         pass
             if is_valid:
                 valid.append(row)
+            elif transaction_allows_missing_amount(row):
+                valid.append(row)
             else:
-                if "parser_metadata" not in row:
-                    row["parser_metadata"] = {}
-                row["parser_metadata"]["parsed_status"] = "failed"
-                row["parser_metadata"]["error"] = "Parsed transaction is missing a valid amount."
+                parser_metadata = row.setdefault("parser_metadata", {})
+                parser_metadata["parsed_status"] = "parsed"
+                parser_metadata["error"] = "Parsed transaction is missing a valid amount."
+                row["is_flag"] = True
+                valid.append(row)
     return valid

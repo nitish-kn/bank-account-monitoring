@@ -21,7 +21,7 @@ from ..core.constants import (
 from ..models.parsed import Parsed
 from ..models.transactions import Transactions
 from .date_utils import utc_now
-from .transaction_utils import normalize_transaction_date
+from .transaction_utils import normalize_transaction_date, transaction_allows_missing_amount
 
 
 def normalize_parsed_status(status: str | None) -> str:
@@ -198,6 +198,7 @@ def build_transaction_dedupe_key(transaction: dict, user_id: int) -> str:
     txn_type = _normal_key(transaction.get("txn_type"))
     amount = _amount_key(transaction.get("amount"))
     ref_number = _normal_key(transaction.get("ref_number"))
+    txn_date = normalize_transaction_date(transaction.get("txn_date"))
 
     if ref_number:
         # If ref_number exists, it creates a strong key using - user_id + bank + account + txn_type + amount + ref_number
@@ -213,7 +214,6 @@ def build_transaction_dedupe_key(transaction: dict, user_id: int) -> str:
 
     else:
         # If ref is missing, it uses fallback fields - user_id + bank + account + txn_type + amount + date + counterparty + txn_via
-        txn_date = normalize_transaction_date(transaction.get("txn_date"))
         counterparty = _normal_key(transaction.get("counterparty"))
         txn_via = _normal_key(
             transaction.get("txn_via")
@@ -317,8 +317,12 @@ def _find_ref_number_match(transaction: dict, user_id: int, db: Session) -> Tran
 
 def _apply_transaction_fields(model: Transactions, transaction: dict, user_id: int) -> None:
     amount = _decimal_or_none(transaction.get("amount"))
-    if amount is None:
-        raise ValueError("Parsed transaction is missing a valid amount.")
+    missing_amount_needs_review = (
+        amount is None
+        and not transaction_allows_missing_amount(transaction)
+    )
+    if missing_amount_needs_review:
+        transaction = {**transaction, "is_flag": True}
 
     needs_review = transaction_needs_review(transaction)
 

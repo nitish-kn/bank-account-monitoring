@@ -27,7 +27,7 @@ class Transactions(Base):
     mode = Column(String)
     category = Column(String)
 
-    amount = Column(Numeric(12, 2), nullable=False)
+    amount = Column(Numeric(12, 2), nullable=True)
     currency = Column(String, default="INR")
 
     txn_date = Column(DateTime(timezone=True))

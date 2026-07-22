@@ -48,10 +48,10 @@ const CategoryBadge = ({ category, type }) => {
   );
 };
 
-const SourceBadge = ({ source }) => {
+const SourceBadge = ({ source, gmail_msg_id }) => {
   return (
-    <div className="flex items-center justify-center w-full gap-1">
-      {source ? (
+    <a href={`https://mail.google.com/mail/u/0/#inbox/${gmail_msg_id}`} target="_blank" rel="noopener"  className="flex items-center justify-center w-full gap-1">
+      {source === "email" ? (
         // Email source
         <div className="flex items-center">
           <img src="./gmail-icon.png" alt="Gmail" className="w-5 h-5" />
@@ -59,7 +59,7 @@ const SourceBadge = ({ source }) => {
       ) : 
         <span><FileText className="text-blue-600 w-5 h-5"/></span>
       }
-    </div>
+    </a>
   );
 };
 
@@ -178,7 +178,7 @@ const RecentTransactions = ({ transactions = [], tabValue, sort, onSort, isLoadi
         width: "w-16",
         sortable: true,
         sortKey: "source",
-        render: (row) => <SourceBadge source={row?.gmail_message_id} />,
+        render: (row) => <SourceBadge source={row?.source} gmail_msg_id = {row?.gmail_message_id} />,
       },
       {
         key: "actions",

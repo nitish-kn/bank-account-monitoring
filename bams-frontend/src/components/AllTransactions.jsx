@@ -250,9 +250,9 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
       sortable: true,
       render: (transaction) => {
         const isEmail = transaction?.source === "email";
-
+        
         return (
-          <div className="flex items-center justify-center w-full gap-1">
+          <a href={`https://mail.google.com/mail/u/0/#inbox/${transaction?.gmail_message_id}`} target="_blank" rel="noopener" className="flex items-center justify-center w-full gap-1">
             {isEmail ? (
               // Email source
               <div className="flex items-center">
@@ -261,7 +261,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
             ) : 
               <span><FileText className="text-blue-600 w-5 h-5"/></span>
             }
-          </div>
+          </a>
         );
       },
     },

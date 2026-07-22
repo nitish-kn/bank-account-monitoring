@@ -1,7 +1,7 @@
 from decimal import Decimal
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import Date, String, cast, func, or_, and_
+from sqlalchemy import String, cast, func, or_, and_
 from sqlalchemy.orm import Session
 
 from ..models.bank_accounts import BankAccounts
@@ -78,6 +78,29 @@ def _parse_date(value):
         return None
 
 
+def _selected_account_date(filters: dict | None):
+    if not filters:
+        return date.today()
+
+    return (
+        _parse_date(
+            filters.get("date")
+            or filters.get("selectedDate")
+            or filters.get("asOfDate")
+        )
+        or date.today()
+    )
+
+
+def _day_bounds(selected_date: date) -> tuple[datetime, datetime]:
+    day_start = datetime.combine(
+        selected_date,
+        datetime.min.time(),
+        tzinfo=timezone.utc,
+    )
+    return day_start, day_start + timedelta(days=1)
+
+
 def _apply_list_filter(query, column, filter_val, filter_kind: str | None = None):
     values = _active_filter_values(filter_val)
     if not values:
@@ -97,37 +120,6 @@ def _apply_list_filter(query, column, filter_val, filter_kind: str | None = None
         return query
 
     return query.filter(or_(*conditions))
-
-
-def _balance_delta_expr():
-    return (
-        func.coalesce(BankAccounts.current_balance, 0)
-        - func.coalesce(BankAccounts.statement_balance, 0)
-    )
-
-
-def _last_updated_expr():
-    return func.coalesce(
-        BankAccounts.last_synced_at,
-        BankAccounts.updated_at,
-        BankAccounts.created_at,
-    )
-
-
-SORTABLE_FIELDS = {
-    "account": BankAccounts.account_holder_name,
-    "account_holder_name": BankAccounts.account_holder_name,
-    "account_number": BankAccounts.account_number,
-    "type": BankAccounts.account_type,
-    "account_type": BankAccounts.account_type,
-    "bank": BankAccounts.bank_name,
-    "bank_name": BankAccounts.bank_name,
-    "statement_balance": BankAccounts.statement_balance,
-    "current_balance": BankAccounts.current_balance,
-    "calculated_balance": BankAccounts.current_balance,
-    "delta": _balance_delta_expr(),
-    "last_updated": _last_updated_expr(),
-}
 
 
 def _decimal_to_string(value) -> str | None:
@@ -170,6 +162,118 @@ def account_to_dict(account: BankAccounts) -> dict:
         "created_at": _datetime_to_iso(account.created_at),
         "updated_at": _datetime_to_iso(account.updated_at),
     }
+
+
+def _account_identity_key(account: BankAccounts) -> tuple[str, str, str]:
+    return (
+        _compact_text(account.account_number),
+        _compact_text(account.bank_name),
+        _compact_text(account.account_holder_name),
+    )
+
+
+def _datetime_rank(value) -> float:
+    if not value:
+        return 0
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.timestamp()
+
+    return 0
+
+
+def _account_as_of_rank(account: BankAccounts) -> tuple[float, float, float, str]:
+    return (
+        _datetime_rank(account.created_at),
+        _datetime_rank(account.last_synced_at),
+        _datetime_rank(account.updated_at),
+        str(account.id or ""),
+    )
+
+
+def _latest_account_rows_as_of(accounts: list[BankAccounts]) -> list[BankAccounts]:
+    latest_by_identity: dict[tuple[str, str, str], BankAccounts] = {}
+
+    for account in accounts:
+        identity_key = _account_identity_key(account)
+        current_latest = latest_by_identity.get(identity_key)
+        if current_latest and _account_as_of_rank(current_latest) >= _account_as_of_rank(account):
+            continue
+
+        latest_by_identity[identity_key] = account
+
+    return list(latest_by_identity.values())
+
+
+def _account_delta(account: BankAccounts) -> Decimal | None:
+    if account.current_balance is None and account.statement_balance is None:
+        return None
+    return (account.current_balance or Decimal("0")) - (account.statement_balance or Decimal("0"))
+
+
+def _account_last_updated(account: BankAccounts):
+    return account.last_synced_at or account.updated_at or account.created_at
+
+
+def _account_sort_value(account: BankAccounts, sort_field_key: str | None):
+    sort_values = {
+        "account": account.account_holder_name,
+        "account_holder_name": account.account_holder_name,
+        "account_number": account.account_number,
+        "type": account.account_type,
+        "account_type": account.account_type,
+        "bank": account.bank_name,
+        "bank_name": account.bank_name,
+        "statement_balance": account.statement_balance,
+        "current_balance": account.current_balance,
+        "calculated_balance": account.current_balance,
+        "delta": _account_delta(account),
+        "last_updated": _account_last_updated(account),
+    }
+
+    return sort_values.get(sort_field_key or "account", account.account_holder_name)
+
+
+def _normalize_sort_value(value):
+    if isinstance(value, str):
+        return value.lower()
+    if isinstance(value, datetime):
+        return _datetime_rank(value)
+    if isinstance(value, Decimal):
+        return value
+    return value
+
+
+def _sort_account_rows(
+    accounts: list[BankAccounts],
+    sort: dict | None,
+) -> list[BankAccounts]:
+    sort_field_key = sort.get("field") if sort else "account"
+    sort_order = sort.get("order", "asc") if sort else "asc"
+    descending = sort_order == "desc"
+
+    present_accounts = []
+    missing_accounts = []
+
+    for account in accounts:
+        sort_value = _account_sort_value(account, sort_field_key)
+        if sort_value in (None, ""):
+            missing_accounts.append(account)
+        else:
+            present_accounts.append(account)
+
+    present_accounts.sort(
+        key=lambda account: (
+            _normalize_sort_value(_account_sort_value(account, sort_field_key)),
+            str(account.id or ""),
+        ),
+        reverse=descending,
+    )
+    missing_accounts.sort(key=lambda account: str(account.id or ""))
+
+    return [*present_accounts, *missing_accounts]
 
 
 def apply_account_filters(query, filters: dict | None):
@@ -256,20 +360,6 @@ def apply_account_filters(query, filters: dict | None):
         if conditions:
             query = query.filter(or_(*conditions))
 
-    selected_date = _parse_date(
-        filters.get("date")
-        or filters.get("selectedDate")
-        or filters.get("asOfDate")
-    )
-    if selected_date:
-        query = query.filter(
-            or_(
-                cast(BankAccounts.last_synced_at, Date) == selected_date,
-                cast(BankAccounts.updated_at, Date) == selected_date,
-                cast(BankAccounts.created_at, Date) == selected_date,
-            )
-        )
-
     return query
 
 
@@ -284,25 +374,20 @@ def get_paginated_accounts(
     safe_page = max(int(page or 1), 1)
     safe_page_size = min(max(int(page_size or 10), 1), 1000)
 
-    query = db.query(BankAccounts).filter(BankAccounts.user_id == user_id)
+    selected_date = _selected_account_date(filters)
+    _, day_end = _day_bounds(selected_date)
+
+    query = db.query(BankAccounts).filter(
+        BankAccounts.user_id == user_id,
+        BankAccounts.created_at < day_end,
+    )
     query = apply_account_filters(query, filters)
 
-    total_count = query.count()
-    sort_field_key = sort.get("field") if sort else None
-    sort_order = sort.get("order", "asc") if sort else "asc"
-    sort_column = SORTABLE_FIELDS.get(sort_field_key, BankAccounts.account_holder_name)
-
-    if sort_order == "desc":
-        query = query.order_by(sort_column.desc().nulls_last(), BankAccounts.id.asc())
-    else:
-        query = query.order_by(sort_column.asc().nulls_last(), BankAccounts.id.asc())
-
-    accounts = (
-        query
-        .limit(safe_page_size)
-        .offset((safe_page - 1) * safe_page_size)
-        .all()
-    )
+    latest_accounts = _latest_account_rows_as_of(query.all())
+    sorted_accounts = _sort_account_rows(latest_accounts, sort)
+    total_count = len(sorted_accounts)
+    start_index = (safe_page - 1) * safe_page_size
+    accounts = sorted_accounts[start_index:start_index + safe_page_size]
 
     return {
         "accounts": [account_to_dict(account) for account in accounts],

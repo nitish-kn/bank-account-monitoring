@@ -13,15 +13,25 @@ import { getAccountFilterOptions } from "../lib/transactional-helper";
 
 const ALL_FILTER_VALUE = "all";
 
-const DEFAULT_ACCOUNT_FILTERS = {
+const toDateValue = (date) => {
+  if (!date) return "";
+  const parsedDate = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) return "";
+  const year = parsedDate.getFullYear();
+  const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
+  const day = String(parsedDate.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getDefaultAccountFilters = () => ({
   search: "",
   account: ALL_FILTER_VALUE,
   individualAccount: ALL_FILTER_VALUE,
   bank: ALL_FILTER_VALUE,
   accountType: ALL_FILTER_VALUE,
   accountHolderName: ALL_FILTER_VALUE,
-  date: "",
-};
+  date: toDateValue(new Date()),
+});
 
 const dropdownTriggerClassName = "h-9! w-full justify-between! text-sm";
 const dropdownContentClassName = "min-w-56 max-h-72 overflow-y-auto";
@@ -113,12 +123,13 @@ const Accounts = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [sort, setSort] = useState({ field: "account", order: "asc" });
-  const [filters, setFilters] = useState(DEFAULT_ACCOUNT_FILTERS);
-  const [draftFilters, setDraftFilters] = useState(DEFAULT_ACCOUNT_FILTERS);
+  const [filters, setFilters] = useState(() => getDefaultAccountFilters());
+  const [draftFilters, setDraftFilters] = useState(() => getDefaultAccountFilters());
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
 
+  console.log(accounts)
   const updateDraftFilter = (key, value) => {
     setDraftFilters((currentFilters) => ({
       ...currentFilters,
@@ -132,8 +143,9 @@ const Accounts = () => {
   };
 
   const resetFilters = () => {
-    setDraftFilters(DEFAULT_ACCOUNT_FILTERS);
-    setFilters(DEFAULT_ACCOUNT_FILTERS);
+    const defaultFilters = getDefaultAccountFilters();
+    setDraftFilters(defaultFilters);
+    setFilters(defaultFilters);
     setPage(1);
   };
 
@@ -187,10 +199,10 @@ const Accounts = () => {
         sortKey: "account",
         columnWidth: "360px",
         render: (account) => (
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400">
+          <div className="flex min-w-0 items-center gap-3 pl-2">
+            {/* <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400">
               <ChevronRight className="h-4 w-4" />
-            </span>
+            </span> */}
 
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-slate-950" title={account.account_holder_name}>
@@ -234,7 +246,7 @@ const Accounts = () => {
         render: (account) => (
           <BalanceCell
             amount={account.statement_balance}
-            label={`stmt ${formatDate(account.statement_updated_at)}`}
+            label={`stmt ${formatDate(account.created_at)}`}
           />
         ),
       },
@@ -248,7 +260,7 @@ const Accounts = () => {
         render: (account) => (
           <BalanceCell
             amount={account.calculated_balance}
-            label={`calc ${formatDate(account.calculated_updated_at)}`}
+            label={`calc ${formatDate(account.created_at)}`}
             muted={Math.abs(toNumber(account.delta)) < 0.01}
           />
         ),
@@ -296,7 +308,7 @@ const Accounts = () => {
           <div>
             <h1 className="text-2xl font-bold text-slate-950">All Accounts</h1>
             <p className="mt-1 text-xs font-medium text-slate-500">
-              Bank account balances and reconciliation status from your database
+              Every account in one view — balances, reconciliation health, and last activity
             </p>
           </div>
 
