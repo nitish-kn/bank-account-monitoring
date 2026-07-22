@@ -49,6 +49,7 @@ from ..models.transactions import Transactions
 from ..utils.transaction_utils import normalize_transaction_date
 
 PLACEHOLDER_TEXT = "N/A"
+VALID_LEDGER_TXN_TYPES = {"credit", "debit"}
 
 # fields a matched, already-recorded transaction can fill in on the
 # in-memory transaction dict being returned, but only where the dict is
@@ -147,7 +148,7 @@ def get_or_create_daily_balance(
             existing.account_holder_name = account_holder_name
         if account_type and not existing.account_type:
             existing.account_type = account_type
-        if source:
+        if source == "statement" or (source and existing.source != "statement"):
             existing.source = source
         return existing, False
 
@@ -265,6 +266,339 @@ def set_daily_closing_balance(
 # ------------------------------------------------------------------ #
 # Email flow — incremental balance, transaction dict returned in-place#
 # ------------------------------------------------------------------ #
+
+
+def _row_id(user_id: int, account_number: str, day: date) -> str:
+    return f"{user_id}_{account_number}_{day.strftime('%Y%m%d')}"
+
+
+def _row_day(row: BankAccounts) -> Optional[date]:
+    return _as_day(row.created_at)
+
+
+def _is_statement_anchor(row: BankAccounts) -> bool:
+    row_day = _row_day(row)
+    synced_day = _as_day(row.last_synced_at)
+
+    return (
+        row.statement_balance is not None
+        and row_day is not None
+        and (
+            row.source == "statement"
+            or synced_day == row_day
+        )
+    )
+
+
+def _transaction_delta(transaction: Transactions) -> Optional[Decimal]:
+    amount = _as_decimal(transaction.amount)
+    txn_type = str(transaction.txn_type or "").strip().lower()
+
+    if amount is None or txn_type not in VALID_LEDGER_TXN_TYPES:
+        return None
+
+    return amount if txn_type == "credit" else -amount
+
+
+def _transaction_day(transaction: Transactions) -> Optional[date]:
+    return _as_day(transaction.txn_date)
+
+
+def _sort_datetime(value: Any) -> datetime:
+    if not isinstance(value, datetime):
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _transaction_sort_key(transaction: Transactions) -> tuple:
+    return (
+        _sort_datetime(transaction.txn_date),
+        _sort_datetime(transaction.created_at),
+        transaction.id or "",
+    )
+
+
+def _account_meta_from_row(row: BankAccounts | None) -> dict[str, Any]:
+    if row is None:
+        return {}
+
+    return {
+        "bank_name": row.bank_name,
+        "account_holder_name": row.account_holder_name,
+        "account_type": row.account_type,
+    }
+
+
+def _account_meta_from_transaction(transaction: Transactions | None) -> dict[str, Any]:
+    if transaction is None:
+        return {}
+
+    return {
+        "bank_name": transaction.bank_name,
+        "account_holder_name": transaction.account_holder_name,
+        "account_type": transaction.account_type,
+    }
+
+
+def _fill_account_meta(row: BankAccounts, meta: dict[str, Any]) -> None:
+    bank_name = meta.get("bank_name")
+    account_holder_name = meta.get("account_holder_name")
+    account_type = meta.get("account_type")
+
+    if bank_name and (not row.bank_name or row.bank_name == "Unknown"):
+        row.bank_name = bank_name
+    if account_holder_name and (
+        not row.account_holder_name
+        or row.account_holder_name == "Unknown"
+    ):
+        row.account_holder_name = account_holder_name
+    if account_type and not row.account_type:
+        row.account_type = account_type
+
+
+def _get_or_create_recalculation_row(
+    db: Session,
+    user_id: int,
+    account_number: str,
+    day: date,
+    meta: dict[str, Any],
+    source: str,
+    stats: dict[str, int],
+) -> BankAccounts:
+    row_id = _row_id(user_id, account_number, day)
+    row = (
+        db.query(BankAccounts)
+        .filter(
+            BankAccounts.id == row_id,
+            BankAccounts.user_id == user_id,
+        )
+        .first()
+    )
+
+    if row:
+        _fill_account_meta(row, meta)
+        stats["bank_accounts_updated"] = stats.get("bank_accounts_updated", 0) + 1
+        return row
+
+    row = BankAccounts(
+        id=row_id,
+        user_id=user_id,
+        bank_name=meta.get("bank_name") or "Unknown",
+        account_holder_name=meta.get("account_holder_name") or "Unknown",
+        account_type=meta.get("account_type"),
+        account_number=account_number,
+        current_balance=Decimal("0"),
+        statement_balance=None,
+        last_synced_at=None,
+        source=source,
+        created_at=_day_start(day),
+    )
+    db.add(row)
+    db.flush()
+    stats["bank_accounts_inserted"] = stats.get("bank_accounts_inserted", 0) + 1
+    return row
+
+
+def recalculate_account_ledger(
+    db: Session,
+    user_id: int,
+    account_number: str,
+    stats: dict[str, int] | None = None,
+) -> dict[str, int]:
+    """
+    Recompute all bank_accounts day rows for one account.
+
+    Statement day rows are trusted anchors. Later rows carry the latest
+    statement_balance/last_synced_at forward while current_balance is
+    recalculated by applying non-statement transactions from the transactions
+    table after that anchor.
+    """
+    account_number = str(account_number or "").strip()
+    empty_result = {
+        "accounts_recalculated": 0,
+        "bank_accounts_inserted": 0,
+        "bank_accounts_updated": 0,
+    }
+    if not account_number:
+        return empty_result
+
+    local_stats = stats if stats is not None else {}
+    local_stats.setdefault("bank_accounts_inserted", 0)
+    local_stats.setdefault("bank_accounts_updated", 0)
+
+    existing_rows = (
+        db.query(BankAccounts)
+        .filter(
+            BankAccounts.user_id == user_id,
+            BankAccounts.account_number == account_number,
+        )
+        .order_by(BankAccounts.created_at.asc())
+        .all()
+    )
+    rows_by_day = {
+        row_day: row
+        for row in existing_rows
+        if (row_day := _row_day(row)) is not None
+    }
+
+    transactions = (
+        db.query(Transactions)
+        .filter(
+            Transactions.user_id == user_id,
+            Transactions.account_number == account_number,
+            Transactions.txn_date.isnot(None),
+            Transactions.amount.isnot(None),
+        )
+        .order_by(Transactions.txn_date.asc(), Transactions.created_at.asc(), Transactions.id.asc())
+        .all()
+    )
+
+    transactions_by_day: dict[date, list[Transactions]] = {}
+    transaction_meta_by_day: dict[date, dict[str, Any]] = {}
+    for transaction in sorted(transactions, key=_transaction_sort_key):
+        txn_day = _transaction_day(transaction)
+        if txn_day is None:
+            continue
+
+        transactions_by_day.setdefault(txn_day, []).append(transaction)
+        transaction_meta_by_day.setdefault(txn_day, _account_meta_from_transaction(transaction))
+
+    anchor_rows = {
+        day: row
+        for day, row in rows_by_day.items()
+        if _is_statement_anchor(row)
+    }
+
+    all_days = sorted(set(rows_by_day) | set(transactions_by_day) | set(anchor_rows))
+    if not all_days:
+        return empty_result
+
+    fallback_meta = {}
+    if existing_rows:
+        fallback_meta.update(_account_meta_from_row(existing_rows[-1]))
+    if transactions:
+        fallback_meta.update({
+            key: value
+            for key, value in _account_meta_from_transaction(transactions[-1]).items()
+            if value
+        })
+
+    running_balance = Decimal("0")
+    statement_balance: Decimal | None = None
+    statement_day: date | None = None
+    touched_count = 0
+
+    for day in all_days:
+        anchor_row = anchor_rows.get(day)
+        meta = (
+            _account_meta_from_row(anchor_row)
+            or transaction_meta_by_day.get(day)
+            or fallback_meta
+        )
+        row_source = "statement" if anchor_row else "email"
+        row = rows_by_day.get(day)
+        if row:
+            local_stats["bank_accounts_updated"] = local_stats.get("bank_accounts_updated", 0) + 1
+        else:
+            row = _get_or_create_recalculation_row(
+                db,
+                user_id=user_id,
+                account_number=account_number,
+                day=day,
+                meta=meta,
+                source=row_source,
+                stats=local_stats,
+            )
+        _fill_account_meta(row, meta)
+
+        if anchor_row:
+            statement_balance = _as_decimal(anchor_row.statement_balance) or Decimal("0")
+            statement_day = day
+            running_balance = statement_balance
+            row.source = "statement"
+            row.current_balance = running_balance
+            row.statement_balance = statement_balance
+            row.last_synced_at = _day_start(statement_day)
+        else:
+            for transaction in transactions_by_day.get(day, []):
+                if str(transaction.source or "").strip().lower() == "statement":
+                    continue
+
+                delta = _transaction_delta(transaction)
+                if delta is not None:
+                    running_balance += delta
+
+            row.current_balance = running_balance
+            if statement_balance is not None and statement_day is not None:
+                row.statement_balance = statement_balance
+                row.last_synced_at = _day_start(statement_day)
+            else:
+                row.statement_balance = None
+                row.last_synced_at = None
+
+            row.source = "email"
+
+        row.updated_at = datetime.now(timezone.utc)
+        db.add(row)
+        touched_count += 1
+
+    db.flush()
+
+    print(
+        "Ledger recalculated: "
+        f"user={user_id} account={account_number} rows={touched_count} "
+        f"bank_accounts_inserted={local_stats['bank_accounts_inserted']} "
+        f"bank_accounts_updated={local_stats['bank_accounts_updated']}"
+    )
+    return {
+        "accounts_recalculated": touched_count,
+        "bank_accounts_inserted": local_stats["bank_accounts_inserted"],
+        "bank_accounts_updated": local_stats["bank_accounts_updated"],
+    }
+
+
+def recalculate_ledgers_for_transactions(
+    db: Session,
+    transactions: List[Transactions],
+    user_id: int,
+    stats: dict[str, int] | None = None,
+) -> dict[str, int]:
+    account_numbers = {
+        str(transaction.account_number or "").strip()
+        for transaction in transactions or []
+        if str(transaction.account_number or "").strip()
+    }
+
+    result = {
+        "accounts_recalculated": 0,
+        "bank_accounts_inserted": 0,
+        "bank_accounts_updated": 0,
+    }
+
+    for account_number in sorted(account_numbers):
+        before_inserted = (stats or {}).get("bank_accounts_inserted", 0)
+        before_updated = (stats or {}).get("bank_accounts_updated", 0)
+        account_result = recalculate_account_ledger(
+            db,
+            user_id=user_id,
+            account_number=account_number,
+            stats=stats,
+        )
+        result["accounts_recalculated"] += account_result.get("accounts_recalculated", 0)
+        result["bank_accounts_inserted"] += (
+            (stats or {}).get("bank_accounts_inserted", 0) - before_inserted
+            if stats is not None
+            else account_result.get("bank_accounts_inserted", 0)
+        )
+        result["bank_accounts_updated"] += (
+            (stats or {}).get("bank_accounts_updated", 0) - before_updated
+            if stats is not None
+            else account_result.get("bank_accounts_updated", 0)
+        )
+
+    return result
 
 
 def persist_transaction(
@@ -510,6 +844,11 @@ def reconcile_statement_batch(
         "bank_accounts_inserted": 0,
         "bank_accounts_updated": 0,
     }
+    recalculation_stats: dict[str, int] = {
+        "bank_accounts_inserted": 0,
+        "bank_accounts_updated": 0,
+    }
+    recalculated_account_rows = 0
 
     for transaction in ordered:
         amount = _as_decimal(transaction.get("amount"))
@@ -574,12 +913,24 @@ def reconcile_statement_batch(
             day_row.last_synced_at = _day_start(day)
             db.add(day_row)
 
+    for account_number in sorted({account for account, _day in day_closing_balance}):
+        result = recalculate_account_ledger(
+            db,
+            user_id=user_id,
+            account_number=account_number,
+            stats=recalculation_stats,
+        )
+        recalculated_account_rows += result.get("accounts_recalculated", 0)
+
     db.commit()
 
     print(
         "Statement ledger DB: "
         f"user={user_id} bank_accounts_inserted={stats['bank_accounts_inserted']} "
         f"bank_accounts_updated={stats['bank_accounts_updated']} "
+        f"recalculated_rows={recalculated_account_rows} "
+        f"recalc_inserted={recalculation_stats['bank_accounts_inserted']} "
+        f"recalc_updated={recalculation_stats['bank_accounts_updated']} "
         f"days_reconciled={len(day_closing_balance)} skipped={len(skipped)}"
     )
 
@@ -587,6 +938,8 @@ def reconcile_statement_batch(
         "skipped_count": len(skipped),
         "skipped": skipped,
         **stats,
+        "recalculated_account_rows": recalculated_account_rows,
+        "recalculation_stats": recalculation_stats,
         "days_reconciled": [
             {"account_number": acc, "day": day.isoformat(), "closing_balance": float(bal)}
             for (acc, day), bal in day_closing_balance.items()

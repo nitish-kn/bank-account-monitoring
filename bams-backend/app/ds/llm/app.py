@@ -29,7 +29,7 @@ import logging
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import fitz  # PyMuPDF
 from openai import OpenAI
@@ -52,9 +52,18 @@ OPENAI_API_KEY = settings.openai_api_key
 # the stored Transaction schema is unified with app/models/transactions.py.
 
 
+class AccountContext(BaseModel):
+    bank_name: Optional[str] = None
+    account_holder_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_type: Optional[str] = None
+    currency: Optional[str] = None
+
+
 class TransactionBatch(BaseModel):
     transactions: list[Transaction] = Field(default_factory=list)
     pages_processed: list[int] = Field(default_factory=list)
+    account_context: AccountContext = Field(default_factory=AccountContext)
     extraction_notes: Optional[str] = None
 
 
@@ -72,9 +81,9 @@ class ExtractionLogEntry(BaseModel):
 # Configuration                                                       #
 # ------------------------------------------------------------------ #
 
-MODEL = "gpt-5.4-nano"          # Vision-capable; switch to "gpt-4o" for best accuracy
+MODEL = "gpt-5.4-mini"          # Vision-capable; switch to "gpt-4o" for best accuracy
 BATCH_SIZE = 5                  # Pages per API call
-DPI = 150                       # Higher = better OCR but larger payloads (~150 is sweet spot)
+DPI = 200                       # Higher = better OCR but larger payloads (~150 is sweet spot)
 JPEG_QUALITY = 90               # JPEG compression quality
 MAX_LONG_EDGE_PX = 2048         # Resize if either dimension exceeds this
 OUTPUT_DIR = Path("output")
@@ -184,6 +193,62 @@ If a row contains only a cheque number, reference number, account number, balanc
 
 ---
 
+# STATEMENT ACCOUNT CONTEXT
+
+Account details are statement-level header details, not transaction rows.
+
+On the first page/header of a bank statement, carefully extract:
+
+* `bank_name`
+* `account_holder_name`
+* `account_number`
+* `account_type`
+* `currency`
+
+Return these values in `account_context`, and repeat the same values on every extracted transaction.
+
+## Account number accuracy
+
+The account number is usually clearly labelled on the first page/header, near labels such as:
+
+* Account Number
+* Account No
+* A/c No
+* Account ID
+* Customer Account Number
+
+Use the value next to the account-number label.
+
+Never use any of these as `account_number`:
+
+* Mobile number
+* Phone number
+* Customer ID
+* CIF ID
+* PAN
+* Aadhaar
+* IFSC
+* MICR
+* Branch code
+* Statement number
+* Reference number
+
+If the statement shows both a clear account number and a masked account number, use the clear account number from the first page/header.
+If a later page does not repeat account details, reuse the supplied known statement account context.
+
+## Account holder accuracy
+
+Extract the actual customer/account holder name from the first page/header, usually near labels such as:
+
+* Account Holder
+* Customer Name
+* Name
+* Account Name
+
+Do not use branch name, bank name, nominee name, phone number, email, address text, or transaction counterparty as `account_holder_name`.
+
+---
+
 # DEBIT/CREDIT DETERMINATION
 
 ### Priority 1
@@ -229,7 +294,18 @@ If direction still cannot be determined:
 
 * The issuing bank as printed on the statement letterhead/header. Repeat it on every transaction from that statement.
 
+## account_holder_name
+
+* Extract the statement customer's name from the first page/header.
+* Prefer values beside labels like `Account Holder`, `Customer Name`, `Account Name`, or `Name`.
+* Do not use a mobile number, email address, branch name, bank name, nominee, address line, or transaction counterparty as the account holder.
+
 ## account_number
+
+* Extract the account number from the labelled account-number field on the first page/header.
+* Prefer labels like `Account Number`, `Account No`, `A/c No`, `Account ID`, or `Customer Account Number`.
+* If a clear account number and a masked account number both appear, use the clear account number.
+* Never use phone/mobile numbers, customer IDs, CIF IDs, PAN, Aadhaar, IFSC, MICR, branch codes, statement numbers, reference numbers, or transaction IDs as the account number.
 
 * Extract exactly as printed, including masked forms (e.g. `XX6744`). Usually printed once in the statement header — repeat it on every transaction.
 * If this is a credit card statement (txn_via = `Credit Card`), leave this null — put the card number in optional_fields.credit_card_number instead.
@@ -342,6 +418,13 @@ Leave these fields null — they are filled in by our code, not by you:
 
 * All page numbers included in the current batch.
 
+## account_context
+
+* Return the statement-level account details visible in this batch or supplied as known context.
+* If the batch includes page 1, extract account details from page 1/header.
+* If the batch does not include page 1 but known statement account context is supplied, return that supplied context.
+* Use the same account context values on every transaction in the batch unless the statement clearly changes account.
+
 ---
 
 # FINAL VALIDATION
@@ -399,6 +482,101 @@ def images_to_base64(images: list[bytes]) -> list[str]:
 
 
 # ------------------------------------------------------------------ #
+# Statement account context helpers                                  #
+# ------------------------------------------------------------------ #
+
+ACCOUNT_CONTEXT_FIELDS = (
+    "bank_name",
+    "account_holder_name",
+    "account_number",
+    "account_type",
+    "currency",
+)
+
+EMPTY_ACCOUNT_VALUES = {"", "-", "--", "n/a", "na", "none", "null", "not available"}
+
+
+def _clean_account_value(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    return None if text.lower() in EMPTY_ACCOUNT_VALUES else text
+
+
+def _account_context_dict(context: AccountContext | dict | None) -> dict[str, str]:
+    if context is None:
+        return {}
+
+    if isinstance(context, AccountContext):
+        raw_context = context.model_dump()
+    elif isinstance(context, dict):
+        raw_context = context
+    else:
+        return {}
+
+    cleaned: dict[str, str] = {}
+    for field in ACCOUNT_CONTEXT_FIELDS:
+        value = _clean_account_value(raw_context.get(field))
+        if value:
+            cleaned[field] = value
+
+    return cleaned
+
+
+def _transaction_account_context(transaction: dict) -> dict[str, str]:
+    if str(transaction.get("txn_via") or "").strip().lower() == "credit card":
+        return {}
+
+    return {
+        field: value
+        for field in ACCOUNT_CONTEXT_FIELDS
+        if (value := _clean_account_value(transaction.get(field)))
+    }
+
+
+def _merge_account_context(
+    current_context: dict[str, str],
+    incoming_context: AccountContext | dict | None,
+) -> None:
+    for field, value in _account_context_dict(incoming_context).items():
+        current_context.setdefault(field, value)
+
+
+def _apply_account_context(
+    transaction: dict,
+    account_context: dict[str, str],
+    overwrite: bool = False,
+) -> dict:
+    if str(transaction.get("txn_via") or "").strip().lower() == "credit card":
+        return transaction
+
+    for field, value in account_context.items():
+        if overwrite or not _clean_account_value(transaction.get(field)):
+            transaction[field] = value
+
+    return transaction
+
+
+def _format_account_context_for_prompt(account_context: dict[str, str]) -> Optional[str]:
+    cleaned_context = {
+        field: value
+        for field, value in account_context.items()
+        if field in ACCOUNT_CONTEXT_FIELDS and _clean_account_value(value)
+    }
+    if not cleaned_context:
+        return None
+
+    context_lines = "\n".join(
+        f"- {field}: {value}"
+        for field, value in cleaned_context.items()
+    )
+    return (
+        "Known statement account context from earlier pages. "
+        "Use these values for every transaction in this batch unless this batch "
+        "clearly belongs to a different account:\n"
+        f"{context_lines}"
+    )
+
+
+# ------------------------------------------------------------------ #
 # OpenAI Responses API call                                           #
 # ------------------------------------------------------------------ #
 
@@ -407,6 +585,7 @@ def extract_batch(
     client: OpenAI,
     b64_images: list[str],
     page_numbers: list[int],
+    account_context: dict[str, str] | None = None,
 ) -> TransactionBatch:
     """
     Send a batch of base-64 JPEG images to GPT-4o mini and return a
@@ -416,6 +595,13 @@ def extract_batch(
     # Build the content list: one image block per page.
     # Responses API uses "input_text" / "input_image" (not "text" / "image_url").
     content: list[dict] = []
+    account_context_prompt = _format_account_context_for_prompt(account_context or {})
+    if account_context_prompt:
+        content.append({
+            "type": "input_text",
+            "text": account_context_prompt,
+        })
+
     for b64, pnum in zip(b64_images, page_numbers):
         content.append({
             "type": "input_text",
@@ -431,7 +617,8 @@ def extract_batch(
         "text": (
             "Extract all transaction rows from the pages above. "
             "Return a TransactionBatch JSON object. "
-            "Every visible transaction row must appear exactly once."
+            "Every visible transaction row must appear exactly once. "
+            "Fill account_context and repeat account-level details on every transaction."
         ),
     })
 
@@ -526,6 +713,7 @@ def extract_transactions_from_pdf(
     # 2 — Process in batches
     all_transactions: list[Transaction] = []
     all_log_entries: list[ExtractionLogEntry] = []
+    statement_account_context: dict[str, str] = {}
 
     batches = [
         list(range(i, min(i + batch_size, total_pages)))
@@ -540,7 +728,12 @@ def extract_transactions_from_pdf(
         batch_b64 = [b64_images[i] for i in page_indices]
 
         try:
-            batch_result = extract_batch(client, batch_b64, page_numbers)
+            batch_result = extract_batch(
+                client,
+                batch_b64,
+                page_numbers,
+                account_context=statement_account_context,
+            )
         except Exception as exc:
             log.error("Batch %d failed: %s", batch_idx + 1, exc)
             all_log_entries.append(
@@ -555,11 +748,20 @@ def extract_transactions_from_pdf(
             )
             continue
 
+        _merge_account_context(statement_account_context, batch_result.account_context)
+
         enriched_transactions = []
         for tx in batch_result.transactions:
             tx_dict = tx.model_dump()
+            _merge_account_context(statement_account_context, _transaction_account_context(tx_dict))
+            tx_dict = _apply_account_context(tx_dict, statement_account_context)
             enriched_tx = fill_missing_account_details(tx_dict)
             enriched_tx = fill_missing_credit_card_details(enriched_tx)
+            enriched_tx = _apply_account_context(
+                enriched_tx,
+                statement_account_context,
+                overwrite=True,
+            )
 
             # Cash withdrawal has no real counterparty — it's the account
             # holder withdrawing their own money, so "same acc to same acc"

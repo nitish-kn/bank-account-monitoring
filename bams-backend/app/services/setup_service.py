@@ -40,6 +40,7 @@ from .gmail_service import (
     hydrate_user_message_page,
     iter_user_message_pages,
 )
+from .ledger_service import recalculate_ledgers_for_transactions
 
 
 from ..utils.sheets_utils import _get_sheet_title, _append_sheet_rows, _read_existing_column_values
@@ -425,6 +426,12 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                         emails=batch_emails,
                     )
 
+                    ledger_result = recalculate_ledgers_for_transactions(
+                        db,
+                        saved_transactions,
+                        user_id,
+                    )
+
                     # 10. Commit DB batch
                     db.add(user)
                     db.commit()
@@ -433,7 +440,8 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                         f"user={user_id} emails={len(batch_emails)} "
                         f"llm_rows={len(transactions)} parsed={parsed_result_count} "
                         f"valid_for_db={len(valid_transactions)} "
-                        f"transactions_saved={len(saved_transactions)}"
+                        f"transactions_saved={len(saved_transactions)} "
+                        f"ledger_rows={ledger_result.get('accounts_recalculated', 0)}"
                     )
                 except Exception as error:
                     db.rollback()
