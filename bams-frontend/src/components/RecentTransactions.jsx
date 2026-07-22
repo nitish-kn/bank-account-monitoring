@@ -107,11 +107,18 @@ const RecentTransactions = ({
         sortable: true,
         sortKey: "bank",
         render: (row) => (
-          <div className="max-w-60 w-fit">
+          ((row?.txn_via === "Credit Card") ?
+            <div className="max-w-60 w-fit">
+            <p className="font-semibold text-gray-900 text-sm"> {row?.optional_fields?.credit_card_issuer || "Unknown Bank"} </p>
+            <p className="text-xs font-medium text-gray-800 truncate"> {row?.optional_fields?.credit_card_owner || "-"} </p>
+            <p className="text-xs text-gray-500 truncate"> {row?.optional_fields?.credit_card_number || "-"} </p>
+          </div>
+           : 
+           <div className="max-w-60 w-fit">
             <p className="font-semibold text-gray-900 text-sm"> {row?.bank_name || "Unknown Bank"} </p>
             <p className="text-xs font-medium text-gray-800 truncate"> {row?.account_holder_name || "-"} </p>
             <p className="text-xs text-gray-500 truncate"> {row?.account_number || "-"} </p>
-          </div>
+          </div>)
         ),
       },
       {

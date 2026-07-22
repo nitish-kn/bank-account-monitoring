@@ -129,7 +129,6 @@ const Accounts = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  console.log(accounts)
   const updateDraftFilter = (key, value) => {
     setDraftFilters((currentFilters) => ({
       ...currentFilters,
