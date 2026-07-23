@@ -83,6 +83,19 @@ describes the BENEFICIARY / COUNTERPARTY — it is NOT the customer's own accoun
 Never copy a beneficiary's account number into account_number — that field is only ever the customer's own account.
 
 ==================================================
+ANOTHER SPECIAL RULE — "raised by JAIDEEP JAIDEEP" (payment approved by another person)
+==================================================
+
+Emails like "raised by JAIDEEP JAIDEEP has been seccessfully processed" 
+These emails should be mapped to a specific bank account number 
+Bank Name - AXIS BANK
+Account Holder's name - Modern Flour Mills Private Limited 
+Account number - 925020009337222
+
+Do not Leave these fields blank whenever you do see such statement in any email "raised by JAIDEEP JAIDEEP has been successfully processed."
+Also Do not classify Jaideep as Counterparty , Counterparty name will be written in the email
+
+==================================================
 txn_via CLASSIFICATION (drives downstream routing — must be exact)
 ==================================================
 
