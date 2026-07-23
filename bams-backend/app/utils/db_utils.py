@@ -675,6 +675,7 @@ def transaction_to_schema_dict(transaction: Transactions) -> dict:
         "dedupe_key": transaction.dedupe_key,
         "email_metadata": transaction.email_metadata or {},
         "parser_metadata": transaction.parser_metadata or {},
+        "optional_fields": optional_fields,
         # "raw_data": transaction.raw_data or {},
         "is_flag": False,
     }

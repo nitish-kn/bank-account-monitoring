@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from ...database import SessionLocal
 from ...services.ledger_service import persist_transactions_batch, reconcile_statement_batch
@@ -35,6 +36,20 @@ def _direct_form_int(value) -> int | None:
     if isinstance(value, str) and value.strip().isdigit():
         return int(value.strip())
     return None
+
+
+def _write_temp_pdf(contents: bytes) -> Path:
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(contents)
+        return Path(tmp.name)
+
+
+def _reconcile_statement_transactions(transactions: list[dict], user_id: int) -> None:
+    db = SessionLocal()
+    try:
+        reconcile_statement_batch(db, transactions, user_id)
+    finally:
+        db.close()
 
 
 @app.get("/")
@@ -140,18 +155,18 @@ async def process_statement(
                 detail=f"File not found: {resolved_file_path}"
             )
 
-        transactions = extract_statement_transactions(pdf_path)
+        transactions = await run_in_threadpool(extract_statement_transactions, pdf_path)
         print(
             "Statement parse result: "
             f"source=file_path rows={len(transactions or [])}"
         )
 
         if resolved_user_id is not None:
-            db = SessionLocal()
-            try:
-                reconcile_statement_batch(db, transactions, resolved_user_id)
-            finally:
-                db.close()
+            await run_in_threadpool(
+                _reconcile_statement_transactions,
+                transactions,
+                resolved_user_id,
+            )
 
         return transactions
 
@@ -163,23 +178,21 @@ async def process_statement(
 
     contents = await upload_file.read()
 
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(contents)
-        tmp_path = Path(tmp.name)
+    tmp_path = await run_in_threadpool(_write_temp_pdf, contents)
 
     try:
-        transactions = extract_statement_transactions(tmp_path)
+        transactions = await run_in_threadpool(extract_statement_transactions, tmp_path)
         print(
             "Statement parse result: "
             f"source=upload rows={len(transactions or [])}"
         )
 
         if resolved_user_id is not None:
-            db = SessionLocal()
-            try:
-                reconcile_statement_batch(db, transactions, resolved_user_id)
-            finally:
-                db.close()
+            await run_in_threadpool(
+                _reconcile_statement_transactions,
+                transactions,
+                resolved_user_id,
+            )
 
         return transactions
 

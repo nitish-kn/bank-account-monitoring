@@ -5,6 +5,8 @@ const all_banks = [
   { name: "ICICI Bank", value: "icici bank" },
   { name: "HDFC Bank", value: "hdfc bank" },
   { name: "Indusind Bank", value: "indusind bank" },
+  { name: "State Bank of India", value: "state bank of india" },
+  { name: "Bank of Baroda", value: "bank of baroda" },
 ];
 
 const all_account_holder_names_ = [
@@ -32,6 +34,7 @@ const all_account_holder_names_ = [
   { name: "Arvind Gupta", value: "arvind gupta" },
   { name: "Arivind Gupta HUF", value: "arivind gupta huf" },
   { name: "Arvind Gupta Oorja/UG", value: "arvind gupta oorja/ug" },
+  { name: "UMANG NRO", value: "umang nro" },
 ];
 
 const all_account_types = [
@@ -46,9 +49,9 @@ const all_account_types = [
   { name: "SBSPL", value: "sbspl" },
   { name: "NRE", value: "nre" },
   { name: "SAAQB25K", value: "saaqb25k" },
-  { name: "Savings Account", value: "savings account" },
+  { name: "Savings", value: "savings" },
   { name: "Fixed Deposit", value: "fixed deposit" },
-  { name: "Current Account", value: "current account" },
+  { name: "Current", value: "current" },
 ];
 
 const all_account_numbers = [
@@ -90,6 +93,10 @@ const all_account_numbers = [
   { name: "XX2021", value: "xx2021" },
   { name: "XX7141", value: "xx7141" },
   { name: "XX4845", value: "xx4845" },
+  { name: "XX0673", value: "xx0673" },
+  { name: "XX9252", value: "xx9252" },
+  { name: "XX3384", value: "xx3384" },
+  { name: "XX8294", value: "xx8294" },
 ];
 
 const individual_account = [
@@ -110,6 +117,15 @@ const individual_account = [
   { name: "Umang Gupta NRE A/c - Axis Bank - XX7701", value: "umang gupta nre a/c - axis bank - xx7701" },
   { name: "Vaibhav Gupta - Axis Bank - XX2994", value: "vaibhav gupta - axis bank - xx2994" },
 
+  // --- Bank of Baroda ---
+  { name: "Sunita Gupta - Bank of Baroda - XX0673", value: "sunita gupta - bank of baroda - xx0673" },
+
+  // --- Indusind Bank Section ---
+  { name: "Arvind Kumar Gupta - Indusind Bank - XX7208", value: "arvind kumar gupta - indusind bank - xx7208" },
+  { name: "Deepali Gupta - Indusind Bank - XX7208", value: "deepali gupta - indusind bank - xx7208" },
+  { name: "Samriddhi Gupta - Indusind Bank - XX7208", value: "samriddhi gupta - indusind bank - xx7208" },
+  { name: "Vaibhav Gupta - Indusind Bank - XX2020", value: "vaibhav gupta - indusind bank - xx2020" },
+
   // --- ICICI Bank Section ---
   { name: "Ram Niwas Gupta - ICICI Bank - XX4782", value: "ram niwas gupta - icici bank - xx4782" },
   { name: "Ram Niwas Gupta HUF - ICICI Bank - XX9814", value: "ram niwas gupta huf - icici bank - xx9814" },
@@ -127,14 +143,19 @@ const individual_account = [
   { name: "Umang Gupta NRE - ICICI Bank - XX9775", value: "umang gupta nre - icici bank - xx9775" },
 
   // --- HDFC Bank Section ---
+  { name: "UMANG NRO - HDFC Bank - XX9252", value: "umang nro - hdfc bank - xx9252" },
+  { name: "UMANG NRE - HDFC Bank - XX3384", value: "umang nre - hdfc bank - xx3384" },
   { name: "Deepali Gupta - HDFC Bank - XX3815", value: "deepali gupta - hdfc bank - xx3815" },
   { name: "Vaibhav Gupta - HDFC Bank - XX0290", value: "vaibhav gupta - hdfc bank - xx0290" },
-  { name: "Arvind Gupta - HDFC Bank - XX5763", value: "arvind gupta - hdfc bank - xx5763" },
+  { name: "Arvind Kumar Gupta - HDFC Bank - XX5763", value: "arvind kumar gupta - hdfc bank - xx5763" },
   { name: "Arivind Gupta HUF - HDFC Bank - XX8525", value: "arivind gupta huf - hdfc bank - xx8525" },
   { name: "Arvind Gupta Oorja/UG - HDFC Bank - XX8673", value: "arvind gupta oorja/ug - hdfc bank - xx8673" },
   { name: "Ujjwal Gupta - HDFC Bank - XX2021", value: "ujjwal gupta - hdfc bank - xx2021" },
   { name: "Om Prakash Gupta - HDFC Bank - XX7141", value: "om prakash gupta - hdfc bank - xx7141" },
-  { name: "Sunita Gupta - HDFC Bank - XX4845", value: "sunita gupta - hdfc bank - xx4845" }
+  { name: "Sunita Gupta - HDFC Bank - XX4845", value: "sunita gupta - hdfc bank - xx4845" },
+
+  // --- State Bank of India ---
+  { name: "Arvind Kumar Gupta - State Bank of India - XX8294", value: "arvind kumar gupta - state bank of india - xx8294" }
 ];
 
 const transactionTypes = [

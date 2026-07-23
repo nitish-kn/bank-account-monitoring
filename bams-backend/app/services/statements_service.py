@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import UploadFile, HTTPException
 from googleapiclient.discovery import build
 from pathlib import Path
@@ -6,8 +8,10 @@ import re
 from uuid import uuid4
 from typing import List
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ..core.constants import UPLOAD_DIR
+from ..database import SessionLocal
 from ..models.user import User
 from ..services.credentials import build_credentials
 from ..utils.db_utils import (
@@ -19,7 +23,7 @@ from .setup_service import _sync_transactions_to_sheet
 
 
 # -------------------------- Main function which calls LLM ------------
-async def _parse_statement_pdf(pdf_path: Path, user_id: int) -> list[dict]:
+def _parse_statement_pdf_sync(pdf_path: Path, user_id: int) -> list[dict]:
     """Parse a statement PDF through the shared LLM statement function."""
     try:
         from ..ds.llm.main import process_statement
@@ -33,7 +37,7 @@ async def _parse_statement_pdf(pdf_path: Path, user_id: int) -> list[dict]:
             ),
         ) from error
 
-    return await process_statement(file_path=str(pdf_path), user_id=user_id)
+    return asyncio.run(process_statement(file_path=str(pdf_path), user_id=user_id))
 
 
 # --------------------------- Helper function -------------------------
@@ -95,32 +99,36 @@ def _normalize_statement_transaction(transaction: dict, source_file: str) -> dic
 
 async def _save_uploaded_statements(files: List[UploadFile]) -> list[tuple[str, Path]]:
     """ """
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    await run_in_threadpool(UPLOAD_DIR.mkdir, parents=True, exist_ok=True)
     saved_files: list[tuple[str, Path]] = []
 
-    # Process every uploaded files
-    for index, file in enumerate(files, start=1):
-        suffix = Path(file.filename or "").suffix.lower()
+    try:
+        # Process every uploaded files
+        for index, file in enumerate(files, start=1):
+            suffix = Path(file.filename or "").suffix.lower()
 
-        # Rejects non-pdf files
-        if suffix != ".pdf":
-            raise HTTPException(
-                status_code=400,
-                detail=f"Only PDF statements are supported: {file.filename or 'unnamed file'}",
-            )
+            # Rejects non-pdf files
+            if suffix != ".pdf":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Only PDF statements are supported: {file.filename or 'unnamed file'}",
+                )
 
-        content = await file.read()
+            content = await file.read()
 
-        # Check for an empty pdf
-        if not content:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Uploaded statement is empty: {file.filename or 'unnamed file'}",
-            )
+            # Check for an empty pdf
+            if not content:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Uploaded statement is empty: {file.filename or 'unnamed file'}",
+                )
 
-        saved_path = UPLOAD_DIR / _safe_upload_name(file.filename, index)
-        saved_path.write_bytes(content)
-        saved_files.append((file.filename or saved_path.name, saved_path))
+            saved_path = UPLOAD_DIR / _safe_upload_name(file.filename, index)
+            await run_in_threadpool(saved_path.write_bytes, content)
+            saved_files.append((file.filename or saved_path.name, saved_path))
+    except Exception:
+        _delete_saved_statements(saved_files)
+        raise
 
     return saved_files
 
@@ -134,39 +142,42 @@ def _delete_saved_statement(saved_path: Path) -> None:
         print(f"Failed to delete temporary statement file {saved_path}: {error}")
 
 
+def _delete_saved_statements(saved_files: list[tuple[str, Path]]) -> None:
+    for _, saved_path in saved_files:
+        _delete_saved_statement(saved_path)
 
 
 
 
 
 
-# --------------------------- Main orchestrator function -----------------
-async def process_and_upload_statements(user: User, files: List[UploadFile], db: Session) -> dict:
+
+
+def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Path]]) -> dict:
     """
-    Service to process uploaded bank statement files.
-    Saves files, invokes the PDF LLM parser sequentially for each statement,
-    saves extracted transactions into DB, then projects unsynced rows to Google Sheets.
+    Blocking statement pipeline. It runs in a worker thread so PDF rendering,
+    LLM calls, Google Sheets calls, and DB commits do not block FastAPI's event loop.
     """
-    
-    if not files:
-        raise HTTPException(status_code=400, detail="No statement files uploaded.")
-
-    if not user.spreadsheet_id:
-        raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
-
-    # 1. Save uploaded pdfs temporarily
-    saved_files = await _save_uploaded_statements(files)
+    db = SessionLocal()
 
     try:
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+
+        if not user.spreadsheet_id:
+            raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
+
         # 2. Connect to Google Sheets client using user's OAuth credentials
         credentials = build_credentials(user)
         sheets_service = build("sheets", "v4", credentials=credentials)
         sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
-
-
     except Exception as e:
         for _, saved_path in saved_files:
             _delete_saved_statement(saved_path)
+        db.close()
+        if isinstance(e, HTTPException):
+            raise
         raise HTTPException(status_code=500, detail=f"Failed to connect to Google Sheets or database: {str(e)}")
 
     all_extracted_txns = []             # Stores all transactions processed across all PDFs
@@ -177,7 +188,7 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
     for original_filename, saved_path in saved_files:
         try:
             # 5. Parse statement PDF using app.ds.llm.app.run(Path)
-            extracted_txns = await _parse_statement_pdf(saved_path, user.id)
+            extracted_txns = _parse_statement_pdf_sync(saved_path, user.id)
             print(
                 "Statement parsed: "
                 f"user={user.id} file={original_filename} rows={len(extracted_txns or [])}"
@@ -260,9 +271,13 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
                 
         except HTTPException:
             # Re-raise HTTP exceptions to propagate cleaner API error codes
+            _delete_saved_statements(saved_files)
+            db.close()
             raise
         except Exception as e:
             # Fallback error wrapper for unexpected process-interrupts
+            _delete_saved_statements(saved_files)
+            db.close()
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed processing statement '{original_filename}': {str(e)}"
@@ -270,11 +285,35 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
         finally:
             _delete_saved_statement(saved_path)
 
-    return {
-        "status": "success",
-        "message": f"Successfully parsed and appended {total_rows_written} transactions from {len(saved_files)} files.",
-        "transactions_count": len(all_extracted_txns),
-        "rows_written": total_rows_written,
-        "duplicates_skipped": 0,
-        "files": processed_files,
-    }
+    try:
+        return {
+            "status": "success",
+            "message": f"Successfully parsed and appended {total_rows_written} transactions from {len(saved_files)} files.",
+            "transactions_count": len(all_extracted_txns),
+            "rows_written": total_rows_written,
+            "duplicates_skipped": 0,
+            "files": processed_files,
+        }
+    finally:
+        db.close()
+
+
+# --------------------------- Main orchestrator function -----------------
+async def process_and_upload_statements(user: User, files: List[UploadFile], db: Session) -> dict:
+    """
+    Service to process uploaded bank statement files.
+    Saves files, invokes the PDF LLM parser sequentially for each statement,
+    saves extracted transactions into DB, then projects unsynced rows to Google Sheets.
+    """
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No statement files uploaded.")
+
+    if not user.spreadsheet_id:
+        raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
+
+    # Save uploads through the async request, then move the blocking pipeline
+    # to a worker thread with its own SQLAlchemy session.
+    saved_files = await _save_uploaded_statements(files)
+
+    return await run_in_threadpool(_process_saved_statements_sync, user.id, saved_files)

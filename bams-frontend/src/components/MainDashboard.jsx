@@ -36,7 +36,7 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
   const [recentPage, setRecentPage] = useState(1);
   const [recentPageSize, setRecentPageSize] = useState(10);
   const [recentTotalCount, setRecentTotalCount] = useState(0);
-
+  console.log(recentTransactions)
   const handleSort = (field) => {
     setRecentPage(1);
     setRecentSort((prev) => ({
