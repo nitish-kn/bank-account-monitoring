@@ -121,7 +121,7 @@ def fill_missing_account_details(transaction: Dict[str, Any], df: pd.DataFrame =
         transaction["account_type"] = None
         return transaction
 
-    if not transaction.get("bank_name") and match.get("bank_name"):
+    if match.get("bank_name"):
         transaction["bank_name"] = match["bank_name"]
 
     if not transaction.get("account_number") or len(str(transaction.get("account_number", ""))) < 10:
@@ -132,7 +132,7 @@ def fill_missing_account_details(transaction: Dict[str, Any], df: pd.DataFrame =
     if match.get("account_holder_name"):
         transaction["account_holder_name"] = match["account_holder_name"]
 
-    if not transaction.get("account_type") and match.get("account_type"):
+    if match.get("account_type"):
         transaction["account_type"] = match["account_type"]
 
     return transaction

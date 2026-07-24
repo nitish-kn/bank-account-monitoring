@@ -755,13 +755,16 @@ def extract_transactions_from_pdf(
             tx_dict = tx.model_dump()
             _merge_account_context(statement_account_context, _transaction_account_context(tx_dict))
             tx_dict = _apply_account_context(tx_dict, statement_account_context)
+            # print(f"BEFORE ENRICHMENT - {tx_dict}")
             enriched_tx = fill_missing_account_details(tx_dict)
+            # print(f"ENRICHED - {enriched_tx}")
             enriched_tx = fill_missing_credit_card_details(enriched_tx)
-            enriched_tx = _apply_account_context(
-                enriched_tx,
-                statement_account_context,
-                overwrite=True,
-            )
+            # enriched_tx = _apply_account_context(
+            #     enriched_tx,
+            #     statement_account_context,
+            #     overwrite=True,
+            # )
+            # print(f"FINAL ENRICHED - {enriched_tx}")
 
             # Cash withdrawal has no real counterparty — it's the account
             # holder withdrawing their own money, so "same acc to same acc"
