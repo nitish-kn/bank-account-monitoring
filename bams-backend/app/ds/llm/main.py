@@ -187,12 +187,12 @@ async def process_statement(
             f"source=upload rows={len(transactions or [])}"
         )
 
-        if resolved_user_id is not None:
-            await run_in_threadpool(
-                _reconcile_statement_transactions,
-                transactions,
-                resolved_user_id,
-            )
+        # if resolved_user_id is not None:
+        #     await run_in_threadpool(
+        #         _reconcile_statement_transactions,
+        #         transactions,
+        #         resolved_user_id,
+        #     )
 
         return transactions
 

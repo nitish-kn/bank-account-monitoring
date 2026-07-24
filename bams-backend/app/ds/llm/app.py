@@ -82,7 +82,7 @@ class ExtractionLogEntry(BaseModel):
 # ------------------------------------------------------------------ #
 
 MODEL = "gpt-5.4-mini"          # Vision-capable; switch to "gpt-4o" for best accuracy
-BATCH_SIZE = 5                  # Pages per API call
+BATCH_SIZE = 1                # Pages per API call
 DPI = 200                       # Higher = better OCR but larger payloads (~150 is sweet spot)
 JPEG_QUALITY = 90               # JPEG compression quality
 MAX_LONG_EDGE_PX = 2048         # Resize if either dimension exceeds this
