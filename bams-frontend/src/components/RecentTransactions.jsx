@@ -78,7 +78,7 @@ const RecentTransactions = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [openDialog, setOpenDialog] = useState(false);
   const [data, setData] = useState({});
-  console.log(data)
+
   const columns = useMemo(() => {
     let baseCols = [
       {
