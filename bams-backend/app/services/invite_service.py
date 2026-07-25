@@ -3,16 +3,20 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..models.family import Family
-from ..models.invites import Invite, InviteType
+from ..models.invites import Invite
 from ..models.user import User
+from ..core.constants import (
+    FAMILY_INVITE,
+    INVITE_STATUS_ACCEPTED,
+    INVITE_STATUS_DECLINED,
+    INVITE_STATUS_EXPIRED,
+    INVITE_STATUS_PENDING,
+    JOIN_REQUEST,
+)
 from ..utils.date_utils import utc_now
 from ..utils.email_utils import normalize_emails
 from ..utils.family_utils import ensure_family, move_user_to_family
 from ..utils.serializers import serialize_invite
-
-
-FAMILY_INVITE = InviteType.FAMILY_INVITE.value
-JOIN_REQUEST = InviteType.JOIN_REQUEST.value
 
 
 def _get_accessible_pending_invite(invite_id: int, current_user: User, db: Session) -> Invite:
@@ -20,7 +24,7 @@ def _get_accessible_pending_invite(invite_id: int, current_user: User, db: Sessi
         db.query(Invite)
         .filter(
             Invite.id == invite_id,
-            Invite.status == "pending",
+            Invite.status == INVITE_STATUS_PENDING,
             or_(
                 Invite.invited_user_id == current_user.id,
                 Invite.invited_email == current_user.email.lower(),
@@ -33,7 +37,7 @@ def _get_accessible_pending_invite(invite_id: int, current_user: User, db: Sessi
         raise HTTPException(status_code=404, detail="Pending invite not found")
 
     if invite.expires_at and invite.expires_at < utc_now():
-        invite.status = "expired"
+        invite.status = INVITE_STATUS_EXPIRED
         db.add(invite)
         db.commit()
         raise HTTPException(status_code=400, detail="Invite has expired")
@@ -115,7 +119,7 @@ def create_invites_for_user(emails: list[str], current_user: User, db: Session) 
 
         pending_query = db.query(Invite).filter(
             Invite.family_id == target_family_id,
-            Invite.status == "pending",
+            Invite.status == INVITE_STATUS_PENDING,
             Invite.invite_type == invite_type,
         )
 
@@ -136,7 +140,7 @@ def create_invites_for_user(emails: list[str], current_user: User, db: Session) 
             invited_user_id=invited_user.id,
             invited_email=invited_user.email.lower(),
             invite_type=invite_type,
-            status="pending",
+            status=INVITE_STATUS_PENDING,
         )
         db.add(invite)
         created_invites.append(invite)
@@ -167,7 +171,7 @@ def get_pending_invites_for_user(current_user: User, db: Session) -> dict:
     invites = (
         db.query(Invite)
         .filter(
-            Invite.status == "pending",
+            Invite.status == INVITE_STATUS_PENDING,
             or_(
                 Invite.invited_user_id == current_user.id,
                 Invite.invited_email == current_user.email.lower(),
@@ -225,7 +229,7 @@ def accept_invite_for_user(invite_id: int, current_user: User, db: Session) -> d
         raise HTTPException(status_code=400, detail="Unsupported invite type")
 
     invite.invited_user_id = current_user.id
-    invite.status = "accepted"
+    invite.status = INVITE_STATUS_ACCEPTED
     invite.accepted_at = utc_now()
 
     db.add(invite)
@@ -242,7 +246,7 @@ def decline_invite_for_user(invite_id: int, current_user: User, db: Session) -> 
     invite = _get_accessible_pending_invite(invite_id, current_user, db)
 
     invite.invited_user_id = current_user.id
-    invite.status = "declined"
+    invite.status = INVITE_STATUS_DECLINED
     invite.declined_at = utc_now()
 
     db.add(invite)

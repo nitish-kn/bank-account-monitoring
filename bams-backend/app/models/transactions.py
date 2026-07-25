@@ -1,13 +1,18 @@
 from ..database import Base
-from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, Numeric
+from sqlalchemy import Column, DateTime, String, ForeignKey, Numeric, UniqueConstraint, Boolean
 from sqlalchemy.dialects.postgresql import JSONB
 from .types import ID_TYPE
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from uuid import uuid4
 
 class Transactions(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "dedupe_key", name="uq_transactions_user_dedupe_key"),
+    )
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True)
 
     user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
 
@@ -22,7 +27,7 @@ class Transactions(Base):
     mode = Column(String)
     category = Column(String)
 
-    amount = Column(Numeric(12, 2), nullable=False)
+    amount = Column(Numeric(12, 2), nullable=True)
     currency = Column(String, default="INR")
 
     txn_date = Column(DateTime(timezone=True))
@@ -40,15 +45,17 @@ class Transactions(Base):
 
     source = Column(String, nullable=False)
 
-    dedupe_key = Column(String, nullable=True, index=True)
+    dedupe_key = Column(String, nullable=False, index=True)
     email_metadata = Column(JSONB)
     parser_metadata = Column(JSONB)
-    raw_data = Column(JSONB)
+    
     optional_fields = Column(JSONB)
 
     sheets_synced_at = Column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default="now()")
-    updated_at = Column(DateTime(timezone=True), onupdate="now()")
+    is_flag = Column(Boolean, nullable=False, default=False, server_default="false")
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="transactions")  # or appropriate name

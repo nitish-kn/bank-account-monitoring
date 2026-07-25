@@ -1,44 +1,135 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Spinner } from "@radix-ui/themes";
-import { useEmailStore } from "../store/emailStore";
-import { FileSpreadsheet, FileText, TriangleAlert } from "lucide-react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
+import { Badge, Button, Spinner, Tabs } from "@radix-ui/themes";
+import { FileSpreadsheet, FileText, TriangleAlert, Filter, Calendar, ChevronDown } from "lucide-react";
 import CustomTable from "./ui/CustomTable";
-import { cleanText, formatAmount, formatCompactINR, getStatusColor } from "../lib/helper";
+import { cleanText, formatAmount, formatCompactINR, formatDateAndTime, getStatusColor } from "../lib/helper";
 import { EmptyMails } from "../utils/EmptyStates";
 import Pagination from "./Pagination";
+import { transactionApi } from "../api/transactions";
+import TransactionFilters from "./TransactionFilters";
+import CustomButton from "./ui/CustomButton";
+import { useSetupStore } from "../store/setupStore";
+import { getTransactionFilterOptionsFromBackend, formatTransactionDateRangeLabel, getDefaultTransactionDateRange } from "../lib/transactional-helper";
+import CustomDatePicker from "./ui/CustomDatePicker";
+
+const tabTriggerClassName = "flex-1! justify-center! bg-white! hover:bg-gray-50! border border-gray-50! shadow-md! rounded-md! text-sm font-medium text-gray-900! transition-colors! data-[state=active]:border-b-2! data-[state=active]:border-blue-600! data-[state=active]:text-blue-600! data-[state=active]:hover:bg-white! [&_.rt-BaseTabListTriggerInner]:bg-transparent!";
 
 export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, syncDashboard }) {
-  const { syncedEmails, loadingSynced: loadingEmails, syncedError, } = useEmailStore();
   const [emailPage, setEmailPage] = useState(1);
   const [emailPageSize, setEmailPageSize] = useState(10);
-  const totalEmailPages = Math.max(Math.ceil((syncedEmails?.length || 0) / emailPageSize), 1);
+  const [transactions, setTransactions] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [filterOptions, setFilterOptions] = useState({});
+  const [appliedFilters, setAppliedFilters] = useState({});
+  const [openFilter, setOpenFilter] = useState(false);
+  const refreshTrigger = useSetupStore((state) => state.refreshTrigger);
+  const [sort, setSort] = useState({ field: "date", order: "desc" });
+  const [tabValue, setTabValue] = useState("transactions");
+
+  const [dateRange, setDateRange] = useState(getDefaultTransactionDateRange(new Date(), 30));
+  const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
+  const dateRangePopoverRef = useRef(null);
+
+  const maxSelectableDate = useMemo(() => new Date(), []);
+  const dateRangeLabel = useMemo(() => formatTransactionDateRangeLabel(dateRange), [dateRange]);
+
+  const handleSort = (field) => {
+    setSort((prev) => ({
+      field,
+      order: prev.field === field && prev.order === "desc" ? "asc" : "desc",
+    }));
+    setEmailPage(1);
+  };
 
   useEffect(() => {
-    setEmailPage((page) => Math.min(page, totalEmailPages));
-  }, [totalEmailPages]);
+    if (!openDateRangeFilter) return undefined;
 
-  // console.log(syncedEmails)
+    const handleOutsideClick = (event) => {
+      if (
+        dateRangePopoverRef.current && !dateRangePopoverRef.current.contains(event.target)) {
+        setOpenDateRangeFilter(false);
+      }
+    };
 
-  const paginatedEmails = useMemo(() => {
-    const start = (emailPage - 1) * emailPageSize;
-    return syncedEmails.slice(start, start + emailPageSize);
-  }, [emailPage, emailPageSize, syncedEmails]);
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [openDateRangeFilter]);
+
+  useEffect(() => {
+    transactionApi.getFilterOptions()
+      .then((res) => {
+        setFilterOptions(getTransactionFilterOptionsFromBackend(res));
+      })
+      .catch(console.error);
+  }, [refreshTrigger]);
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      const shouldShowInitialLoader = transactions.length === 0;
+      setError(null);
+      setLoading(shouldShowInitialLoader);
+      setIsRefreshing(!shouldShowInitialLoader);
+      try {
+        const payloadFilters = {
+          ...appliedFilters,
+          dateRange,
+          tab: tabValue,
+        };
+        const res = await transactionApi.queryTransactions(
+          payloadFilters,
+          { page: emailPage, pageSize: emailPageSize },
+          { summary: false, transactions: true },
+          sort
+        );
+        if (res.transactions) {
+          setTransactions(res.transactions);
+          setTotalCount(res.totalCount || 0);
+        }
+      } catch (err) {
+        setError(err.message || "Failed to fetch transactions");
+      } finally {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+    };
+    fetchTransactions();
+  }, [appliedFilters, emailPage, emailPageSize, refreshTrigger, sort, dateRange, tabValue]);
+
+  const totalEmailPages = Math.max(Math.ceil(totalCount / emailPageSize), 1);
+  
+  const hasActiveFilters = Object.keys(appliedFilters).some(
+    (key) => appliedFilters[key] && appliedFilters[key] !== "all" && appliedFilters[key].length !== 0
+  );
 
   const emailColumns = [
     {
       key: "txn_date",
       header: "Date",
+      columnWidth: "120px",
       cellClassName: "whitespace-nowrap",
+      sortable: true,
+      sortKey: "date",
       render: (transaction) => (
         <p className="text-xs text-gray-700">
-          {transaction?.txn_date || "-"}
+          {formatDateAndTime(transaction?.txn_date).date || "-"}
         </p>
       ),
     },
     {
       key: "bank_name",
       header: "Bank / Account",
-      width: "w-xl",
+      columnWidth: "260px",
+      sortable: true,
+      sortKey: "bank",
       render: (transaction) => (
         <div className="min-w-0 ">
           <p className="truncate text-sm max-w-80 text-black" title={transaction?.bank_name} >
@@ -73,19 +164,22 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "txn_type",
       header: "Credit / Debit",
-      width: "w-80",
+      columnWidth: "130px",
       cellClassName: "whitespace-nowrap",
+      sortable: true,
+      sortKey: "type",
       render: (transaction) => {
-        const transactionType = transaction?.txn_type?.toLowerCase();
-        const status = transaction?.parser_metadata?.parsed_status?.toLowerCase();
-        const statusColor = status === "not_transaction"
-          ? "gray"
-          : transactionType === "debit"
-            ? "red"
-            : transactionType === "credit"
-              ? "green"
-              : getStatusColor(status);
-        const label = transaction?.txn_type || transaction?.parser_metadata?.parsed_status || "Parsed";
+        const transactionType = String(transaction?.txn_type || "").toLowerCase();
+        const statusColor = transactionType === "debit"
+          ? "red"
+          : transactionType === "credit"
+            ? "green"
+            : "gray";
+        const label = transactionType === "debit"
+          ? "Debit"
+          : transactionType === "credit"
+            ? "Credit"
+            : "-";
 
         return (
           <Badge
@@ -102,7 +196,9 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "amount",
       header: "Amount",
+      columnWidth: "140px",
       cellClassName: "whitespace-nowrap",
+      sortable: true,
       render: (transaction) => {
         const amount = transaction?.amount || transaction?.inr_equivalent;
         return (
@@ -115,7 +211,9 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "counterparty",
       header: "Counterparty",
+      columnWidth: "240px",
       cellClassName: "max-w-[280px]",
+      sortable: true,
       render: (transaction) => {
         const counterparty = cleanText(transaction?.counterparty);
 
@@ -132,9 +230,11 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "narration",
       header: "Narration",
+      columnWidth: "340px",
       cellClassName: "max-w-[420px]",
+      sortable: true,
       render: (transaction) => {
-        const narration = cleanText(transaction?.narration || transaction?.raw_data?.subject);
+        const narration = cleanText(transaction?.narration || transaction?.email_metadata?.subject);
 
         return (
           <p
@@ -149,13 +249,15 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
     {
       key: "source",
       header: "Source",
+      columnWidth: "90px",
       cellClassName: "whitespace-nowrap",
+      sortable: true,
       render: (transaction) => {
-        const source = transaction?.gmail_message_id;
-
+        const isEmail = transaction?.source === "email";
+        
         return (
-          <a href={`https://mail.google.com/mail/u/0/#inbox/${source}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full gap-1">
-            {source ? (
+          <a href={`https://mail.google.com/mail/u/0/#inbox/${transaction?.gmail_message_id}`} target="_blank" rel="noopener" className="flex items-center justify-center w-full gap-1">
+            {isEmail ? (
               // Email source
               <div className="flex items-center">
                 <img src="./gmail-icon.png" alt="Gmail" className="w-5 h-5" />
@@ -194,6 +296,59 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto mt-2 lg:mt-0">
+            {/* Date Range Filter */}
+            <div ref={dateRangePopoverRef} className="relative">
+              <CustomButton color="gray" radius="large" className="text-gray-800!" variant="outline" size="2" onClick={() => setOpenDateRangeFilter((prev) => !prev)} >
+                <Calendar className="mr-1 h-4 w-4" /> 
+                <span className="hidden sm:inline">{dateRangeLabel.long}</span>
+                <span className="sm:hidden">{dateRangeLabel.short}</span>
+                <ChevronDown className="ml-1 h-4 w-4" />
+              </CustomButton>
+
+              {openDateRangeFilter && (
+                <>
+                  <div
+                    className="lg:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2"
+                    onClick={() => setOpenDateRangeFilter(false)}
+                  >
+                    <div className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+                      <CustomDatePicker
+                        value={dateRange}
+                        onChange={(val) => {
+                          setDateRange(val);
+                          setEmailPage(1);
+                        }}
+                        maxDate={maxSelectableDate}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="hidden lg:flex z-20 absolute top-10 right-0 justify-end">
+                    <CustomDatePicker
+                      value={dateRange}
+                      onChange={(val) => {
+                        setDateRange(val);
+                        setEmailPage(1);
+                      }}
+                      maxDate={maxSelectableDate}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <CustomButton
+              color={hasActiveFilters ? "blue" : "gray"}
+              radius="large"
+              variant={hasActiveFilters ? "solid" : "outline"}
+              size="2"
+              className={`ml-2 ${hasActiveFilters ? "text-white" : "text-gray-900"}!`}
+              onClick={() =>setOpenFilter((prev) => !prev)}
+            >
+              <Filter className="sm:mr-1 h-4 w-4" /> 
+              <span className="hidden sm:flex">Filter</span>
+            </CustomButton>
+
             <Badge
               size="2"
               color="gray"
@@ -201,7 +356,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
               radius="full"
               className="px-3 py-1 font-semibold"
             >
-              {syncedEmails?.length} Total
+              {totalCount} Total
             </Badge>
 
             {user?.spreadsheet_id && (
@@ -230,6 +385,51 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
           </div>
         </div>
 
+        <div className="border-b border-gray-100 bg-gray-50/60 px-4 py-3">
+          <Tabs.Root
+            value={tabValue}
+            className="w-full"
+            onValueChange={(value) => {
+              setTabValue(value);
+              setEmailPage(1);
+            }}
+          >
+            <Tabs.List
+              className="flex! w-full! gap-2 items-stretch! border-none! shadow-none! rounded-md! h-12!"
+              style={{ boxShadow: "none" }}
+            >
+              <Tabs.Trigger value="transactions" className={tabTriggerClassName}>
+                Transactions
+              </Tabs.Trigger>
+              <Tabs.Trigger value="credit-card" className={tabTriggerClassName}>
+                Credit Card
+              </Tabs.Trigger>
+              <Tabs.Trigger value="fastag" className={tabTriggerClassName}>
+                Fastag
+              </Tabs.Trigger>
+            </Tabs.List>
+          </Tabs.Root>
+        </div>
+
+        {/* Filter UI */}
+        {openFilter && (
+          <div className="p-4 bg-gray-50 border-b border-gray-200">
+            <TransactionFilters
+              filters={appliedFilters}
+              filterOptions={filterOptions}
+              onApply={(newFilters) => {
+                setAppliedFilters(newFilters);
+                setEmailPage(1);
+              }}
+              onReset={() => {
+                setAppliedFilters({});
+                setEmailPage(1);
+              }}
+              onOpenChange={() => setOpenFilter(false)}
+            />
+          </div>
+        )}
+
         {isSyncing && (
           <div className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-700">
             {syncMessage || "Syncing your last 30 days of emails in the background. New rows may appear gradually."}
@@ -255,7 +455,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
         <div className="overflow-x-auto">
 
           {/* Loading State */}
-          {loadingEmails ? (
+          {loading && transactions.length === 0 ? (
 
             <div className="flex w-full flex-col items-center justify-center gap-3 py-16">
               <Spinner size="3" />
@@ -270,7 +470,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
               </div>
             </div>
 
-          ) : syncedError ? (
+          ) : error ? (
 
             // If an error occured while loading new mails
             <div className="m-4 rounded-xl border border-red-100 bg-red-50 p-6 flex flex-col items-center justify-center gap-4 overflow-hidden">
@@ -278,36 +478,46 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
 
               <div className="text-center">
                 <p className="text-sm font-bold text-red-700">
-                  Unable to load synced transactions
+                  Unable to load transactions
                 </p>
                 <p className="mt-1 text-xs font-medium text-red-500">
-                  Please check Google Sheets permissions and try again.
+                  Please try again.
                 </p>
               </div>
 
               <pre className="max-h-32 w-full overflow-auto rounded-lg border border-red-100 bg-white/70 p-3 text-left text-xs leading-5 text-red-600 whitespace-pre-wrap break-words">
-                {syncedError}
+                {error}
               </pre>
             </div>
-          ) : syncedEmails.length === 0 ? (
+          ) : transactions.length === 0 ? (
 
             // No error but, no emails to show
-            <EmptyMails heading="No synced transactions found" description="Once transactions are parsed, they will appear here." />
+            <EmptyMails heading="No transactions found" description="Adjust your filters or sync new transactions." />
           ) : (
 
             // The main table to show the parsed data
             <>
-              <CustomTable
-                columns={emailColumns}
-                data={paginatedEmails}
-                minWidth="900px"
-                getRowKey={(transaction, idx) => transaction.id || transaction.gmail_message_id || transaction.ref_number || idx}
-                emptyMessage="No synced transactions found"
-              />
+              <div className="relative">
+                {isRefreshing && (
+                  <div className="absolute right-4 top-3 z-20 rounded-full border border-blue-100 bg-white px-3 py-1 text-xs font-semibold text-blue-600 shadow-sm">
+                    Updating...
+                  </div>
+                )}
+
+                <CustomTable
+                  columns={emailColumns}
+                  data={transactions}
+                  minWidth="1320px"
+                  getRowKey={(transaction, idx) => transaction.id || transaction.gmail_message_id || transaction.ref_number || idx}
+                  emptyMessage="No synced transactions found"
+                  sort={sort}
+                  onSort={handleSort}
+                />
+              </div>
 
               <Pagination
                 currentPage={emailPage}
-                totalItems={syncedEmails.length}
+                totalItems={totalCount}
                 pageSize={emailPageSize}
                 itemLabel="transactions"
                 onPageChange={setEmailPage}

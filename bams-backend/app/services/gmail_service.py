@@ -7,31 +7,39 @@ from email.utils import parsedate_to_datetime
 from html import unescape
 import time
 
+from google.auth.transport.requests import Request
 import requests
+from ..core.constants import (
+    BASE_RETRY_DELAY_SECONDS,
+    DEFAULT_EMAIL_FETCH_LIMIT,
+    GMAIL_BACKFILL_DAYS,
+    GMAIL_DETAIL_WORKERS,
+    GMAIL_MESSAGE_DETAIL_URL,
+    GMAIL_MESSAGES_URL,
+    GMAIL_PAGE_SIZE,
+    GMAIL_READ_SCOPE,
+    MAX_EMAIL_BODY_CHARS,
+    MAX_RETRY_ATTEMPTS,
+    MAX_RETRY_DELAY_SECONDS,
+    PAGE_THROTTLE_SECONDS,
+    RETRYABLE_STATUS_CODES,
+    TRACKED_EMAIL_DOMAINS,
+)
 from ..models.user import User
 from .credentials import build_credentials, get_token_scopes_from_tokeninfo
 
-GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
-GMAIL_MESSAGES_URL = "https://www.googleapis.com/gmail/v1/users/me/messages"
-GMAIL_MESSAGE_DETAIL_URL = "https://www.googleapis.com/gmail/v1/users/me/messages/{message_id}"
-DEFAULT_EMAIL_FETCH_LIMIT = 100
-GMAIL_BACKFILL_DAYS = 30
-GMAIL_PAGE_SIZE = 100
-GMAIL_DETAIL_WORKERS = 10
-MAX_EMAIL_BODY_CHARS = 10000
-MAX_RETRY_ATTEMPTS = 4
-BASE_RETRY_DELAY_SECONDS = 1
-MAX_RETRY_DELAY_SECONDS = 16
-PAGE_THROTTLE_SECONDS = 0.35
-RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
-TRACKED_EMAIL_DOMAINS = [
-    "github.com",
-    "flodataanalytics.com",
-    "axis.bank.in",
-    "hdfcbank.bank.in",
-    "indusind.com",
-    "kotak.bank.in"   
-]
+
+def _auth_headers_for_credentials(creds) -> dict[str, str] | None:
+    """ Given a Google credentials object, return the Authorization header for API requests. 
+    If the credentials are expired and have a refresh token, it will attempt to refresh them. 
+    If the credentials are invalid or cannot be refreshed, it returns None.
+    This prevents stale-token crashes during longer syncs."""
+
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+    if not creds.token:
+        return None
+    return {"Authorization": f"Bearer {creds.token}"}
 
 
 
@@ -249,41 +257,15 @@ def _parse_message_detail(detail: dict) -> dict | None:
 
 
 
-#  -------------------- Main funcion to fetch all the mails using threading
-def _hydrate_message_page(headers: dict, messages: list[dict], max_workers: int = GMAIL_DETAIL_WORKERS) -> list[dict]:
-    """ Takes a list of sparse email structural envelopes (containing just IDs) and passes them to a multi-threaded ThreadPoolExecutor mapping to fetch full content details concurrently."""
-
-    worker_count = max(1, min(max_workers, GMAIL_DETAIL_WORKERS, len(messages) or 1))
-
-    with ThreadPoolExecutor(max_workers=worker_count) as executor:
-        details = list(
-            executor.map(
-                lambda msg: _fetch_message_detail(headers, msg.get("id")),
-                messages,
-            )
-        )
-
-    parsed_emails = [
-        parsed_email
-        for parsed_email in (_parse_message_detail(detail) for detail in details)
-        if parsed_email
-    ]
-    parsed_emails.sort(key=lambda email: email.get("internalDate", 0), reverse=True)
-
-    return parsed_emails
-
-
-
-
 # ------------------ Main functions ----------------
 def verify_gmail_access(user: User, db=None) -> dict:
     """Verify if the user's access token has Gmail read permissions and return the scopes and access status."""
     creds = build_credentials(user)
-    active_token = creds.token
-    if not active_token:
+    headers = _auth_headers_for_credentials(creds)
+    if not headers:
         return {"gmail_read_access": False, "scopes": []}
 
-    scopes = get_token_scopes_from_tokeninfo(active_token)
+    scopes = get_token_scopes_from_tokeninfo(creds.token)
     has_access = GMAIL_READ_SCOPE in scopes
     return {"gmail_read_access": has_access, "scopes": scopes}
 
@@ -292,13 +274,12 @@ def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) 
     """Fetch the user's most recent Gmail emails from tracked sender domains."""
     
     creds = build_credentials(user)
-    active_token = creds.token
-    if not active_token:
+    headers = _auth_headers_for_credentials(creds)
+    if not headers:
         return {"emails": [], "message": "No access token available."}
     if not _tracked_domains():
         return {"emails": [], "message": "No tracked sender domains configured."}
 
-    headers = {"Authorization": f"Bearer {active_token}"}
     fetch_limit = max(1, min(max_results, 500))
 
     # Use Gmail's index search to fetch only emails from configured sender domains.
@@ -312,32 +293,34 @@ def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) 
     if not messages:
         return {"emails": [], "message": "No tracked emails found in this account."}
 
-    parsed_emails = _hydrate_message_page(headers, messages)
+    parsed_emails = hydrate_user_message_page(user, messages)
 
     return {"emails": parsed_emails}
 
-# Function used for setup of 30 day mail sync
-def iter_user_email_pages(
+def iter_user_message_pages(
     user: User,
     days: int = GMAIL_BACKFILL_DAYS,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
     page_size: int = GMAIL_PAGE_SIZE,
-    detail_workers: int = GMAIL_DETAIL_WORKERS,
 ):
-    """Yield parsed Gmail email pages for the configured sender domains within a date window."""
+    """Yield sparse Gmail message pages before hydrating full bodies.
+    It only fetches message IDs not whole body or whole object, So we can check DB, what msg id's are new and only hydrate for those ids only"""
 
     creds = build_credentials(user)
-    active_token = creds.token
-    if not active_token or not _tracked_domains():
+    if not _tracked_domains():
         return
 
-    headers = {"Authorization": f"Bearer {active_token}"}
     query = _build_date_window_query(days=days, start_date=start_date, end_date=end_date)
     page_token = None
     fetch_limit = max(1, min(page_size, 500))
 
+    page_index = 1
     while True:
+        headers = _auth_headers_for_credentials(creds)
+        if not headers:
+            return
+
         params = {
             "maxResults": fetch_limit,
             "q": query,
@@ -356,27 +339,63 @@ def iter_user_email_pages(
 
         payload = response.json()
         messages = payload.get("messages", [])
+        estimate = payload.get("resultSizeEstimate", len(messages))
+        total_pages = max(1, (estimate + fetch_limit - 1) // fetch_limit)
 
         if messages:
-            yield _hydrate_message_page(headers, messages, max_workers=detail_workers)
+            yield messages, page_index, total_pages
 
         page_token = payload.get("nextPageToken")
         if not page_token:
             break
 
+        page_index += 1
         time.sleep(PAGE_THROTTLE_SECONDS)
+
+
+def hydrate_user_message_page(
+    user: User,
+    messages: list[dict],
+    detail_workers: int = GMAIL_DETAIL_WORKERS,
+) -> list[dict]:
+    """Hydrate sparse Gmail message IDs into parsed email payloads.
+    This receives only the filtered/new Gmail IDs and fetches full email body/details"""
+    if not messages:
+        return []
+
+    creds = build_credentials(user)
+    headers = _auth_headers_for_credentials(creds)
+    if not headers:
+        return []
+
+    worker_count = max(1, min(detail_workers, GMAIL_DETAIL_WORKERS, len(messages)))
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        details = list(
+            executor.map(
+                lambda msg: _fetch_message_detail(headers, msg.get("id")),
+                messages,
+            )
+        )
+
+    parsed_emails = [
+        parsed_email
+        for parsed_email in (_parse_message_detail(detail) for detail in details)
+        if parsed_email
+    ]
+    parsed_emails.sort(key=lambda email: email.get("internalDate", 0), reverse=True)
+
+    return parsed_emails
 
 
 def get_latest_gmail_message_id(user: User) -> str | None:
     """Fetch only the single most recent message ID from Gmail for tracked domains."""
     creds = build_credentials(user)
-    active_token = creds.token
-    if not active_token:
+    headers = _auth_headers_for_credentials(creds)
+    if not headers:
         return None
     if not _tracked_domains():
         return None
 
-    headers = {"Authorization": f"Bearer {active_token}"}
     params = {"maxResults": 1, "q": _build_sender_query()}
 
     response = _request_get_with_backoff(GMAIL_MESSAGES_URL, headers=headers, params=params, timeout=10)

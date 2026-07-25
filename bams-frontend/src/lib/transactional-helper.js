@@ -5,6 +5,8 @@ const all_banks = [
   { name: "ICICI Bank", value: "icici bank" },
   { name: "HDFC Bank", value: "hdfc bank" },
   { name: "Indusind Bank", value: "indusind bank" },
+  { name: "State Bank of India", value: "state bank of india" },
+  { name: "Bank of Baroda", value: "bank of baroda" },
 ];
 
 const all_account_holder_names_ = [
@@ -32,18 +34,24 @@ const all_account_holder_names_ = [
   { name: "Arvind Gupta", value: "arvind gupta" },
   { name: "Arivind Gupta HUF", value: "arivind gupta huf" },
   { name: "Arvind Gupta Oorja/UG", value: "arvind gupta oorja/ug" },
+  { name: "UMANG NRO", value: "umang nro" },
 ];
 
 const all_account_types = [
+  { name: "Business", value: "business" },
+  { name: "Common", value: "common" },
+  { name: "HUF", value: "huf" },
+  { name: "Personal", value: "personal" },
+  { name: "Firm", value: "firm" },
   { name: "SBPRV", value: "sbprv" },
   { name: "SBSPA", value: "sbspa" },
   { name: "SBEZY", value: "sbezy" },
   { name: "SBSPL", value: "sbspl" },
   { name: "NRE", value: "nre" },
   { name: "SAAQB25K", value: "saaqb25k" },
-  { name: "Savings Account", value: "savings account" },
+  { name: "Savings", value: "savings" },
   { name: "Fixed Deposit", value: "fixed deposit" },
-  { name: "Current Account", value: "current account" },
+  { name: "Current", value: "current" },
 ];
 
 const all_account_numbers = [
@@ -85,6 +93,10 @@ const all_account_numbers = [
   { name: "XX2021", value: "xx2021" },
   { name: "XX7141", value: "xx7141" },
   { name: "XX4845", value: "xx4845" },
+  { name: "XX0673", value: "xx0673" },
+  { name: "XX9252", value: "xx9252" },
+  { name: "XX3384", value: "xx3384" },
+  { name: "XX8294", value: "xx8294" },
 ];
 
 const individual_account = [
@@ -105,6 +117,15 @@ const individual_account = [
   { name: "Umang Gupta NRE A/c - Axis Bank - XX7701", value: "umang gupta nre a/c - axis bank - xx7701" },
   { name: "Vaibhav Gupta - Axis Bank - XX2994", value: "vaibhav gupta - axis bank - xx2994" },
 
+  // --- Bank of Baroda ---
+  { name: "Sunita Gupta - Bank of Baroda - XX0673", value: "sunita gupta - bank of baroda - xx0673" },
+
+  // --- Indusind Bank Section ---
+  { name: "Arvind Kumar Gupta - Indusind Bank - XX7208", value: "arvind kumar gupta - indusind bank - xx7208" },
+  { name: "Deepali Gupta - Indusind Bank - XX7208", value: "deepali gupta - indusind bank - xx7208" },
+  { name: "Samriddhi Gupta - Indusind Bank - XX7208", value: "samriddhi gupta - indusind bank - xx7208" },
+  { name: "Vaibhav Gupta - Indusind Bank - XX2020", value: "vaibhav gupta - indusind bank - xx2020" },
+
   // --- ICICI Bank Section ---
   { name: "Ram Niwas Gupta - ICICI Bank - XX4782", value: "ram niwas gupta - icici bank - xx4782" },
   { name: "Ram Niwas Gupta HUF - ICICI Bank - XX9814", value: "ram niwas gupta huf - icici bank - xx9814" },
@@ -122,14 +143,19 @@ const individual_account = [
   { name: "Umang Gupta NRE - ICICI Bank - XX9775", value: "umang gupta nre - icici bank - xx9775" },
 
   // --- HDFC Bank Section ---
+  { name: "UMANG NRO - HDFC Bank - XX9252", value: "umang nro - hdfc bank - xx9252" },
+  { name: "UMANG NRE - HDFC Bank - XX3384", value: "umang nre - hdfc bank - xx3384" },
   { name: "Deepali Gupta - HDFC Bank - XX3815", value: "deepali gupta - hdfc bank - xx3815" },
   { name: "Vaibhav Gupta - HDFC Bank - XX0290", value: "vaibhav gupta - hdfc bank - xx0290" },
-  { name: "Arvind Gupta - HDFC Bank - XX5763", value: "arvind gupta - hdfc bank - xx5763" },
+  { name: "Arvind Kumar Gupta - HDFC Bank - XX5763", value: "arvind kumar gupta - hdfc bank - xx5763" },
   { name: "Arivind Gupta HUF - HDFC Bank - XX8525", value: "arivind gupta huf - hdfc bank - xx8525" },
   { name: "Arvind Gupta Oorja/UG - HDFC Bank - XX8673", value: "arvind gupta oorja/ug - hdfc bank - xx8673" },
   { name: "Ujjwal Gupta - HDFC Bank - XX2021", value: "ujjwal gupta - hdfc bank - xx2021" },
   { name: "Om Prakash Gupta - HDFC Bank - XX7141", value: "om prakash gupta - hdfc bank - xx7141" },
-  { name: "Sunita Gupta - HDFC Bank - XX4845", value: "sunita gupta - hdfc bank - xx4845" }
+  { name: "Sunita Gupta - HDFC Bank - XX4845", value: "sunita gupta - hdfc bank - xx4845" },
+
+  // --- State Bank of India ---
+  { name: "Arvind Kumar Gupta - State Bank of India - XX8294", value: "arvind kumar gupta - state bank of india - xx8294" }
 ];
 
 const transactionTypes = [
@@ -152,6 +178,8 @@ const toAmount = (value) => {
 // Text strings are lowercased and stripped of whitespace
 const normalizeValue = (value = "") => String(value || "").trim();
 const normalizeSearchValue = (value = "") => normalizeValue(value).toLowerCase();
+const compactSearchValue = (value = "") =>
+  normalizeSearchValue(value).replace(/[^a-z0-9]/g, "");
 
 const ALL_FILTER_VALUE = "all";
 const MODE_CHART_COLORS = [
@@ -298,64 +326,8 @@ const toSelectOptions = (records = [], key, allLabel) => {
 };
 
 
-// ---------------------- Main function to generate filter options to show in the dropdowns ----------------------
-const buildCombinedSelectOptions = (records = [], key, predefinedList = [], allLabel) => {
-  const optionsMap = new Map();
-
-  predefinedList.forEach((item) => {
-    const label = item.name || item.label || String(item.value || "");
-    const val = String(item.value ?? "").trim();
-    if (val) {
-      optionsMap.set(val.toLowerCase(), { label, value: val });
-    }
-  });
-
-  records.forEach((record) => {
-    const rawVal = key.includes(".")
-      ? getNestedValue(record, key)
-      : record?.[key];
-    const val = normalizeValue(rawVal);
-    if (val) {
-      const lowerVal = val.toLowerCase();
-      if (!optionsMap.has(lowerVal)) {
-        optionsMap.set(lowerVal, { label: val, value: val });
-      }
-    }
-  });
-
-  const predefinedKeysOrder = predefinedList
-    .map((item) => String(item.value ?? "").trim().toLowerCase())
-    .filter(Boolean);
-
-  const predefinedOptionsOrdered = [];
-  const dynamicOptions = [];
-
-  optionsMap.forEach((opt, lowerVal) => {
-    if (predefinedKeysOrder.includes(lowerVal)) {
-      predefinedOptionsOrdered.push({
-        index: predefinedKeysOrder.indexOf(lowerVal),
-        option: opt,
-      });
-    } else {
-      dynamicOptions.push(opt);
-    }
-  });
-
-  predefinedOptionsOrdered.sort((a, b) => a.index - b.index);
-  const orderedPredefinedList = predefinedOptionsOrdered.map((o) => o.option);
-
-  dynamicOptions.sort((a, b) => a.label.localeCompare(b.label));
-
-  return [
-    { label: allLabel, value: ALL_FILTER_VALUE },
-    ...orderedPredefinedList,
-    ...dynamicOptions,
-  ];
-};
-
 // Function to build select options using only predefined list 
 const buildSelectOptions = (
-  key,
   predefinedList = [],
   allLabel
 ) => {
@@ -373,62 +345,6 @@ const buildSelectOptions = (
 };
 
 
-const buildIndividualAccountOptions = (records = [], predefinedList = [], allLabel) => {
-  const optionsMap = new Map();
-
-  predefinedList.forEach((item) => {
-    const label = item.name || item.label || String(item.value || "");
-    const val = String(item.value ?? "").trim();
-    if (val) {
-      optionsMap.set(val.toLowerCase(), { label, value: val });
-    }
-  });
-
-  records.forEach((record) => {
-    const holder = normalizeValue(record?.account_holder_name);
-    const bank = normalizeValue(record?.bank_name);
-    const account = normalizeValue(record?.account_number);
-
-    if (holder && bank && account) {
-      const name = `${holder} - ${bank} - ${account}`;
-      const val = name.toLowerCase();
-      if (!optionsMap.has(val)) {
-        optionsMap.set(val, { label: name, value: val });
-      }
-    }
-  });
-
-  const predefinedKeysOrder = predefinedList
-    .map((item) => String(item.value ?? "").trim().toLowerCase())
-    .filter(Boolean);
-
-  const predefinedOptionsOrdered = [];
-  const dynamicOptions = [];
-
-  optionsMap.forEach((opt, lowerVal) => {
-    if (predefinedKeysOrder.includes(lowerVal)) {
-      predefinedOptionsOrdered.push({
-        index: predefinedKeysOrder.indexOf(lowerVal),
-        option: opt,
-      });
-    } else {
-      dynamicOptions.push(opt);
-    }
-  });
-
-  predefinedOptionsOrdered.sort((a, b) => a.index - b.index);
-  const orderedPredefinedList = predefinedOptionsOrdered.map((o) => o.option);
-
-  dynamicOptions.sort((a, b) => a.label.localeCompare(b.label));
-
-  return [
-    { label: allLabel, value: ALL_FILTER_VALUE },
-    ...orderedPredefinedList,
-    ...dynamicOptions,
-  ];
-};
-
-
 // ---------------------- Main function to generate filter options to show in the dropdowns ----------------------
 export const getTransactionFilterOptions = (records = []) => ({
   entities: toSelectOptions(
@@ -436,9 +352,9 @@ export const getTransactionFilterOptions = (records = []) => ({
     "email_metadata.forwarded_by_name",
     "All Entities",
   ),
-  banks: buildCombinedSelectOptions([], "bank_name", all_banks, "All Banks"),
-  accounts: buildCombinedSelectOptions([], "account_number", all_account_numbers, "All Accounts"),
-  transactionTypes: buildCombinedSelectOptions([], "txn_type", transactionTypes, "All Types"),
+  banks: buildSelectOptions(all_banks, "All Banks"),
+  accounts: buildSelectOptions(all_account_numbers, "All Accounts"),
+  transactionTypes: buildSelectOptions(transactionTypes, "All Types"),
   modes: toSelectOptions(records, "mode", "All Modes"),
   categories: toSelectOptions(records, "category", "All Categories"),
   statuses: toSelectOptions(
@@ -447,22 +363,34 @@ export const getTransactionFilterOptions = (records = []) => ({
     "All Statuses",
   ),
   currencies: toSelectOptions(records, "currency", "All Currencies"),
-  accountHolderNames: buildCombinedSelectOptions(
-    [],
-    "account_holder_name",
+  accountHolderNames: buildSelectOptions(
     all_account_holder_names_,
     "All Account Holders",
   ),
-  accountTypes: buildCombinedSelectOptions(
-    records,
-    "account_type",
+  accountTypes: buildSelectOptions(
     all_account_types,
     "All Account Types",
   ),
-  individualAccounts: buildIndividualAccountOptions(
-    [],
+  individualAccounts: buildSelectOptions(
     individual_account,
     "All Individual Accounts",
+  ),
+});
+
+export const getAccountFilterOptions = () => ({
+  banks: buildSelectOptions(all_banks, "All Banks"),
+  accounts: buildSelectOptions(all_account_numbers, "All Accounts"),
+  individualAccounts: buildSelectOptions(
+    individual_account,
+    "All Individual Accounts",
+  ),
+  accountHolderNames: buildSelectOptions(
+    all_account_holder_names_,
+    "All Account Holders",
+  ),
+  accountTypes: buildSelectOptions(
+    all_account_types,
+    "All Account Types",
   ),
 });
 
@@ -476,26 +404,67 @@ const getActiveFilterValues = (filterValue) => {
     .filter((value) => value && value !== ALL_FILTER_VALUE);
 };
 
+const getFilterMatchTerms = (value, filterKind) => {
+  const normalizedValue = normalizeSearchValue(value);
+  if (!normalizedValue) return [];
+
+  const terms = [normalizedValue];
+  const compactValue = compactSearchValue(normalizedValue);
+
+  if (filterKind === "bank") {
+    const bankKey = normalizedValue
+      .replace(/\bbank\b/g, "")
+      .replace(/\blimited\b/g, "")
+      .replace(/\bltd\b/g, "")
+      .trim();
+    if (bankKey) terms.push(bankKey);
+
+    ["axis", "icici", "hdfc", "indusind", "kotak"].forEach((bankTerm) => {
+      if (compactValue.includes(bankTerm)) terms.push(bankTerm);
+    });
+  }
+
+  if (filterKind === "account") {
+    const digits = normalizedValue.replace(/\D/g, "");
+    if (digits.length >= 4) terms.push(digits.slice(-4));
+    if (compactValue) terms.push(compactValue);
+  }
+
+  if (filterKind === "accountType") {
+    [" account", " a/c"].forEach((suffix) => {
+      if (normalizedValue.endsWith(suffix)) {
+        terms.push(normalizedValue.slice(0, -suffix.length).trim());
+      }
+    });
+  }
+
+  return Array.from(new Set(terms.filter(Boolean)));
+};
+
 
 // Filter matching functions to check if a record matches the active filter values for a given field
 // Function compares one record against one filter.
-const matchesSelectFilter = (recordValue, filterValue) => {
+const matchesSelectFilter = (recordValue, filterValue, filterKind) => {
   const activeValues = getActiveFilterValues(filterValue);
   if (!activeValues.length) return true;
 
   const normalizedRecordValue = normalizeSearchValue(recordValue);
+  const compactRecordValue = compactSearchValue(recordValue);
   if (!normalizedRecordValue) return false;
 
-  return activeValues.some(
-    (activeValue) => {
-      const normalizedActiveValue = normalizeSearchValue(activeValue);
-      if (!normalizedActiveValue) return false;
+  return activeValues.some((activeValue) => {
+    const matchTerms = getFilterMatchTerms(activeValue, filterKind);
+    return matchTerms.some((term) => {
+      const compactTerm = compactSearchValue(term);
       return (
-        normalizedRecordValue.includes(normalizedActiveValue) ||
-        normalizedActiveValue.includes(normalizedRecordValue)
+        normalizedRecordValue.includes(term) ||
+        term.includes(normalizedRecordValue) ||
+        (compactTerm &&
+          (compactRecordValue.includes(compactTerm) ||
+            compactTerm.includes(compactRecordValue)))
       );
-    }
-  );
+    });
+  });
 };
 
 const matchesIndividualAccountFilter = (record, filterValue) => {
@@ -510,8 +479,8 @@ const matchesIndividualAccountFilter = (record, filterValue) => {
 
     return (
       matchesSelectFilter(record?.account_holder_name, expectedHolder) &&
-      matchesSelectFilter(record?.bank_name, expectedBank) &&
-      matchesSelectFilter(record?.account_number, expectedAccount)
+      matchesSelectFilter(record?.bank_name, expectedBank, "bank") &&
+      matchesSelectFilter(record?.account_number, expectedAccount, "account")
     );
   });
 };
@@ -552,12 +521,12 @@ export const filterTransactions = (
   }
   if (getActiveFilterValues(normalizedFilters.bank).length) {
     selectFilterChecks.push((record) =>
-      matchesSelectFilter(record?.bank_name, normalizedFilters.bank),
+      matchesSelectFilter(record?.bank_name, normalizedFilters.bank, "bank"),
     );
   }
   if (getActiveFilterValues(normalizedFilters.account).length) {
     selectFilterChecks.push((record) =>
-      matchesSelectFilter(record?.account_number, normalizedFilters.account),
+      matchesSelectFilter(record?.account_number, normalizedFilters.account, "account"),
     );
   }
   if (getActiveFilterValues(normalizedFilters.txnType).length) {
@@ -598,7 +567,7 @@ export const filterTransactions = (
   }
   if (getActiveFilterValues(normalizedFilters.accountType).length) {
     selectFilterChecks.push((record) =>
-      matchesSelectFilter(record?.account_type, normalizedFilters.accountType),
+      matchesSelectFilter(record?.account_type, normalizedFilters.accountType, "accountType"),
     );
   }
   if (getActiveFilterValues(normalizedFilters.individualAccount).length) {
@@ -945,4 +914,31 @@ export const getTopTransactions = (records = [], limit = 5) => {
     (a, b) => toAmount(b.amount) - toAmount(a.amount),
   );
   return filteredTxns.slice(0, limit);
+};
+
+export const getTransactionFilterOptionsFromBackend = (backendOptions = {}) => {
+  const mockRecords = [];
+  const maxLen = Math.max(
+    backendOptions.entities?.length || 0,
+    backendOptions.modes?.length || 0,
+    backendOptions.categories?.length || 0,
+    backendOptions.statuses?.length || 0,
+    backendOptions.currencies?.length || 0
+  );
+
+  for (let i = 0; i < maxLen; i++) {
+    mockRecords.push({
+      email_metadata: {
+        forwarded_by_name: backendOptions.entities?.[i],
+      },
+      mode: backendOptions.modes?.[i],
+      category: backendOptions.categories?.[i],
+      parser_metadata: {
+        parsed_status: backendOptions.statuses?.[i]
+      },
+      currency: backendOptions.currencies?.[i],
+    });
+  }
+
+  return getTransactionFilterOptions(mockRecords);
 };

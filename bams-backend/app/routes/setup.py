@@ -4,19 +4,15 @@ import asyncio
 import json
 from sqlalchemy.orm import Session
 
+from ..core.constants import SYNC_STATUS_RUNNING
 from ..core.dependencies import get_current_user
+from ..models.transactions import Transactions
 from ..models.user import User
-from ..services.setup_service import setup_process_with_progress, perform_incremental_sync, _is_sync_genuinely_running, _mark_sync_failed, SYNC_STATUS_RUNNING
+from ..services.setup_service import setup_process_with_progress, perform_incremental_sync, _is_sync_genuinely_running, _mark_sync_failed
 from ..database import get_db
-from ..services.setup_service import build_credentials
 from ..utils.date_utils import datetime_to_iso
-from ..utils.transaction_utils import (
-    TRANSACTION_DATA_RANGE,
-    parse_sheet_transaction_row,
-    transaction_timestamp,
-)
-from googleapiclient.discovery import build
-from ..utils.sheets_utils import _get_sheet_title
+from ..utils.db_utils import transaction_to_schema_dict
+from ..utils.transaction_utils import transaction_timestamp
 
 
 router = APIRouter(prefix="/api/setup", tags=["setup"])
@@ -103,35 +99,26 @@ def get_synced_emails(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Retrieve parsed transactions directly from the user's Google Sheet."""
+    """Fetch parsed transactions from the DB instead of sheets and send them to frontend"""
     
     
-    if not current_user.is_setup_completed or not current_user.spreadsheet_id:
+    if not current_user.is_setup_completed:
         return {"transactions": []}
-    
-    credentials = build_credentials(current_user)
-    sheets_service = build("sheets", "v4", credentials=credentials)
-    
-    try:
-        sheet_title = _get_sheet_title(sheets_service, current_user.spreadsheet_id)
-        # Read all transaction-schema rows except the header.
-        result = sheets_service.spreadsheets().values().get(
-            spreadsheetId=current_user.spreadsheet_id,
-            range=f"'{sheet_title}'!{TRANSACTION_DATA_RANGE}"
-        ).execute()
-        
-        rows = result.get("values", [])
-        
-        transactions = []
-        for row in rows:
-            transaction = parse_sheet_transaction_row(row)
-            if transaction:
-                transactions.append(transaction)
 
+    try:
+        transaction_rows = (
+            db.query(Transactions)
+            .filter(Transactions.user_id == current_user.id)
+            .all()
+        )
+        transactions = [
+            transaction_to_schema_dict(transaction)
+            for transaction in transaction_rows
+        ]
         transactions.sort(key=transaction_timestamp, reverse=True)
         return {"transactions": transactions}
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to read synced transactions from Google Sheets: {str(e)}"
+            detail=f"Failed to read synced transactions from database: {str(e)}"
         )

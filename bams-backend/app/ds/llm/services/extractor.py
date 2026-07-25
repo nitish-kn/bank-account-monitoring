@@ -1,18 +1,16 @@
 import json
 import re
 import difflib
+from email.utils import parseaddr
 
 from .html_cleaner import clean_email_body
 from .prompt_builder import build_batch_prompt
 from .llm_client import call_llm
 
-from ..utils.hashing import generate_hash
-from ..utils.datetime_utils import get_current_timestamp
 from ..utils.account_lookup import fill_missing_account_details
+from ..utils.credit_card_lookup import fill_missing_credit_card_details
 
 from ..schemas.transaction_schema import Transaction
-
-from ....config import settings
 
 
 def extract_transactions(emails):
@@ -83,35 +81,27 @@ def extract_transactions(emails):
                 result["amount"]
             )
 
-        if result.get("inr_equivalent") is not None:
-            result["inr_equivalent"] = str(
-                result["inr_equivalent"]
-            )
-
         if result.get("balance_after_txn") is not None:
             result["balance_after_txn"] = str(
                 result["balance_after_txn"]
             )
 
-        # Default account holder
-
-        if not result.get(
-            "account_holder_name"
-        ):
-            result[
-                "account_holder_name"
-            ] = "Customer"
-
         result = fill_missing_account_details(result)
+        result = fill_missing_credit_card_details(result)
 
-        # Default forwarded flag
+        # Placeholder holder name only when we actually have a (validated) own
+        # account. For beneficiary debits and accounts not in Bank Accounts V1,
+        # fill_missing_account_details has already nulled account_number +
+        # account_holder_name, and we must leave the name null rather than
+        # attribute the transaction to "Customer".
+        if result.get("account_number") and not result.get("account_holder_name"):
+            result["account_holder_name"] = "Customer"
 
-        if not result.get(
-            "is_forwarded"
-        ):
-            result[
-                "is_forwarded"
-            ] = "No"
+        # Cash withdrawal has no real counterparty — it's the account
+        # holder withdrawing their own money, so "same acc to same acc"
+        # would otherwise look like a conflicting transfer.
+        if str(result.get("category") or "").strip().lower() == "cash withdrawal":
+            result["counterparty"] = "Self"
 
         # Confidence score to string
 
@@ -139,32 +129,17 @@ def extract_transactions(emails):
             "gmail_message_id"
         ] = email.get("id")
 
-        result[
-            "parser_name"
-        ] = settings.PARSER_NAME
+        result["source"] = "email"
 
-        result[
-            "parser_version"
-        ] = settings.PARSER_VERSION
+        # email_metadata is filled from the raw email, not the LLM, to save tokens
+        display_name, from_email = parseaddr(email.get("from") or "")
 
-        result[
-            "parsed_at"
-        ] = get_current_timestamp()
-
-        # Raw data enrichment
-
-        if "raw_data" not in result:
-            result["raw_data"] = {}
-
-        result["raw_data"][
-            "body"
-        ] = email.get("body")
-
-        result["raw_text_hash"] = (
-            generate_hash(
-                email.get("body", "")
-            )
-        )
+        result["email_metadata"] = {
+            "original_from_email": from_email or None,
+            "original_from_name": display_name or None,
+            "subject": email.get("subject"),
+            "body": email.get("body"),
+        }
 
         validated_result = (
             Transaction.model_validate(
@@ -210,20 +185,7 @@ def extract_transactions(emails):
         else:
             canonical = ""
 
-        # Append details like account_number or ref_number in parentheses if present
         for member in g["members"]:
-            suffix_parts = []
-            acct = member.get("account_number")
-            ref = member.get("ref_number")
-            if acct:
-                suffix_parts.append(f"Account: {acct}")
-            if ref:
-                suffix_parts.append(f"Ref: {ref}")
-
-            suffix = ""
-            if suffix_parts:
-                suffix = " (" + ", ".join(suffix_parts) + ")"
-
-            member["counterparty"] = canonical + suffix if canonical else member.get("counterparty")
+            member["counterparty"] = canonical or member.get("counterparty")
 
     return final_results

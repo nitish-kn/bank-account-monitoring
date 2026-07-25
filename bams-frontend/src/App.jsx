@@ -7,6 +7,7 @@ import Layout from "./components/Layout";
 import ConsolidatedView from "./pages/ConsolidatedView";
 import { Transactions } from "./pages/Transactions";
 import Dashboard from "./pages/Dashboard";
+import Accounts from "./pages/Accounts";
 
 function App() {
   const { isAuthenticated, accessToken } = useAuthStore();
@@ -20,6 +21,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/consolidated-view" element={<ConsolidatedView />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route path="/all-accounts" element={<Accounts />} />
       </Route>
       
       <Route

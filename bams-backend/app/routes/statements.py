@@ -17,6 +17,6 @@ async def upload_statements(
 ):
     """
     Route handler to receive statement files, parse them using LLM,
-    and save extracted transaction rows to Google Sheets.
+    and save extracted transaction rows through the DB transaction pipeline.
     """
-    return await process_and_upload_statements(current_user, files)
+    return await process_and_upload_statements(current_user, files, db)

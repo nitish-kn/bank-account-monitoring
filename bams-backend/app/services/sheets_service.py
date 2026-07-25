@@ -1,17 +1,11 @@
-import requests
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
-from sqlalchemy.orm import Session
-from ..config import settings
-from ..models.user import User
-import requests
 from sqlalchemy.orm import Session
 from ..models.user import User
+from ..core.constants import (
+    DRIVE_FILE_SCOPE,
+    SPREADSHEETS_READONLY_SCOPE,
+    SPREADSHEETS_SCOPE,
+)
 from .credentials import build_credentials, get_token_scopes_from_tokeninfo
-
-DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
-SPREADSHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
-SPREADSHEETS_READONLY_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 
 
 def verify_sheet_access(user: User, db: Session = None) -> dict:

@@ -10,10 +10,10 @@ const dropdownTriggerClassName = "h-9! w-full justify-between! text-sm";
 const dropdownContentClassName = "min-w-56 max-h-72 overflow-y-auto";
 
 const getAllOptionLabel = (options = [], fallback = "All") => (
-  options.find((option) => option?.value === "all")?.label || fallback
+  options?.find((option) => option?.value === "all")?.label || fallback
 );
 
-const DashboardFilter = ({
+const TransactionFilters = ({
   filters = DEFAULT_TRANSACTION_FILTERS,
   filterOptions,
   onApply,
@@ -43,7 +43,7 @@ const DashboardFilter = ({
   };
 
   return (
-    <div className="bg-white py-4 px-6 space-y-4 rounded-xl shadow-md">
+    <div className="bg-white py-4 px-6 space-y-4 rounded-xl shadow-md mb-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-900 mb-2">Filters</h2>
         <CustomButton
@@ -68,24 +68,6 @@ const DashboardFilter = ({
             inputClassName="rounded-md border-gray-200 pl-3 pr-10"
           />
         </FilterField>
-
-        {/* <FilterField label="Entity">
-          <CustomDropDown
-            value={draftFilters.entity}
-            options={filterOptions?.entities}
-            placeholder={getAllOptionLabel(filterOptions?.entities, "All Entities")}
-            onValueChange={(value) => updateFilter("entity", value)}
-            multiple
-            showSearch
-            searchPlaceholder="Search entities..."
-            align="start"
-            buttonVariant="outline"
-            buttonColor="gray"
-            buttonSize="2"
-            triggerClassName={dropdownTriggerClassName}
-            contentClassName={dropdownContentClassName}
-          />
-        </FilterField> */}
 
         <FilterField label="Bank">
           <CustomDropDown
@@ -229,22 +211,6 @@ const DashboardFilter = ({
           />
         </FilterField>
 
-        {/* <FilterField label="Status">
-          <CustomDropDown
-            value={draftFilters.status}
-            options={filterOptions?.statuses}
-            placeholder={getAllOptionLabel(filterOptions?.statuses, "All Statuses")}
-            onValueChange={(value) => updateFilter("status", value)}
-            multiple
-            align="start"
-            buttonVariant="outline"
-            buttonColor="gray"
-            buttonSize="2"
-            triggerClassName={dropdownTriggerClassName}
-            contentClassName={dropdownContentClassName}
-          />
-        </FilterField> */}
-
         <FilterField label="Amount Range (₹)" className="sm:col-span-2">
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-md border border-gray-200 bg-white px-2">
             <input
@@ -270,22 +236,6 @@ const DashboardFilter = ({
             />
           </div>
         </FilterField>
-
-        {/* <FilterField label="Currency">
-          <CustomDropDown
-            value={draftFilters.currency}
-            options={filterOptions?.currencies}
-            placeholder={getAllOptionLabel(filterOptions?.currencies, "All Currencies")}
-            onValueChange={(value) => updateFilter("currency", value)}
-            multiple
-            align="start"
-            buttonVariant="outline"
-            buttonColor="gray"
-            buttonSize="2"
-            triggerClassName={dropdownTriggerClassName}
-            contentClassName={dropdownContentClassName}
-          />
-        </FilterField> */}
       </div>
 
       <div className="flex items-end gap-2 sm:col-span-2 xl:col-span-2 justify-end">
@@ -313,4 +263,4 @@ const DashboardFilter = ({
   );
 };
 
-export default DashboardFilter;
+export default TransactionFilters;

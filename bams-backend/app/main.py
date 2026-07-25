@@ -1,17 +1,13 @@
-from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .database import init_database
+from .database import init_database, check_connection
 from . import models
-from .routes import auth, family, gmail, invites, sheets, setup, statements
+from .routes import accounts, auth, family, gmail, invites, sheets, setup, statements, transactions
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi import status
-    
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-FRONTEND_DIST_DIR = PROJECT_ROOT / "bams-frontend" / "dist"
-FRONTEND_INDEX_FILE = FRONTEND_DIST_DIR / "index.html"
+from .core.constants import FRONTEND_DIST_DIR, FRONTEND_INDEX_FILE, PROJECT_ROOT
 
+check_connection()
 init_database()
 
 app = FastAPI()
@@ -32,6 +28,8 @@ app.include_router(invites.router)
 app.include_router(sheets.router)
 app.include_router(setup.router)
 app.include_router(statements.router)
+app.include_router(transactions.router)
+app.include_router(accounts.router)
 
 
 # @app.get("/", tags=["Root"])

@@ -1,33 +1,49 @@
 import { Table } from "@radix-ui/themes";
-import { Triangle } from "lucide-react";
+import { ChevronUp, ChevronDown, ArrowUpDown } from "lucide-react";
 
-const CustomTableHeader = ({ columns = [] }) => {
+const CustomTableHeader = ({ columns = [], sort, onSort }) => {
   return (
     <Table.Header>
       <Table.Row className="bg-blue-50">
-        {columns.map((column) => (
-          <Table.ColumnHeaderCell
-            key={column.key}
-            className={`
-              sticky top-0 z-10 border-b border-gray-200 bg-gray-50
-              px-4 py-3 text-xs font-bold uppercase tracking-wide 
-              ${column.width || ""}
-              ${column.headerClassName || ""}
-            `}
-          >
-            <span className="flex items-center">
-              {column.header}
+        {columns.map((column) => {
+          const isSortable = column.sortable;
+          const sortKey = column.sortKey || column.key;
+          const isSorted = sort && sort.field === sortKey;
+          const isAsc = sort && sort.order === "asc";
 
-              {(column?.key !== "source_name" && column?.key !== "actions") && 
-              (
-                <>
-                  <Triangle className="h-2.5 w-2.5 border-0 ml-1 fill-gray-400 hover:fill-gray-600 transition-transform duration-200 hover:cursor-pointer" stroke="none"/>
-                  <Triangle className="h-2.5 w-2.5 border-0 rotate-180 fill-gray-400 hover:fill-gray-600 transition-transform duration-200 hover:cursor-pointer" stroke="none"/>
-                </>
+          return (
+            <Table.ColumnHeaderCell
+              key={column.key}
+              style={column.columnWidth ? { width: column.columnWidth } : undefined}
+              className={`
+                sticky top-0 z-10 border-b border-gray-200 bg-gray-50
+                px-4 py-3 text-xs font-bold uppercase tracking-wide 
+                ${column.width || ""}
+                ${column.headerClassName || ""}
+              `}
+            >
+              {isSortable ? (
+                <div
+                  className="flex min-w-0 items-center gap-1.5 cursor-pointer select-none"
+                  onClick={() => onSort && onSort(sortKey)}
+                >
+                  <span className="truncate">{column.header}</span>
+                  {isSorted ? (
+                    isAsc ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-blue-600" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="h-3.5 w-3.5 text-gray-400 opacity-40 hover:opacity-100" />
+                  )}
+                </div>
+              ) : (
+                column.header
               )}
-            </span>
-          </Table.ColumnHeaderCell>
-        ))}
+            </Table.ColumnHeaderCell>
+          );
+        })}
       </Table.Row>
     </Table.Header>
   );

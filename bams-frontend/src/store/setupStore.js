@@ -28,6 +28,8 @@ export const useSetupStore = create((set, get) => ({
   lastSyncedEmailDate: null,
   syncStatus: null,
   abortController: null,          // Keep reference to AbortController for cleanup
+  refreshTrigger: 0,
+  triggerRefresh: () => set((state) => ({ refreshTrigger: state.refreshTrigger + 1 })),
   syncPollIntervalId: null,
   lastDashboardRefreshAt: 0,
   hasAutoSyncedDashboard: false,  // Track if we've auto-synced in this session
@@ -167,7 +169,7 @@ export const useSetupStore = create((set, get) => ({
                 abortController: null,
               });
 
-              useEmailStore.getState().fetchSyncedEmails({ force: true });
+              get().triggerRefresh();
               if (isBackgroundSyncRunning) {
                 get().startSyncStatusPolling();
               }
@@ -301,7 +303,7 @@ export const useSetupStore = create((set, get) => ({
         set({ lastDashboardRefreshAt: now });
 
         // Call the email refresh
-        useEmailStore.getState().fetchSyncedEmails({ force: true });
+        get().triggerRefresh();
       }
 
       if (isCompleted || isFailed) {
@@ -309,7 +311,7 @@ export const useSetupStore = create((set, get) => ({
         if (isCompleted) {
 
           // Call the email refresh
-          useEmailStore.getState().fetchSyncedEmails({ force: true });
+          get().triggerRefresh();
         }
       }
 
@@ -380,7 +382,7 @@ export const useSetupStore = create((set, get) => ({
       if (isRunning) {
         get().startSyncStatusPolling();
       } else {
-        await useEmailStore.getState().fetchSyncedEmails({ force: true });
+        get().triggerRefresh();
       }
 
       return response.data;

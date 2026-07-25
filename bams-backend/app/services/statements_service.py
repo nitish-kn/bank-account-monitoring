@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import UploadFile, HTTPException
 from googleapiclient.discovery import build
 from pathlib import Path
@@ -5,23 +7,26 @@ import hashlib
 import re
 from uuid import uuid4
 from typing import List
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
+from ..core.constants import UPLOAD_DIR
+from ..database import SessionLocal
 from ..models.user import User
 from ..services.credentials import build_credentials
-from ..utils.sheets_utils import _get_sheet_title, _read_existing_column_values
-from ..utils.transaction_utils import (
-    transactions_to_sheet_rows,
-    transaction_column_for_field,
+from ..utils.db_utils import (
+    save_valid_transaction_to_db,
+    update_parsed_status_to_db,
 )
-from .setup_service import append_sheet_with_emails
-
-BACKEND_ROOT = Path(__file__).resolve().parents[2]
-UPLOAD_DIR = BACKEND_ROOT / "uploads"
+from ..utils.sheets_utils import _get_sheet_title
+from .setup_service import _sync_transactions_to_sheet
 
 
-def _parse_statement_pdf(pdf_path: Path) -> list[dict]:
+# -------------------------- Main function which calls LLM ------------
+def _parse_statement_pdf_sync(pdf_path: Path, user_id: int) -> list[dict]:
+    """Parse a statement PDF through the shared LLM statement function."""
     try:
-        from ..ds.llm.app import run
+        from ..ds.llm.main import process_statement
     except ModuleNotFoundError as error:
         missing_dependency = error.name or "PDF extraction dependency"
         raise HTTPException(
@@ -32,10 +37,13 @@ def _parse_statement_pdf(pdf_path: Path) -> list[dict]:
             ),
         ) from error
 
-    return run(pdf_path)
+    return asyncio.run(process_statement(file_path=str(pdf_path), user_id=user_id))
 
 
+# --------------------------- Helper function -------------------------
 def _safe_upload_name(filename: str | None, index: int) -> str:
+    """ Generate filename with uuid to prevent collisions """
+
     original_name = (filename or f"statement_{index}.pdf").replace("\\", "/").split("/")[-1]
     path = Path(original_name)
     stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", path.stem).strip("._") or f"statement_{index}"
@@ -43,11 +51,8 @@ def _safe_upload_name(filename: str | None, index: int) -> str:
     return f"{stem}_{uuid4().hex}{suffix}"
 
 
-def _normalize_reference(value: str | None) -> str:
-    return str(value or "").strip().lower()
-
-
 def _fallback_reference(transaction: dict) -> str:
+    """ Create fallback reference number"""
     raw_key = "|".join(
         str(transaction.get(field) or "").strip()
         for field in (
@@ -64,111 +69,130 @@ def _fallback_reference(transaction: dict) -> str:
 
 
 def _normalize_statement_transaction(transaction: dict, source_file: str) -> dict:
+    """ Makes statement parser output look like a parsed transaction."""
+
     normalized = dict(transaction or {})
     ref_number = str(normalized.get("ref_number") or "").strip() or _fallback_reference(normalized)
     parser_metadata = normalized.get("parser_metadata") or {}
+    optional_fields = normalized.get("optional_fields") or None
 
+    # If parser_metadata is a Pydantic model, it converts it to a dictionary
     if hasattr(parser_metadata, "model_dump"):
         parser_metadata = parser_metadata.model_dump()
 
     parser_metadata = {
         **(parser_metadata if isinstance(parser_metadata, dict) else {}),
         "parsed_status": "parsed",
-        "source": "statement_upload",
         "source_file": source_file,
     }
 
     normalized["ref_number"] = ref_number
-    normalized.setdefault("id", ref_number)
-    normalized.setdefault("gmail_message_id", "")
-    normalized.setdefault("email_metadata", {})
+    normalized.setdefault("gmail_message_id", None)
+    normalized["source"] = "statement"
+    normalized.setdefault("email_metadata", None)
     normalized["parser_metadata"] = parser_metadata
-    normalized.setdefault("raw_data", {"source_file": source_file})
-    normalized.setdefault("is_forwarded", False)
+    normalized["optional_fields"] = optional_fields
+
 
     return normalized
 
 
 async def _save_uploaded_statements(files: List[UploadFile]) -> list[tuple[str, Path]]:
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    """ """
+    await run_in_threadpool(UPLOAD_DIR.mkdir, parents=True, exist_ok=True)
     saved_files: list[tuple[str, Path]] = []
 
-    for index, file in enumerate(files, start=1):
-        suffix = Path(file.filename or "").suffix.lower()
-        if suffix != ".pdf":
-            raise HTTPException(
-                status_code=400,
-                detail=f"Only PDF statements are supported: {file.filename or 'unnamed file'}",
-            )
+    try:
+        # Process every uploaded files
+        for index, file in enumerate(files, start=1):
+            suffix = Path(file.filename or "").suffix.lower()
 
-        content = await file.read()
-        if not content:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Uploaded statement is empty: {file.filename or 'unnamed file'}",
-            )
+            # Rejects non-pdf files
+            if suffix != ".pdf":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Only PDF statements are supported: {file.filename or 'unnamed file'}",
+                )
 
-        saved_path = UPLOAD_DIR / _safe_upload_name(file.filename, index)
-        saved_path.write_bytes(content)
-        saved_files.append((file.filename or saved_path.name, saved_path))
+            content = await file.read()
+
+            # Check for an empty pdf
+            if not content:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Uploaded statement is empty: {file.filename or 'unnamed file'}",
+                )
+
+            saved_path = UPLOAD_DIR / _safe_upload_name(file.filename, index)
+            await run_in_threadpool(saved_path.write_bytes, content)
+            saved_files.append((file.filename or saved_path.name, saved_path))
+    except Exception:
+        _delete_saved_statements(saved_files)
+        raise
 
     return saved_files
 
 
 def _delete_saved_statement(saved_path: Path) -> None:
+    """ Delete the temporary files after processing """
     try:
         if saved_path.exists():
             saved_path.unlink()
     except OSError as error:
         print(f"Failed to delete temporary statement file {saved_path}: {error}")
 
-async def process_and_upload_statements(user: User, files: List[UploadFile]) -> dict:
+
+def _delete_saved_statements(saved_files: list[tuple[str, Path]]) -> None:
+    for _, saved_path in saved_files:
+        _delete_saved_statement(saved_path)
+
+
+
+
+
+
+
+
+def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Path]]) -> dict:
     """
-    Service to process uploaded bank statement files.
-    Saves files, invokes the PDF LLM parser sequentially for each statement,
-    and appends extracted transactions directly into the user's Google Sheet.
+    Blocking statement pipeline. It runs in a worker thread so PDF rendering,
+    LLM calls, Google Sheets calls, and DB commits do not block FastAPI's event loop.
     """
-    if not files:
-        raise HTTPException(status_code=400, detail="No statement files uploaded.")
+    db = SessionLocal()
 
-    if not user.spreadsheet_id:
-        raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
-
-    saved_files = await _save_uploaded_statements(files)
-
-    # 1. Connect to Google Sheets client using user's OAuth credentials
     try:
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+
+        if not user.spreadsheet_id:
+            raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
+
+        # 2. Connect to Google Sheets client using user's OAuth credentials
         credentials = build_credentials(user)
         sheets_service = build("sheets", "v4", credentials=credentials)
         sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
-
-        # Retrieve all currently saved reference numbers to avoid duplicate insertions
-        existing_ref_numbers = _read_existing_column_values(
-            sheets_service,
-            user.spreadsheet_id,
-            sheet_title,
-            transaction_column_for_field("ref_number"),
-        )
-        existing_ref_numbers = {
-            _normalize_reference(ref)
-            for ref in existing_ref_numbers
-            if _normalize_reference(ref)
-        }
     except Exception as e:
         for _, saved_path in saved_files:
             _delete_saved_statement(saved_path)
-        raise HTTPException(status_code=500, detail=f"Failed to connect to Google Sheets or read reference numbers: {str(e)}")
+        db.close()
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail=f"Failed to connect to Google Sheets or database: {str(e)}")
 
-    all_extracted_txns = []
-    total_rows_written = 0
-    processed_files = []
-    skipped_duplicates = 0
+    all_extracted_txns = []             # Stores all transactions processed across all PDFs
+    total_rows_written = 0              # Tracks how many rows were added to Google Sheets.
+    processed_files = []                # Stores per-file summary information.
 
-    # 2. Iterate and process saved statement PDFs one-by-one
+    # 4. Iterate and process saved statement PDFs one-by-one
     for original_filename, saved_path in saved_files:
         try:
-            # Parse statement PDF using app.ds.llm.app.run(Path)
-            extracted_txns = _parse_statement_pdf(saved_path)
+            # 5. Parse statement PDF using app.ds.llm.app.run(Path)
+            extracted_txns = _parse_statement_pdf_sync(saved_path, user.id)
+            print(
+                "Statement parsed: "
+                f"user={user.id} file={original_filename} rows={len(extracted_txns or [])}"
+            )
             if not extracted_txns:
                 processed_files.append({
                     "filename": original_filename,
@@ -179,54 +203,81 @@ async def process_and_upload_statements(user: User, files: List[UploadFile]) -> 
                 })
                 continue
 
-            # Filter out transactions that have a duplicate ref_number
-            unique_txns = []
-            for txn in extracted_txns:
-                normalized_txn = _normalize_statement_transaction(txn, original_filename)
-                ref = _normalize_reference(normalized_txn.get("ref_number"))
+            # 6. Normalize every statement row and let the DB upsert layer handle
+            # ref-number matching first, with dedupe-key matching as fallback.
+            statement_txns = [
+                _normalize_statement_transaction(txn, original_filename)
+                for txn in extracted_txns
+            ]
 
-                if ref in existing_ref_numbers:
-                    skipped_duplicates += 1
-                    continue
-
-                unique_txns.append(normalized_txn)
-                existing_ref_numbers.add(ref)
-
-            if not unique_txns:
+            if not statement_txns:
+                print(
+                    "Statement DB: "
+                    f"user={user.id} file={original_filename} "
+                    f"transactions_saved=0"
+                )
                 processed_files.append({
                     "filename": original_filename,
                     "stored_path": str(saved_path),
                     "transactions_found": len(extracted_txns),
                     "rows_written": 0,
-                    "duplicates_skipped": len(extracted_txns),
+                    "duplicates_skipped": 0,
                 })
                 continue
-
-            all_extracted_txns.extend(unique_txns)
             
-            # 3. Serialize extracted transactions to sheet rows
-            rows = transactions_to_sheet_rows(unique_txns)
-            if rows:
-                # Safely append rows to the user's spreadsheet by reusing the existing setup utility
-                sync_result = append_sheet_with_emails(user, user.spreadsheet_id, sheet_title, rows)
-                rows_written = sync_result.get("rows_written", 0)
-                total_rows_written += rows_written
-            else:
-                rows_written = 0
+            # 7. Add normalized transactions to overall list
+            all_extracted_txns.extend(statement_txns)
+
+            try:
+                # 8. Add/update parsed transactions in DB.
+                saved_transactions = save_valid_transaction_to_db(statement_txns, user.id, db)
+                update_parsed_status_to_db(user.id, statement_txns, db)
+                db.commit()
+                print(
+                    "Statement DB: "
+                    f"user={user.id} file={original_filename} "
+                    f"parsed_valid={len(statement_txns)} "
+                    f"transactions_saved={len(saved_transactions)}"
+                )
+            except Exception as e:
+                db.rollback()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed saving statement transactions for '{original_filename}': {str(e)}"
+                )
+
+            # 9. Add newly saved unsynced transactions to the sheets.
+            sync_result = _sync_transactions_to_sheet(
+                user,
+                db,
+                sheets_service=sheets_service,
+                sheet_title=sheet_title,
+                transaction_ids=[transaction.id for transaction in saved_transactions],
+            )
+            rows_written = sync_result.get("rows_written", 0)
+            total_rows_written += rows_written
+            print(
+                "Statement sheet sync: "
+                f"user={user.id} file={original_filename} rows_written={rows_written}"
+            )
 
             processed_files.append({
                 "filename": original_filename,
                 "stored_path": str(saved_path),
                 "transactions_found": len(extracted_txns),
                 "rows_written": rows_written,
-                "duplicates_skipped": len(extracted_txns) - len(unique_txns),
+                "duplicates_skipped": 0,
             })
                 
         except HTTPException:
             # Re-raise HTTP exceptions to propagate cleaner API error codes
+            _delete_saved_statements(saved_files)
+            db.close()
             raise
         except Exception as e:
             # Fallback error wrapper for unexpected process-interrupts
+            _delete_saved_statements(saved_files)
+            db.close()
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed processing statement '{original_filename}': {str(e)}"
@@ -234,11 +285,35 @@ async def process_and_upload_statements(user: User, files: List[UploadFile]) -> 
         finally:
             _delete_saved_statement(saved_path)
 
-    return {
-        "status": "success",
-        "message": f"Successfully parsed and appended {total_rows_written} transactions from {len(saved_files)} files.",
-        "transactions_count": len(all_extracted_txns),
-        "rows_written": total_rows_written,
-        "duplicates_skipped": skipped_duplicates,
-        "files": processed_files,
-    }
+    try:
+        return {
+            "status": "success",
+            "message": f"Successfully parsed and appended {total_rows_written} transactions from {len(saved_files)} files.",
+            "transactions_count": len(all_extracted_txns),
+            "rows_written": total_rows_written,
+            "duplicates_skipped": 0,
+            "files": processed_files,
+        }
+    finally:
+        db.close()
+
+
+# --------------------------- Main orchestrator function -----------------
+async def process_and_upload_statements(user: User, files: List[UploadFile], db: Session) -> dict:
+    """
+    Service to process uploaded bank statement files.
+    Saves files, invokes the PDF LLM parser sequentially for each statement,
+    saves extracted transactions into DB, then projects unsynced rows to Google Sheets.
+    """
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No statement files uploaded.")
+
+    if not user.spreadsheet_id:
+        raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
+
+    # Save uploads through the async request, then move the blocking pipeline
+    # to a worker thread with its own SQLAlchemy session.
+    saved_files = await _save_uploaded_statements(files)
+
+    return await run_in_threadpool(_process_saved_statements_sync, user.id, saved_files)

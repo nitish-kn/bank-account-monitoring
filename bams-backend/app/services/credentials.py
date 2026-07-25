@@ -2,8 +2,7 @@ import requests
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from ..config import settings
-
-TOKENINFO_URL = "https://www.googleapis.com/oauth2/v3/tokeninfo"
+from ..core.constants import GOOGLE_TOKEN_URI, TOKENINFO_URL
 
 
 def build_credentials(user) -> Credentials:
@@ -11,7 +10,7 @@ def build_credentials(user) -> Credentials:
     creds = Credentials(
         token=user.access_token,
         refresh_token=user.refresh_token,
-        token_uri='https://oauth2.googleapis.com/token',
+        token_uri=GOOGLE_TOKEN_URI,
         client_id=settings.google_client_id,
         client_secret=settings.google_client_secret,
         expiry=user.token_expiry,
