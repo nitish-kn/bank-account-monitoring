@@ -82,7 +82,7 @@ class ExtractionLogEntry(BaseModel):
 # ------------------------------------------------------------------ #
 
 MODEL = "gpt-5.4-mini"          # Vision-capable; switch to "gpt-4o" for best accuracy
-BATCH_SIZE = 5                  # Pages per API call
+BATCH_SIZE = 1                # Pages per API call
 DPI = 200                       # Higher = better OCR but larger payloads (~150 is sweet spot)
 JPEG_QUALITY = 90               # JPEG compression quality
 MAX_LONG_EDGE_PX = 2048         # Resize if either dimension exceeds this
@@ -755,13 +755,16 @@ def extract_transactions_from_pdf(
             tx_dict = tx.model_dump()
             _merge_account_context(statement_account_context, _transaction_account_context(tx_dict))
             tx_dict = _apply_account_context(tx_dict, statement_account_context)
+            # print(f"BEFORE ENRICHMENT - {tx_dict}")
             enriched_tx = fill_missing_account_details(tx_dict)
+            # print(f"ENRICHED - {enriched_tx}")
             enriched_tx = fill_missing_credit_card_details(enriched_tx)
-            enriched_tx = _apply_account_context(
-                enriched_tx,
-                statement_account_context,
-                overwrite=True,
-            )
+            # enriched_tx = _apply_account_context(
+            #     enriched_tx,
+            #     statement_account_context,
+            #     overwrite=True,
+            # )
+            # print(f"FINAL ENRICHED - {enriched_tx}")
 
             # Cash withdrawal has no real counterparty — it's the account
             # holder withdrawing their own money, so "same acc to same acc"
