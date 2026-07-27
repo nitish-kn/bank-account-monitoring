@@ -288,7 +288,8 @@ If direction still cannot be determined:
 
 ## txn_date
 
-* Format `YYYY-MM-DD` only. Never include a time component, even if one is printed on the statement.
+* If the statement prints a time alongside the date for this row (e.g. UPI/IMPS narrations often show one), return `YYYY-MM-DD HH:MM:SS` (24-hour clock) with that exact time.
+* If no time is printed for this row, return `YYYY-MM-DD` only. Never invent a time that isn't shown.
 
 ## bank_name
 

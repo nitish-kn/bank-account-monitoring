@@ -450,6 +450,7 @@ def recalculate_account_ledger(
             Transactions.account_number == account_number,
             Transactions.txn_date.isnot(None),
             Transactions.amount.isnot(None),
+            Transactions.is_flag.isnot(True),
         )
         .order_by(Transactions.txn_date.asc(), Transactions.created_at.asc(), Transactions.id.asc())
         .all()

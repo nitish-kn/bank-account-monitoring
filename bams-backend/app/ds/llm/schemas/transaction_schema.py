@@ -100,7 +100,15 @@ class Transaction(BaseModel):
 
     currency: Optional[str] = "INR"
 
-    txn_date: Optional[str] = None
+    txn_date: Optional[str] = Field(
+        default=None,
+        description=(
+            "\"YYYY-MM-DD HH:MM:SS\" (24-hour) if a transaction time is actually shown/stated, "
+            "otherwise \"YYYY-MM-DD\" only. Never invent a time that isn't shown, and for emails "
+            "never substitute the email's received/sent timestamp for a transaction time the "
+            "email itself doesn't state."
+        ),
+    )
 
     counterparty: Optional[str] = None
 
