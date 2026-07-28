@@ -19,11 +19,13 @@ jobs:
           port: ${{ secrets.SSH_PORT || '22' }}
           script: |
             set -e
-            
+
             cd ${{ secrets.DEPLOY_PATH }}
-            
+
             git fetch origin main
             git reset --hard origin/main
-            
+
             docker compose build
             docker compose up -d
+
+            nohup docker compose logs -f backend > backend_output.log 2>&1 &
