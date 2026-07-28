@@ -21,4 +21,4 @@ EXPOSE 5173
 
 # 8. Command to run your application
 # CMD ["npm", "run", "dev", "--", "--host"]
-CMD ["npm", "run", "preview"]
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5173"]
