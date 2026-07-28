@@ -120,7 +120,7 @@ FIELD RULES
 
 amount / balance_after_txn — numeric strings, no currency symbol/commas. e.g. "1700.00", never 1700.
 
-txn_date — date only, format YYYY-MM-DD. Never include a time component even if the email shows one.
+txn_date — if the email states a time for the transaction (many bank alert emails do, e.g. "at 14:32:10 on 12-Jul-2026"), return it as "YYYY-MM-DD HH:MM:SS" (24-hour clock). If no time is stated, return "YYYY-MM-DD" only. Never invent a time that isn't shown, and never use the email's received/sent timestamp as a substitute for a transaction time the email itself doesn't state.
 
 account_holder_name — the name of the CUSTOMER's OWN account this email is about (best-effort from the email). Set it to null when the only name shown belongs to the counterparty/beneficiary (see the "credited to the beneficiary" rule) rather than to the customer's own account.
 

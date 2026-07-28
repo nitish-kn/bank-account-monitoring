@@ -14,10 +14,11 @@ RUN npm install
 COPY . .
 
 # # 6. Build the frontend application
-# RUN npm run build
+RUN npm run build
 
 # 7. Expose the port the app runs on
 EXPOSE 5173
 
 # 8. Command to run your application
-CMD ["npm", "run", "dev", "--", "--host"]
+# CMD ["npm", "run", "dev", "--", "--host"]
+CMD ["npm", "run", "preview"]

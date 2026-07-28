@@ -19,7 +19,7 @@ from ..core.constants import (
 from ..models.parsed import Parsed
 from ..models.transactions import Transactions
 from .date_utils import utc_now
-from .transaction_utils import normalize_transaction_date
+from .transaction_utils import normalize_transaction_date, normalize_transaction_datetime
 
 
 def normalize_parsed_status(status: str | None) -> str:
@@ -79,17 +79,22 @@ def _datetime_or_none(value) -> datetime | None:
     if value is None or isinstance(value, datetime):
         return value
 
-    normalized = normalize_transaction_date(value)
+    # Preserve time-of-day when the source actually provides one -- plain
+    # normalize_transaction_date() would silently truncate it to midnight.
+    normalized = normalize_transaction_datetime(value)
     if not normalized:
         return None
 
-    try:
-        return datetime.strptime(normalized, "%Y-%m-%d")
-    except (TypeError, ValueError):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            return datetime.strptime(normalized, fmt)
         except (TypeError, ValueError):
-            return None
+            continue
+
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
 
 
 def _amount_key(value) -> str:
@@ -242,7 +247,7 @@ def _transaction_optional_fields(transaction: dict) -> dict:
     return optional_fields
 
 
-def _transaction_core_matches(candidate: Transactions, transaction: dict) -> bool:
+def _account_bank_type_compatible(candidate: Transactions, transaction: dict) -> bool:
     txn_type = _normal_key(transaction.get("txn_type"))
     candidate_txn_type = _normal_key(candidate.txn_type)
     if txn_type and candidate_txn_type and candidate_txn_type != txn_type:
@@ -258,6 +263,13 @@ def _transaction_core_matches(candidate: Transactions, transaction: dict) -> boo
         and _normal_key(candidate.bank_name) != bank_name
         and not _similar_text(candidate.bank_name, transaction.get("bank_name"), threshold=0.85)
     ):
+        return False
+
+    return True
+
+
+def _transaction_core_matches(candidate: Transactions, transaction: dict) -> bool:
+    if not _account_bank_type_compatible(candidate, transaction):
         return False
 
     if not _dates_close(candidate.txn_date, transaction.get("txn_date"), max_days=3):
@@ -296,13 +308,21 @@ def _candidate_ref_match_score(
     return score
 
 
-def _find_ref_number_match(transaction: dict, user_id: int, db: Session) -> Transactions | None:
-    """Find an existing row by exact/subset ref before building a new dedupe key."""
+def _find_ref_number_match(
+    transaction: dict, user_id: int, db: Session
+) -> tuple[Transactions | None, str | None]:
+    """Find an existing row by exact/subset ref before building a new dedupe key.
+
+    Returns (candidate, match_kind) where match_kind is "exact" or "subset" —
+    a subset match (e.g. a previously-stored 16-digit ref vs. a newly-arrived
+    12-digit ref that's fully contained in it) is lower confidence than an
+    exact match, and callers use match_kind to decide whether to flag it.
+    """
 
     ref_number = transaction.get("ref_number")
 
     if not _compact_key(ref_number):
-        return None
+        return None, None
 
     query = db.query(Transactions).filter(
         Transactions.user_id == user_id,
@@ -310,7 +330,7 @@ def _find_ref_number_match(transaction: dict, user_id: int, db: Session) -> Tran
     )
 
     candidates = query.all()
-    matches: list[tuple[int, int, Transactions]] = []
+    matches: list[tuple[int, int, str, Transactions]] = []
 
     for candidate in candidates:
         match_kind = _ref_match_kind(candidate.ref_number, ref_number)
@@ -321,12 +341,59 @@ def _find_ref_number_match(transaction: dict, user_id: int, db: Session) -> Tran
         if score is None:
             continue
 
-        matches.append((score, len(_compact_key(candidate.ref_number)), candidate))
+        matches.append((score, len(_compact_key(candidate.ref_number)), match_kind, candidate))
+
+    if not matches:
+        return None, None
+
+    best = max(matches, key=lambda item: (item[0], item[1]))
+    return best[3], best[2]
+
+
+def _find_fallback_amount_date_match(
+    transaction: dict, user_id: int, db: Session
+) -> Transactions | None:
+    """Used only when the incoming transaction has no ref_number at all.
+
+    The only remaining signal is an exact amount match + exact calendar-date
+    match (account/bank/txn_type compatible) — no day-window leniency here,
+    unlike the ref-match path. A different amount or a different date always
+    means a distinct transaction; counterparty similarity (>=70%) only
+    contributes to tie-breaking between multiple same-amount/same-day
+    candidates, never gates the match on its own.
+    """
+
+    amount = _decimal_or_none(transaction.get("amount"))
+    txn_dt = _datetime_or_none(transaction.get("txn_date"))
+    if amount is None or txn_dt is None:
+        return None
+
+    candidates = (
+        db.query(Transactions)
+        .filter(
+            Transactions.user_id == user_id,
+            Transactions.amount == amount,
+            Transactions.txn_date.isnot(None),
+        )
+        .all()
+    )
+
+    matches: list[tuple[int, Transactions]] = []
+    for candidate in candidates:
+        if candidate.txn_date.date() != txn_dt.date():
+            continue
+        if not _account_bank_type_compatible(candidate, transaction):
+            continue
+
+        score = 1
+        if _similar_text(candidate.counterparty, transaction.get("counterparty")):
+            score += 1
+        matches.append((score, candidate))
 
     if not matches:
         return None
 
-    return max(matches, key=lambda item: (item[0], item[1]))[2]
+    return max(matches, key=lambda item: item[0])[1]
 
 
 TEXT_PLACEHOLDERS_BY_FIELD = {
@@ -355,14 +422,20 @@ def _assign_model_field(
     field_name: str,
     value,
     fill_missing_only: bool,
-) -> None:
+) -> bool:
+    """Sets the field and returns True iff it actually changed the model."""
+
     if fill_missing_only:
         if _field_value_missing(field_name, value):
-            return
+            return False
         if not _field_value_missing(field_name, getattr(model, field_name)):
-            return
+            return False
+        setattr(model, field_name, value)
+        return True
 
+    changed = getattr(model, field_name) != value
     setattr(model, field_name, value)
+    return changed
 
 
 def _merge_missing_dict_values(existing, incoming) -> dict:
@@ -377,12 +450,28 @@ def _merge_missing_dict_values(existing, incoming) -> dict:
     return merged
 
 
+IMPORTANT_FIELDS = ("account_number", "account_holder_name", "counterparty")
+
+
+def _has_missing_important_field(model: Transactions) -> bool:
+    return any(
+        _field_value_missing(field, getattr(model, field, None))
+        for field in IMPORTANT_FIELDS
+    )
+
+
 def _apply_transaction_fields(
     model: Transactions,
     transaction: dict,
     user_id: int,
     fill_missing_only: bool = False,
-) -> None:
+) -> bool:
+    """Applies `transaction`'s fields onto `model` and returns True iff
+    anything about the model actually changed (a brand-new row always
+    counts as changed; a fill-missing-only merge only counts as changed
+    if it actually filled in something that was previously empty)."""
+
+    changed = False
     amount = _decimal_or_none(transaction.get("amount"))
 
     model.user_id = user_id
@@ -408,14 +497,18 @@ def _apply_transaction_fields(
     }
 
     for field_name, value in field_values.items():
-        _assign_model_field(model, field_name, value, fill_missing_only)
+        if _assign_model_field(model, field_name, value, fill_missing_only):
+            changed = True
 
     incoming_ref_number = _clean_text(transaction.get("ref_number"))
     if fill_missing_only:
         preferred_ref = _preferred_ref_number(model.ref_number, incoming_ref_number)
-        if preferred_ref:
+        if preferred_ref and preferred_ref != model.ref_number:
             model.ref_number = preferred_ref
+            changed = True
     else:
+        if model.ref_number != incoming_ref_number:
+            changed = True
         model.ref_number = incoming_ref_number
         model.dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
 
@@ -427,25 +520,62 @@ def _apply_transaction_fields(
     incoming_optional_fields = _transaction_optional_fields(transaction)
 
     if fill_missing_only:
-        model.email_metadata = _merge_missing_dict_values(model.email_metadata, incoming_email_metadata)
-        model.parser_metadata = _merge_missing_dict_values(model.parser_metadata, incoming_parser_metadata)
-        model.optional_fields = _merge_missing_dict_values(model.optional_fields, incoming_optional_fields)
+        merged_email = _merge_missing_dict_values(model.email_metadata, incoming_email_metadata)
+        if merged_email != (model.email_metadata or {}):
+            changed = True
+        model.email_metadata = merged_email
+
+        merged_parser = _merge_missing_dict_values(model.parser_metadata, incoming_parser_metadata)
+        if merged_parser != (model.parser_metadata or {}):
+            changed = True
+        model.parser_metadata = merged_parser
+
+        merged_optional = _merge_missing_dict_values(model.optional_fields, incoming_optional_fields)
+        if merged_optional != (model.optional_fields or {}):
+            changed = True
+        model.optional_fields = merged_optional
     else:
         model.email_metadata = incoming_email_metadata
         model.parser_metadata = incoming_parser_metadata
         # model.raw_data = transaction.get("raw_data") or {}
         model.optional_fields = incoming_optional_fields
+        changed = True
 
-    model.is_flag = False
+    return changed
 
 
 def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Session) -> list[Transactions]:
     """Insert or update valid parsed transactions. Caller owns commit/rollback.
-    It only saves transaction with parsed_status == "parsed" """
+    It only saves transaction with parsed_status == "parsed".
+
+    Dedup policy:
+      1. Ref number present -> only a ref-based match counts. An exact ref
+         match merges silently (is_flag stays as computed below); a subset
+         match (e.g. a stored 16-digit ref vs. an arriving 12-digit ref fully
+         contained in it) merges but is flagged as lower confidence. A ref
+         that matches nothing existing is confidently a new, distinct
+         transaction -- never falls back to the amount/date guess.
+      2. Ref number absent -> the only signal left is an exact amount +
+         exact calendar-date match (account/bank/type compatible). Any
+         mismatch on amount or date means "new". A match here is always
+         flagged (no ref number ever backs it with full confidence).
+      3. Whether or not any of the above matched, the row is also flagged if
+         an important field (account_number, account_holder_name,
+         counterparty) is still missing after applying this transaction's
+         fields -- independent of duplicate-confidence.
+
+    Each returned Transactions object carries two transient (non-persisted)
+    markers for callers that need to know "is this actually new information":
+      - `_is_insert`: True only for a brand-new row.
+      - `_has_new_data`: True if a merge actually changed something (e.g.
+        filled a previously-empty field) -- a true no-op duplicate resubmit
+        leaves this False.
+    """
     saved_transactions: list[Transactions] = []
     parsed_input_count = 0
     inserted_count = 0
     updated_count = 0
+    flagged_count = 0
     skipped_count = 0
 
     for transaction in transactions or []:
@@ -457,20 +587,37 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
             continue
 
         parsed_input_count += 1
-        ref_match = _find_ref_number_match(transaction, user_id, db)
-        if ref_match:
-            transaction = {
-                **transaction,
-                "dedupe_key": ref_match.dedupe_key,
-                "ref_number": _preferred_ref_number(
-                    ref_match.ref_number,
-                    transaction.get("ref_number"),
-                ),
-            }
-            model = ref_match
-            is_insert = False
+
+        model: Transactions | None = None
+        is_insert = True
+        is_flag = False
+
+        if _compact_key(transaction.get("ref_number")):
+            ref_match, match_kind = _find_ref_number_match(transaction, user_id, db)
+            if ref_match:
+                transaction = {
+                    **transaction,
+                    "dedupe_key": ref_match.dedupe_key,
+                    "ref_number": _preferred_ref_number(
+                        ref_match.ref_number,
+                        transaction.get("ref_number"),
+                    ),
+                }
+                model = ref_match
+                is_insert = False
+                is_flag = match_kind == "subset"
         else:
-            # If no ref overlap exists, fall back to the normal stable dedupe key.
+            fallback_match = _find_fallback_amount_date_match(transaction, user_id, db)
+            if fallback_match:
+                transaction = {**transaction, "dedupe_key": fallback_match.dedupe_key}
+                model = fallback_match
+                is_insert = False
+                is_flag = True
+
+        if model is None:
+            # Safety-net exact lookup by the stable dedupe key, so a literal
+            # re-submission of the same transaction dict never creates a
+            # second row even if the paths above didn't already catch it.
             dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
             existing = (
                 db.query(Transactions)
@@ -484,18 +631,27 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
             model = existing or Transactions(id=str(uuid4()))
             is_insert = existing is None
 
-        _apply_transaction_fields(
+        changed = _apply_transaction_fields(
             model,
             transaction,
             user_id,
             fill_missing_only=not is_insert,
         )
 
+        if _has_missing_important_field(model):
+            is_flag = True
+        model.is_flag = is_flag
+
+        model._is_insert = is_insert
+        model._has_new_data = changed
+
         db.add(model)
         db.flush()
         saved_transactions.append(model)
         if is_insert:
             inserted_count += 1
+        elif is_flag:
+            flagged_count += 1
         else:
             updated_count += 1
 
@@ -504,7 +660,7 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
             "Transactions DB: "
             f"user={user_id} parsed_valid={parsed_input_count} "
             f"inserted={inserted_count} updated={updated_count} "
-            f"skipped_non_parsed={skipped_count}"
+            f"flagged_duplicates={flagged_count} skipped_non_parsed={skipped_count}"
         )
 
     return saved_transactions

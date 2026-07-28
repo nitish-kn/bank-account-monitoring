@@ -182,6 +182,8 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
 
     all_extracted_txns = []             # Stores all transactions processed across all PDFs
     total_rows_written = 0              # Tracks how many rows were added to Google Sheets.
+    total_duplicates_skipped = 0        # Rows that matched an existing transaction with no new data.
+    total_flagged_for_review = 0        # Rows saved but flagged as low-confidence/incomplete.
     processed_files = []                # Stores per-file summary information.
 
     # 4. Iterate and process saved statement PDFs one-by-one
@@ -200,6 +202,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
                     "transactions_found": 0,
                     "rows_written": 0,
                     "duplicates_skipped": 0,
+                    "flagged_for_review": 0,
                 })
                 continue
 
@@ -222,6 +225,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
                     "transactions_found": len(extracted_txns),
                     "rows_written": 0,
                     "duplicates_skipped": 0,
+                    "flagged_for_review": 0,
                 })
                 continue
             
@@ -233,11 +237,25 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
                 saved_transactions = save_valid_transaction_to_db(statement_txns, user.id, db)
                 update_parsed_status_to_db(user.id, statement_txns, db)
                 db.commit()
+
+                # Only rows that are actually new information -- a brand-new
+                # row, or a merge that filled in previously-missing fields --
+                # count as "saved". A merge that matched an existing row and
+                # changed nothing is a pure duplicate and is excluded.
+                new_transactions = [
+                    txn for txn in saved_transactions
+                    if getattr(txn, "_is_insert", False) or getattr(txn, "_has_new_data", False)
+                ]
+                duplicates_skipped = len(saved_transactions) - len(new_transactions)
+                flagged_for_review = sum(1 for txn in saved_transactions if txn.is_flag)
+
                 print(
                     "Statement DB: "
                     f"user={user.id} file={original_filename} "
                     f"parsed_valid={len(statement_txns)} "
-                    f"transactions_saved={len(saved_transactions)}"
+                    f"transactions_saved={len(new_transactions)} "
+                    f"duplicates_skipped={duplicates_skipped} "
+                    f"flagged_for_review={flagged_for_review}"
                 )
             except Exception as e:
                 db.rollback()
@@ -245,6 +263,9 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
                     status_code=500,
                     detail=f"Failed saving statement transactions for '{original_filename}': {str(e)}"
                 )
+
+            total_duplicates_skipped += duplicates_skipped
+            total_flagged_for_review += flagged_for_review
 
             # 9. Add newly saved unsynced transactions to the sheets.
             sync_result = _sync_transactions_to_sheet(
@@ -266,7 +287,8 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
                 "stored_path": str(saved_path),
                 "transactions_found": len(extracted_txns),
                 "rows_written": rows_written,
-                "duplicates_skipped": 0,
+                "duplicates_skipped": duplicates_skipped,
+                "flagged_for_review": flagged_for_review,
             })
                 
         except HTTPException:
@@ -291,7 +313,8 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
             "message": f"Successfully parsed and appended {total_rows_written} transactions from {len(saved_files)} files.",
             "transactions_count": len(all_extracted_txns),
             "rows_written": total_rows_written,
-            "duplicates_skipped": 0,
+            "duplicates_skipped": total_duplicates_skipped,
+            "flagged_for_review": total_flagged_for_review,
             "files": processed_files,
         }
     finally:

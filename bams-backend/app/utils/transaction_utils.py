@@ -1,7 +1,7 @@
 import json
-from datetime import datetime
+from datetime import datetime, time
 from email.utils import parsedate_to_datetime
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from ..core.constants import (
     GMAIL_MESSAGE_ID_COLUMN,
@@ -14,75 +14,123 @@ from ..core.constants import (
     VALID_TRANSACTION_TYPES,
 )
 
-def normalize_transaction_date(raw_date: Any) -> str:
-    """Return a consistent YYYY-MM-DD string for all transaction dates."""
+DATE_ONLY_FORMATS = [
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%d.%m.%Y",
+
+    "%d/%m/%y",
+    "%d-%m-%y",
+
+    "%m/%d/%Y",
+    "%m-%d-%Y",
+
+    "%d %b %Y",
+    "%d %B %Y",
+
+    "%b %d %Y",
+    "%B %d %Y",
+
+    "%d %b %y",
+    "%d %B %y",
+
+    "%b %d %y",
+    "%B %d %y",
+]
+
+# Same set of date formats, each paired with a trailing time-of-day so a
+# combined "date time" string (whichever separator the source uses) can
+# still be parsed without losing the time component.
+DATE_TIME_FORMATS = [
+    f"{date_fmt}{sep}{time_fmt}"
+    for date_fmt in DATE_ONLY_FORMATS
+    for sep in (" ", "T")
+    for time_fmt in ("%H:%M:%S", "%H:%M", "%I:%M:%S %p", "%I:%M %p")
+]
+
+
+def _parse_transaction_datetime(raw_date: Any) -> Optional[datetime]:
+    """Best-effort parse of any transaction date/datetime-ish value, keeping
+    the time-of-day when the source actually provides one."""
 
     if raw_date is None:
-        return ""
+        return None
 
     if isinstance(raw_date, datetime):
-        return raw_date.strftime("%Y-%m-%d")
+        return raw_date
 
     text = str(raw_date).strip()
-
     if not text:
-        return ""
+        return None
 
     text = text.replace(",", "").replace("Z", "+00:00")
 
-    # ISO formats
+    # ISO formats (date-only or full datetime, "T" or space separator)
     try:
-        return datetime.fromisoformat(text).strftime("%Y-%m-%d")
+        return datetime.fromisoformat(text)
     except (TypeError, ValueError, OSError, OverflowError):
         pass
 
-    # RFC 2822 / email dates
+    # RFC 2822 / email dates (these always carry a time)
     try:
         parsed = parsedate_to_datetime(text)
         if parsed is not None:
-            return parsed.strftime("%Y-%m-%d")
+            return parsed
     except (TypeError, ValueError, IndexError, AttributeError, OverflowError):
         pass
 
-    formats = [
-        "%Y-%m-%d",
-        "%Y/%m/%d",
-
-        "%d/%m/%Y",
-        "%d-%m-%Y",
-        "%d.%m.%Y",
-
-        "%d/%m/%y",
-        "%d-%m-%y",
-
-        "%m/%d/%Y",
-        "%m-%d-%Y",
-
-        "%d %b %Y",
-        "%d %B %Y",
-
-        "%b %d %Y",
-        "%B %d %Y",
-
-        "%d %b %y",
-        "%d %B %y",
-
-        "%b %d %y",
-        "%B %d %y",
-    ]
-
-    for fmt in formats:
+    for fmt in DATE_TIME_FORMATS:
         try:
-            return datetime.strptime(text, fmt).strftime("%Y-%m-%d")
+            return datetime.strptime(text, fmt)
         except ValueError:
             continue
 
-    # Try parsing only the first token if datetime is appended
+    for fmt in DATE_ONLY_FORMATS:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+
+    # Try parsing only the first token if datetime is appended in a format
+    # we don't otherwise recognize (e.g. "2026-07-12 (IST)")
     try:
-        return datetime.fromisoformat(text.split()[0]).strftime("%Y-%m-%d")
+        return datetime.fromisoformat(text.split()[0])
     except (TypeError, ValueError, OSError, OverflowError):
         pass
 
+    return None
+
+
+def normalize_transaction_date(raw_date: Any) -> str:
+    """Return a consistent YYYY-MM-DD string for all transaction dates.
+
+    Time-of-day, if any, is intentionally discarded here -- use
+    `normalize_transaction_datetime` wherever the time actually matters
+    (e.g. persisting txn_date to the DB).
+    """
+
+    parsed = _parse_transaction_datetime(raw_date)
+    if parsed is not None:
+        return parsed.strftime("%Y-%m-%d")
+
+    text = str(raw_date or "").strip()
+    return text
+
+
+def normalize_transaction_datetime(raw_date: Any) -> str:
+    """Return YYYY-MM-DD HH:MM:SS when a time-of-day is present in the
+    source value, otherwise plain YYYY-MM-DD."""
+
+    parsed = _parse_transaction_datetime(raw_date)
+    if parsed is not None:
+        if parsed.time() == time.min:
+            return parsed.strftime("%Y-%m-%d")
+        return parsed.strftime("%Y-%m-%d %H:%M:%S")
+
+    text = str(raw_date or "").strip()
     return text
 
 
