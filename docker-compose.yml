@@ -7,7 +7,7 @@ services:
     env_file:
       - ./bams-backend/.env
     ports:
-      - "8000:7788"
+      - "7788:8000"
 
   # Frontend Service
   frontend:
@@ -17,7 +17,7 @@ services:
     env_file:
       - ./bams-frontend/.env
     ports:
-      - "5173:7777"
+      - "7777:5173"
     depends_on:
       - backend
 
