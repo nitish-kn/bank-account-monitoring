@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   server:{
-    allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app', '.ngrok-free.io', '.ngrok-free.live', '.ngrok-free.net', '.ngrok-free.org']
+    allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app', '.ngrok-free.io', '.ngrok-free.live', '.ngrok-free.net', '.ngrok-free.org', '.duckdns.org']
   },
   optimizeDeps: {
     include: ['recharts'], // Forces Vite to pre-bundle Recharts cleanly
