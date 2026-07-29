@@ -1,13 +1,13 @@
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..core.dependencies import get_current_user
 from ..database import get_db
 from ..models.user import User
-from ..services.accounts_service import get_paginated_accounts
+from ..services.accounts_service import get_paginated_accounts, create_new_account
 
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -28,6 +28,11 @@ class AccountsQueryRequest(BaseModel):
     pagination: PaginationQuery = PaginationQuery()
     sort: Optional[SortQuery] = None
 
+class CreateAccountRequest(BaseModel):
+    bank: str
+    accountno: str
+    type: str
+    name: str
 
 @router.post("/query")
 def query_accounts(
@@ -44,3 +49,11 @@ def query_accounts(
         page_size=req.pagination.pageSize,
         sort=sort_dict,
     )
+
+
+@router.post("/")
+def create_account(request: CreateAccountRequest, current_user: User = Depends(get_current_user), db: Session= Depends(get_db)):
+
+    return create_new_account(db, request, current_user.id)
+
+    

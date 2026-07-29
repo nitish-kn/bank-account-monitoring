@@ -1,5 +1,6 @@
 import { Button, Dialog, Flex, Spinner } from "@radix-ui/themes";
 import React from "react";
+import CustomButton from "./CustomButton";
 
 const DialogPopup = ({
   open,
@@ -44,7 +45,7 @@ const DialogPopup = ({
                 </Button>
               ) : (
                 <Dialog.Close>
-                  <Button>{successbtntxt}</Button>
+                  <CustomButton>{successbtntxt}</CustomButton>
                 </Dialog.Close>
               )}
             </Flex>

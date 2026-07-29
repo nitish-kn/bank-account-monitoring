@@ -10,6 +10,7 @@ const CustomSearchBar = ({
   inputClassName = "",
   iconClassName = "",
   type = "text",
+  labelText = "",
   ...props
 }) => {
   const isIconRight = iconPosition === "right";
@@ -18,6 +19,7 @@ const CustomSearchBar = ({
 
   return (
     <div className={`relative ${className}`}>
+      {labelText && <label className="text-sm text-gray-800 font-semibold pb-1">{labelText}</label>}
       <Search
         className={`pointer-events-none absolute ${iconPositionClass} top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 ${iconClassName}`}
       />
