@@ -9,4 +9,11 @@ export const accountsApi = {
     });
     return response.data;
   },
+
+  createAccounts: async (body) => {
+    console.log(body)
+    const response = await api.post("/accounts", body);
+
+    return response?.data;
+  }
 };

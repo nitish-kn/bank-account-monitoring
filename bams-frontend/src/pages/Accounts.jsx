@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Badge, Spinner } from "@radix-ui/themes";
-import { AlertTriangle, CheckCircle2, ChevronRight, Filter, RotateCcw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Filter, Plus, RotateCcw } from "lucide-react";
 
 import { accountsApi } from "../api/accounts";
 import CustomButton from "../components/ui/CustomButton";
@@ -10,6 +10,7 @@ import CustomTable from "../components/ui/CustomTable";
 import Pagination from "../components/Pagination";
 import { formatAmount, formatDate } from "../lib/helper";
 import { getAccountFilterOptions } from "../lib/transactional-helper";
+import AddAcounts from "../components/AddAcounts";
 
 const ALL_FILTER_VALUE = "all";
 
@@ -128,6 +129,7 @@ const Accounts = () => {
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [addAccounts, setAddAccounts] = useState(false);
 
   const updateDraftFilter = (key, value) => {
     setDraftFilters((currentFilters) => ({
@@ -307,13 +309,29 @@ const Accounts = () => {
           <div>
             <h1 className="text-2xl font-bold text-slate-950">All Accounts</h1>
             <p className="mt-1 text-xs font-medium text-slate-500">
-              Every account in one view — balances, reconciliation health, and last activity
+              Every account in one view — balances, reconciliation health, and
+              last activity
             </p>
           </div>
 
-          <Badge color={hasActiveFilters ? "blue" : "gray"} variant="soft" radius="full" className="w-fit px-3 py-1 font-semibold">
-            {totalCount} Accounts
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge
+              color={hasActiveFilters ? "blue" : "gray"}
+              variant="soft"
+              radius="full"
+              className="w-fit px-3 py-1 font-semibold"
+            >
+              {totalCount} Accounts
+            </Badge>
+
+            <CustomButton
+              className="h-9!"
+              onClick={() => setAddAccounts((prev) => !prev)}
+            >
+              <Plus className="h-5 w-5" />
+              Add Account
+            </CustomButton>
+          </div>
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-8">
@@ -330,7 +348,10 @@ const Accounts = () => {
           <CustomDropDown
             value={draftFilters.account}
             options={filterOptions.accounts}
-            placeholder={getAllOptionLabel(filterOptions.accounts, "All Accounts")}
+            placeholder={getAllOptionLabel(
+              filterOptions.accounts,
+              "All Accounts",
+            )}
             onValueChange={(value) => updateDraftFilter("account", value)}
             multiple
             showSearch
@@ -346,8 +367,13 @@ const Accounts = () => {
           <CustomDropDown
             value={draftFilters.individualAccount}
             options={filterOptions.individualAccounts}
-            placeholder={getAllOptionLabel(filterOptions.individualAccounts, "All Individual Accounts")}
-            onValueChange={(value) => updateDraftFilter("individualAccount", value)}
+            placeholder={getAllOptionLabel(
+              filterOptions.individualAccounts,
+              "All Individual Accounts",
+            )}
+            onValueChange={(value) =>
+              updateDraftFilter("individualAccount", value)
+            }
             multiple
             showSearch
             searchPlaceholder="Search individual accounts..."
@@ -378,7 +404,10 @@ const Accounts = () => {
           <CustomDropDown
             value={draftFilters.accountType}
             options={filterOptions.accountTypes}
-            placeholder={getAllOptionLabel(filterOptions.accountTypes, "All Account Types")}
+            placeholder={getAllOptionLabel(
+              filterOptions.accountTypes,
+              "All Account Types",
+            )}
             onValueChange={(value) => updateDraftFilter("accountType", value)}
             multiple
             showSearch
@@ -394,8 +423,13 @@ const Accounts = () => {
           <CustomDropDown
             value={draftFilters.accountHolderName}
             options={filterOptions.accountHolderNames}
-            placeholder={getAllOptionLabel(filterOptions.accountHolderNames, "All Account Holders")}
-            onValueChange={(value) => updateDraftFilter("accountHolderName", value)}
+            placeholder={getAllOptionLabel(
+              filterOptions.accountHolderNames,
+              "All Account Holders",
+            )}
+            onValueChange={(value) =>
+              updateDraftFilter("accountHolderName", value)
+            }
             multiple
             showSearch
             searchPlaceholder="Search account holders..."
@@ -413,14 +447,22 @@ const Accounts = () => {
               aria-label="Filter accounts by date"
               title="Filter accounts by date"
               value={draftFilters.date}
-              onChange={(event) => updateDraftFilter("date", event.target.value)}
+              onChange={(event) =>
+                updateDraftFilter("date", event.target.value)
+              }
               className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>
 
         <div className="mt-4 flex justify-end gap-2">
-          <CustomButton variant="outline" color="gray" size="2" className="h-9!" onClick={resetFilters}>
+          <CustomButton
+            variant="outline"
+            color="gray"
+            size="2"
+            className="h-9!"
+            onClick={resetFilters}
+          >
             <RotateCcw className="h-4 w-4" />
             Reset Filters
           </CustomButton>
@@ -443,7 +485,9 @@ const Accounts = () => {
           <div className="flex w-full flex-col items-center justify-center gap-3 py-16">
             <Spinner size="3" />
             <div className="text-center">
-              <p className="text-sm font-semibold text-slate-700">Loading accounts</p>
+              <p className="text-sm font-semibold text-slate-700">
+                Loading accounts
+              </p>
               <p className="mt-1 text-xs font-medium text-slate-400">
                 Fetching account balances from the database...
               </p>
@@ -481,6 +525,8 @@ const Accounts = () => {
           </>
         )}
       </div>
+
+      <AddAcounts open={addAccounts} setOpen={setAddAccounts}/>
     </main>
   );
 };

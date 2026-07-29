@@ -87,6 +87,24 @@ const TransactionFilters = ({
           />
         </FilterField>
 
+        <FilterField label="Account Holder Name">
+          <CustomDropDown
+            value={draftFilters.accountHolderName}
+            options={filterOptions?.accountHolderNames}
+            placeholder={getAllOptionLabel(filterOptions?.accountHolderNames, "All Account Holders")}
+            onValueChange={(value) => updateFilter("accountHolderName", value)}
+            multiple
+            showSearch
+            searchPlaceholder="Search account holders..."
+            align="start"
+            buttonVariant="outline"
+            buttonColor="gray"
+            buttonSize="2"
+            triggerClassName={dropdownTriggerClassName}
+            contentClassName={dropdownContentClassName}
+          />
+        </FilterField>
+
         <FilterField label="Individual Account">
           <CustomDropDown
             value={draftFilters.individualAccount}
@@ -105,7 +123,7 @@ const TransactionFilters = ({
           />
         </FilterField>
         
-        <FilterField label="Account">
+        {/* <FilterField label="Account">
           <CustomDropDown
             value={draftFilters.account}
             options={filterOptions?.accounts}
@@ -121,25 +139,8 @@ const TransactionFilters = ({
             triggerClassName={dropdownTriggerClassName}
             contentClassName={dropdownContentClassName}
           />
-        </FilterField>
+        </FilterField> */}
 
-        <FilterField label="Account Holder Name">
-          <CustomDropDown
-            value={draftFilters.accountHolderName}
-            options={filterOptions?.accountHolderNames}
-            placeholder={getAllOptionLabel(filterOptions?.accountHolderNames, "All Account Holders")}
-            onValueChange={(value) => updateFilter("accountHolderName", value)}
-            multiple
-            showSearch
-            searchPlaceholder="Search account holders..."
-            align="start"
-            buttonVariant="outline"
-            buttonColor="gray"
-            buttonSize="2"
-            triggerClassName={dropdownTriggerClassName}
-            contentClassName={dropdownContentClassName}
-          />
-        </FilterField>
 
         <FilterField label="Account Type">
           <CustomDropDown

@@ -1,11 +1,16 @@
+import uuid
 from decimal import Decimal
 from datetime import date, datetime, timedelta, timezone
+
+from fastapi import HTTPException
 
 from sqlalchemy import String, cast, func, or_, and_
 from sqlalchemy.orm import Session
 
 from ..models.bank_accounts import BankAccounts
+from ..utils.sheets_utils import append_account_to_local_excel
 
+import uuid
 
 def _lower_text(column):
     return func.lower(func.coalesce(cast(column, String), ""))
@@ -393,3 +398,63 @@ def get_paginated_accounts(
         "accounts": [account_to_dict(account) for account in accounts],
         "totalCount": total_count,
     }
+
+def create_new_account(db: Session, request: dict, user_id: int) -> None:
+    """Create a new bank account for a user"""
+
+    bank_name = request.bank
+    account_no = request.accountno
+    account_type = request.type
+    account_holder_name = request.name
+
+    if not (bank_name and account_no and account_type and account_holder_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Important fields are missing."
+        )
+    
+    # Check for existing account number
+    existing_account = (db.query(BankAccounts)
+    .filter(
+        BankAccounts.account_number == account_no,
+        BankAccounts.user_id == user_id
+    ).first())
+    
+    if existing_account:
+        raise HTTPException(status_code=400, detail="Account number already exists.")
+    
+    try:
+        new_account = BankAccounts(
+            id=str(uuid.uuid4()),
+            bank_name= bank_name,
+            account_number = account_no,
+            account_type = account_type,
+            account_holder_name = account_holder_name,
+            source = "manual",
+            user_id = user_id
+        )
+
+        db.add(new_account)
+
+        # Append to local Excel sheet
+        excel_success = append_account_to_local_excel(
+            bank_name=bank_name,
+            name=account_holder_name,
+            ac_type=account_type,
+            account_no=account_no
+        )
+        if not excel_success:
+            raise Exception("Failed to write to Excel sheet")
+
+        db.commit()
+        db.refresh(new_account)
+
+        return {
+            "status" : 201,
+            "message": f'New account with account number - {account_no}, is created successfully'
+        }
+
+    except Exception as e:
+        db.rollback()
+        print(f"Error creating new account: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error occurred while creating the account.")
