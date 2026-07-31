@@ -1,4 +1,6 @@
 import asyncio
+import threading
+from datetime import datetime, timezone
 
 from fastapi import UploadFile, HTTPException
 from googleapiclient.discovery import build
@@ -20,6 +22,36 @@ from ..utils.db_utils import (
 )
 from ..utils.sheets_utils import _get_sheet_title
 from .setup_service import _sync_transactions_to_sheet
+
+
+STATEMENT_JOB_RUNNING = "running"
+STATEMENT_JOB_SUCCESS = "success"
+STATEMENT_JOB_FAILED = "failed"
+
+_statement_jobs: dict[str, dict] = {}
+_statement_jobs_lock = threading.Lock()
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _set_statement_job(job_key: str, **updates) -> None:
+    with _statement_jobs_lock:
+        current_job = _statement_jobs.get(job_key, {})
+        _statement_jobs[job_key] = {
+            **current_job,
+            **updates,
+            "updated_at": _utc_now_iso(),
+        }
+
+
+def get_statement_upload_job(user_id: int, job_id: str) -> dict:
+    with _statement_jobs_lock:
+        job = _statement_jobs.get(job_id)
+        if not job or job.get("user_id") != user_id:
+            raise HTTPException(status_code=404, detail="Statement upload job not found.")
+        return dict(job)
 
 
 # -------------------------- Main function which calls LLM ------------
@@ -145,6 +177,43 @@ def _delete_saved_statement(saved_path: Path) -> None:
 def _delete_saved_statements(saved_files: list[tuple[str, Path]]) -> None:
     for _, saved_path in saved_files:
         _delete_saved_statement(saved_path)
+
+
+def _statement_error_message(error: Exception) -> str:
+    if isinstance(error, HTTPException):
+        return str(error.detail)
+    return str(error) or "Statement parsing failed."
+
+
+def _run_statement_upload_job(job_id: str, user_id: int, saved_files: list[tuple[str, Path]]) -> None:
+    try:
+        result = _process_saved_statements_sync(user_id, saved_files)
+        _set_statement_job(
+            job_id,
+            status=STATEMENT_JOB_SUCCESS,
+            message=result.get("message") or "Statement parsing completed.",
+            result=result,
+            completed_at=_utc_now_iso(),
+        )
+    except Exception as error:
+        _delete_saved_statements(saved_files)
+        _set_statement_job(
+            job_id,
+            status=STATEMENT_JOB_FAILED,
+            message=_statement_error_message(error),
+            error=_statement_error_message(error),
+            completed_at=_utc_now_iso(),
+        )
+
+
+def _start_statement_job_thread(job_id: str, user_id: int, saved_files: list[tuple[str, Path]]) -> None:
+    thread = threading.Thread(
+        target=_run_statement_upload_job,
+        args=(job_id, user_id, saved_files),
+        daemon=True,
+        name=f"statement-upload-{job_id}",
+    )
+    thread.start()
 
 
 
@@ -335,8 +404,36 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
     if not user.spreadsheet_id:
         raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
 
-    # Save uploads through the async request, then move the blocking pipeline
-    # to a worker thread with its own SQLAlchemy session.
     saved_files = await _save_uploaded_statements(files)
+    job_id = uuid4().hex
+    filenames = [original_filename for original_filename, _ in saved_files]
 
-    return await run_in_threadpool(_process_saved_statements_sync, user.id, saved_files)
+    _set_statement_job(
+        job_id,
+        job_id=job_id,
+        user_id=user.id,
+        status=STATEMENT_JOB_RUNNING,
+        message="Statement parsing is running.",
+        filenames=filenames,
+        started_at=_utc_now_iso(),
+    )
+
+    try:
+        _start_statement_job_thread(job_id, user.id, saved_files)
+    except Exception:
+        _delete_saved_statements(saved_files)
+        _set_statement_job(
+            job_id,
+            status=STATEMENT_JOB_FAILED,
+            message="Failed to start statement parsing.",
+            completed_at=_utc_now_iso(),
+        )
+        raise HTTPException(status_code=500, detail="Failed to start statement parsing.")
+
+    return {
+        "status": STATEMENT_JOB_RUNNING,
+        "job_id": job_id,
+        "message": "Statement upload started. Parsing will continue in the background.",
+        "files_count": len(saved_files),
+        "filenames": filenames,
+    }

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import DataCard from "../components/ui/DataCard";
 import ChartCard from "../components/charts/ChartCard";
 import { Flex, Tabs } from "@radix-ui/themes";
@@ -18,7 +19,8 @@ import { formatTransactionDateRangeLabel, getTransactionFilterOptionsFromBackend
 import { transactionApi } from "../api/transactions";
 import { useSetupStore } from "../store/setupStore";
 
-export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage }) => {
+export const MainDashboard = ({ tabValue, setTabValue }) => {
+  const navigate = useNavigate();
   const [openFilter, setOpenFilter] = useState(false);
   const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
   const [cashFlowPeriod, setCashFlowPeriod] = useState("daily");
@@ -176,6 +178,16 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
   const cashFlowTrendData = summaryData?.cashFlowTrend || []; 
   const transactionsByModeData = summaryData?.transactionsByMode || [];
 
+  const handleViewTopTransactions = () => {
+    const params = new URLSearchParams({
+      sortField: "amount",
+      sortOrder: "desc",
+      tab: tabValue || "transactions",
+    });
+
+    navigate(`/transactions?${params.toString()}`);
+  };
+
   const cashFlowPeriodOptions = useMemo(
     () => [{ label: "Daily", value: "daily" }],
     [],
@@ -282,12 +294,6 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
         />
       )}
 
-      {isSyncing && (
-        <div className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-700">
-          {syncMessage || "Syncing your last 30 days of emails in the background. New rows may appear gradually."}
-        </div>
-      )}
-
       <Tabs.Root value={tabValue} className="w-full" onValueChange={(value) => setTabValue(value)}>
         <Tabs.List className="flex! w-full! gap-2 items-stretch! border-none! shadow-none! rounded-md! h-12!" style={{ boxShadow: "none" }}>
           <Tabs.Trigger value="transactions" className="flex-1! justify-center! bg-white! hover:bg-gray-50! border border-gray-50! shadow-md! rounded-md! text-sm font-medium text-gray-900! transition-colors! data-[state=active]:border-b-2! data-[state=active]:border-blue-600! data-[state=active]:text-blue-600! data-[state=active]:hover:bg-white! [&_.rt-BaseTabListTriggerInner]:bg-transparent!">
@@ -373,7 +379,13 @@ export const MainDashboard = ({ tabValue, setTabValue, isSyncing, syncMessage })
 
       {/* Top Transactions */}
       <div className="flex flex-col md:flex-row gap-3 md:gap-4">
-      <TopItemList title="Top 5 Transactions" showBtn={true} btnText="View All" data={topTransactions} />
+      <TopItemList
+        title="Top 5 Transactions"
+        showBtn={true}
+        btnText="View All"
+        data={topTransactions}
+        onButtonClick={handleViewTopTransactions}
+      />
       </div>
 
       

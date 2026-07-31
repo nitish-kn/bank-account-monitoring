@@ -7,5 +7,6 @@ from .user_sheet import UserSheet
 from .transactions import Transactions
 from .parsed import Parsed
 from .bank_accounts import BankAccounts
+from .transaction_logs import TransactionLog
 
-__all__ = ["Family", "Invite", "User", "UserSheet", "Transactions", "Parsed", "BankAccounts"]
+__all__ = ["Family", "Invite", "User", "UserSheet", "Transactions", "Parsed", "BankAccounts", "TransactionLog"]

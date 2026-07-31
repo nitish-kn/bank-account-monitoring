@@ -36,3 +36,4 @@ class User(Base):
     transactions = relationship("Transactions", back_populates="user")
     bank_accounts = relationship("BankAccounts", back_populates="user")
     parsed = relationship("Parsed", back_populates="user")
+    transaction_logs = relationship("TransactionLog", back_populates="user")

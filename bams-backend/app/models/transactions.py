@@ -59,3 +59,4 @@ class Transactions(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="transactions")  # or appropriate name
+    transaction_logs = relationship("TransactionLog", back_populates="transactions")

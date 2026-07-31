@@ -4,6 +4,7 @@ import DialogPopup from "./ui/DialogPopup";
 import axios from "axios";
 import { accountsApi } from "../api/accounts";
 import { TriangleAlert } from "lucide-react";
+import { toast } from "react-toastify";
 
 const AddAcounts = ({open, setOpen}) => {
   const [account, setAccount] = useState({
@@ -29,6 +30,12 @@ const AddAcounts = ({open, setOpen}) => {
     try{
         const result = await accountsApi.createAccounts(account)
         console.log(result)
+
+        if(result.status === 201){
+          toast.success(`Account with account no. - ${account?.accountno} created successfully`)
+        } else {
+          toast.error("Error creating the account")
+        }
         setOpen(false) // Close the modal on success
     } catch(err){
         setError(err.response?.data?.detail || err.message || "Failed to create account")

@@ -1,67 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import CustomTable from "./ui/CustomTable";
-import { Eye, FileText, MoreHorizontal } from "lucide-react";
+import { EllipsisVertical, Eye, FileText, MoreHorizontal } from "lucide-react";
 import { Button } from "@radix-ui/themes";
 import { formatAmount, formatCompactINR, formatDateAndTime } from "../lib/helper";
 import Pagination from "./Pagination";
 import CustomSearchBar from "./ui/CustomSearchBar";
 import DialogPopup from "./ui/DialogPopup";
-
-const TypeBadge = ({ type }) => {
-  const normalizedType = String(type || "").trim().toLowerCase();
-  const isCredit = normalizedType === "credit";
-  const isDebit = normalizedType === "debit";
-
-  if (!isCredit && !isDebit) {
-    return (
-      <span className="inline-flex items-center rounded-md! bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500">
-        -
-      </span>
-    );
-  }
-
-  const bgColor = isCredit ? "bg-green-100" : "bg-red-100";
-  const textColor = isCredit ? "text-green-600" : "text-red-600";
-  const label = isCredit ? "Credit" : "Debit";
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-md! px-2.5 py-1 text-xs font-semibold ${bgColor} ${textColor}`}
-    >
-      {label}
-    </span>
-  );
-};
-
-const CategoryBadge = ({ category, type }) => {
-  const isCredit = String(type).toLowerCase() === "credit";
-  const bgColor = isCredit ? "bg-green-50" : "bg-red-50";
-  const textColor = isCredit ? "text-green-600" : "text-red-600";
-  const borderColor = isCredit ? "border-green-200" : "border-red-200";
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium text-blue-700`}
-    >
-      {category ? category : "Others"}
-    </span>
-  );
-};
-
-const SourceBadge = ({ source, gmail_msg_id }) => {
-  return (
-    <a href={`https://mail.google.com/mail/u/0/#inbox/${gmail_msg_id}`} target="_blank" rel="noopener"  className="flex items-center justify-center w-full gap-1">
-      {source === "email" ? (
-        // Email source
-        <div className="flex items-center">
-          <img src="./gmail-icon.png" alt="Gmail" className="w-5 h-5" />
-        </div>
-      ) : 
-        <span><FileText className="text-blue-600 w-5 h-5"/></span>
-      }
-    </a>
-  );
-};
+import CustomPopover from "./ui/CustomPopover";
+import CustomButton from "./ui/CustomButton";
+import ActionList from "./ui/ActionList";
+import { ActionBadge, AmountColor, CategoryBadge, SourceBadge, TypeBadge } from "../utils/Badges";
 
 const RecentTransactions = ({
   transactions = [],
@@ -76,8 +24,8 @@ const RecentTransactions = ({
   onPageSizeChange,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [openDialog, setOpenDialog] = useState(false);
-  const [data, setData] = useState({});
+
+
 
   const columns = useMemo(() => {
     let baseCols = [
@@ -109,16 +57,16 @@ const RecentTransactions = ({
         render: (row) => (
           ((row?.txn_via === "Credit Card") ?
             <div className="max-w-60 w-fit">
-            <p className="font-semibold text-gray-900 text-sm"> {row?.optional_fields?.credit_card_issuer || "Unknown Bank"} </p>
-            <p className="text-xs font-medium text-gray-800 truncate"> {row?.optional_fields?.credit_card_owner || "-"} </p>
-            <p className="text-xs text-gray-500 truncate"> {row?.optional_fields?.credit_card_number || "-"} </p>
-          </div>
-           : 
-           <div className="max-w-60 w-fit">
-            <p className="font-semibold text-gray-900 text-sm"> {row?.bank_name || "Unknown Bank"} </p>
-            <p className="text-xs font-medium text-gray-800 truncate"> {row?.account_holder_name || "-"} </p>
-            <p className="text-xs text-gray-500 truncate"> {row?.account_number || "-"} </p>
-          </div>)
+              <p className="font-semibold text-gray-900 text-sm"> {row?.optional_fields?.credit_card_issuer || "Unknown Bank"} </p>
+              <p className="text-xs font-medium text-gray-800 truncate"> {row?.optional_fields?.credit_card_owner || "-"} </p>
+              <p className="text-xs text-gray-500 truncate"> {row?.optional_fields?.credit_card_number || "-"} </p>
+            </div>
+            :
+            <div className="max-w-60 w-fit">
+              <p className="font-semibold text-gray-900 text-sm"> {row?.bank_name || "Unknown Bank"} </p>
+              <p className="text-xs font-medium text-gray-800 truncate"> {row?.account_holder_name || "-"} </p>
+              <p className="text-xs text-gray-500 truncate"> {row?.account_number || "-"} </p>
+            </div>)
         ),
       },
       {
@@ -159,20 +107,7 @@ const RecentTransactions = ({
         columnWidth: "150px",
         width: "w-40",
         sortable: true,
-        render: (row) => {
-          const normalizedType = String(row.txn_type || "").trim().toLowerCase();
-          const isCredit = normalizedType === "credit";
-          const isDebit = normalizedType === "debit";
-          const amountValue = parseFloat(row.amount || 0);
-          const sign = isCredit ? "+" : "−";
-          const color = isCredit ? "text-green-600" : isDebit ? "text-red-500" : "text-gray-700";
-
-          return (
-            <div className={`text-sm font-semibold w-full text-right ${color}`}>
-              {sign} ₹ {formatAmount(amountValue)}
-            </div>
-          );
-        },
+        render: (row) => <AmountColor type={row?.txn_type} amount={row?.amount} />
       },
       {
         key: "balance_after_txn",
@@ -194,7 +129,7 @@ const RecentTransactions = ({
         width: "w-16",
         sortable: true,
         sortKey: "source",
-        render: (row) => <SourceBadge source={row?.source} gmail_msg_id = {row?.gmail_message_id} />,
+        render: (row) => <SourceBadge source={row?.source} gmail_msg_id={row?.gmail_message_id} />,
       },
       {
         key: "actions",
@@ -202,24 +137,14 @@ const RecentTransactions = ({
         columnWidth: "90px",
         width: "w-20",
         render: (row) => (
-          <Button
-            color="gray"
-            variant="ghost"
-            size="1"
-            className="hover:bg-gray-100 flex items-center justify-center w-full!"
-          >
-            <Eye className="h-5 w-5 font-bold" onClick={() => {
-              setOpenDialog(true);
-              setData(row);
-            }}/>
-          </Button>
+          <ActionBadge row={row} />
         ),
       },
     ];
 
     if (tabValue === "fastag") {
       baseCols = baseCols.filter(c => !["txn_type", "amount", "balance_after_txn"].includes(c.key));
-      
+
       const actionsIdx = baseCols.findIndex(c => c.key === "actions");
       const newCols = [
         {
@@ -243,7 +168,7 @@ const RecentTransactions = ({
           ),
         },
       ];
-      
+
       baseCols.splice(actionsIdx, 0, ...newCols);
     }
 
@@ -318,25 +243,6 @@ const RecentTransactions = ({
         />
       </div>
 
-      <DialogPopup open={openDialog} setOpen={setOpenDialog} subheading="Transaction Details">
-        {data ? (
-          <div className="text-sm text-gray-900 w-full">
-            <p>Narration - <span className="font-medium text-lg">{data?.narration}</span></p>
-            <p>Transaction Date - <span className="font-medium text-lg">{formatDateAndTime(data?.txn_date).date}</span></p>
-            <p>Account Number - <span className="font-medium text-lg">{data?.account_number}</span></p>
-            <p>Reference Number - <span className="font-medium text-lg">{data?.ref_number}</span></p>
-            <p>Category - <span className="font-medium text-lg">{data?.category}</span></p>
-            <p>Transaction Type - <span className="font-medium text-lg">{data?.txn_type}</span></p>
-            <p>Amount - <span className="font-medium text-lg">{formatAmount(data?.amount)}</span></p>
-            <p>Balance After Transaction - <span className="font-medium text-lg">{formatAmount(data?.balance_after_txn)}</span></p>
-            <p>Account Holder Name - <span className="font-medium text-lg">{data?.account_holder_name}</span></p>
-            <p>Counter Party Name - <span className="font-medium text-lg">{data?.counter_party_name}</span></p>
-            
-          </div>
-        ) : (
-          <div className="text-sm text-gray-500">No transaction details available.</div>
-        )}
-      </DialogPopup>
     </>
   );
 };

@@ -7,6 +7,12 @@ from ..utils.db_utils import transaction_to_schema_dict
 from ..utils.transaction_utils import normalize_txn_via
 
 
+from fastapi import HTTPException
+from ..models.transaction_logs import TransactionLog
+
+from ..models.user import User
+from ..utils.db_utils import build_transaction_dedupe_key
+
 def _lower_text(column):
     return func.lower(func.coalesce(cast(column, String), ""))
 
@@ -482,3 +488,224 @@ def get_filter_options(db: Session, user_id: int):
         "currencies": _distinct_values(Transactions.currency),
         "statuses": ["parsed", "failed", "not_transaction"],
     }
+
+
+
+def update_transaction(db: Session, user_id: int, txn_id: str, payload, ip_address: str) -> dict:
+    transaction = db.query(Transactions).filter(
+        Transactions.id == txn_id,
+        Transactions.user_id == user_id
+    ).first()
+
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found.")
+
+    old_dedupe_key = transaction.dedupe_key
+
+    # Updatable fields mapping (exclude amount and bank_name to prevent manual modifications)
+    updatable_fields = {
+        "category": payload.category,
+        "narration": payload.narration,
+        "counterparty": payload.counterparty,
+        "account_number": payload.account_number,
+        "account_holder_name": payload.account_holder_name,
+        "txn_date": payload.txn_date,
+        "mode": payload.mode,
+        "ref_number": payload.ref_number,
+    }
+
+    changes = {}
+
+    for field, new_val in updatable_fields.items():
+        if new_val is None:
+            continue
+
+        old_val = getattr(transaction, field)
+
+        if field == "txn_date":
+            try:
+                new_date = datetime.fromisoformat(new_val.replace("Z", "+00:00"))
+                if transaction.txn_date and transaction.txn_date.tzinfo:
+                    new_date = new_date.astimezone(transaction.txn_date.tzinfo)
+                else:
+                    new_date = new_date.replace(tzinfo=None)
+                
+                # Check for mismatch
+                if transaction.txn_date != new_date:
+                    changes[field] = {
+                        "old": transaction.txn_date.isoformat() if transaction.txn_date else None,
+                        "new": new_val
+                    }
+                    transaction.txn_date = new_date
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid date format.")
+        else:
+            if str(old_val or "") != str(new_val or ""):
+                changes[field] = {
+                    "old": old_val,
+                    "new": new_val
+                }
+                setattr(transaction, field, new_val)
+
+    if not changes:
+        return {
+            "status": "success",
+            "message": "No changes made to the transaction.",
+            "transaction": transaction_to_schema_dict(transaction)
+        }
+
+    try:
+        # Recalculate dedupe key
+        updated_txn_dict = transaction_to_schema_dict(transaction)
+        new_dedupe_key = build_transaction_dedupe_key(updated_txn_dict, user_id)
+        transaction.dedupe_key = new_dedupe_key
+
+        # Create log entry
+        log_entry = TransactionLog(
+            user_id=user_id,
+            txn_id=txn_id,
+            changes=changes,
+            reason=payload.reason,
+            ip_address=ip_address,
+            changed_by=payload.changed_by
+        )
+        db.add(log_entry)
+
+        # Update updated_at on transaction
+        transaction.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(transaction)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update transaction: {str(e)}")
+
+    # Propagate changes to Google Sheets
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and user.spreadsheet_id:
+        _update_sheets_for_transaction(user, old_dedupe_key, transaction)
+
+    return {
+        "status": "success",
+        "message": "Transaction updated successfully.",
+        "transaction": transaction_to_schema_dict(transaction)
+    }
+
+
+def query_audit_logs(db: Session, user_id: int, page: int, page_size: int, search: str | None = None, changed_by: str | None = None, start_date: str | None = None, end_date: str | None = None) -> dict:
+    query = db.query(TransactionLog).filter(TransactionLog.user_id == user_id)
+
+    if changed_by:
+        query = query.filter(TransactionLog.changed_by.ilike(f"%{changed_by}%"))
+
+    if search:
+        query = query.filter(
+            or_(
+                TransactionLog.reason.ilike(f"%{search}%"),
+                TransactionLog.ip_address.ilike(f"%{search}%"),
+                TransactionLog.changed_by.ilike(f"%{search}%")
+            )
+        )
+
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            query = query.filter(TransactionLog.created_at >= start_dt)
+        except Exception:
+            pass
+
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999)
+            query = query.filter(TransactionLog.created_at <= end_dt)
+        except Exception:
+            pass
+
+    total_count = query.count()
+
+    logs = (
+        query
+        .order_by(TransactionLog.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    serialized_logs = []
+    for log in logs:
+        txn = db.query(Transactions).filter(Transactions.id == log.txn_id).first()
+        txn_narration = txn.narration if txn else "Unknown Transaction"
+        txn_amount = str(txn.amount) if txn and txn.amount is not None else "-"
+        
+        serialized_logs.append({
+            "id": log.id,
+            "txn_id": log.txn_id,
+            "txn_narration": txn_narration,
+            "txn_amount": txn_amount,
+            "changes": log.changes,
+            "reason": log.reason,
+            "ip_address": log.ip_address,
+            "changed_by": log.changed_by,
+            "created_at": log.created_at.isoformat() if log.created_at else None
+        })
+
+    return {
+        "logs": serialized_logs,
+        "totalCount": total_count,
+        "page": page,
+        "pageSize": page_size
+    }
+
+
+def _update_sheets_for_transaction(user: User, old_dedupe_key: str, updated_transaction: Transactions):
+    """
+    Finds the row corresponding to old_dedupe_key in the user's Google Sheet
+    and updates it with the new fields of updated_transaction.
+    """
+    if not user.spreadsheet_id:
+        return
+
+    try:
+        from googleapiclient.discovery import build
+        from .credentials import build_credentials
+        from ..utils.sheets_utils import _get_sheet_title
+        from ..utils.transaction_utils import (
+            transaction_column_for_field,
+            transactions_to_sheet_rows,
+            TRANSACTION_SHEET_END_COLUMN
+        )
+
+        creds = build_credentials(user)
+        sheets_service = build("sheets", "v4", credentials=creds)
+        sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
+
+        # Read the dedupe_key column values as list to locate the correct row
+        dedupe_col = transaction_column_for_field("dedupe_key")
+        result = sheets_service.spreadsheets().values().get(
+            spreadsheetId=user.spreadsheet_id,
+            range=f"'{sheet_title}'!{dedupe_col}2:{dedupe_col}",
+        ).execute()
+
+        dedupe_keys = [row[0] if row else "" for row in result.get("values", [])]
+
+        if old_dedupe_key in dedupe_keys:
+            idx = dedupe_keys.index(old_dedupe_key)
+            row_num = idx + 2
+
+            # Convert updated transaction to sheets rows
+            txn_dict = transaction_to_schema_dict(updated_transaction)
+            rows = transactions_to_sheet_rows([txn_dict])
+
+            if rows:
+                range_to_update = f"'{sheet_title}'!A{row_num}:{TRANSACTION_SHEET_END_COLUMN}{row_num}"
+                sheets_service.spreadsheets().values().update(
+                    spreadsheetId=user.spreadsheet_id,
+                    range=range_to_update,
+                    valueInputOption="RAW",
+                    body={"values": rows}
+                ).execute()
+                print(f"Successfully updated Google Sheets row {row_num} for dedupe_key {old_dedupe_key}")
+        else:
+            print(f"Old dedupe_key {old_dedupe_key} not found in Google Sheets. It may not be synced yet.")
+    except Exception as e:
+        print(f"Failed to update Google Sheets for edited transaction: {e}")

@@ -27,7 +27,6 @@ const all_account_holder_names_ = [
   { name: "Vaibhav Gupta", value: "vaibhav gupta" },
   { name: "Ram Niwas Gupta", value: "ram niwas gupta" },
   { name: "Ram Niwas Gupta HUF", value: "ram niwas gupta huf" },
-  { name: "Om Prakash Gupta HUF", value: "om prakash gupta huf" },
   { name: "Arvind Kumar Gupta HUF", value: "arvind kumar gupta huf" },
   { name: "Umang Gupta NRO", value: "umang gupta nro" },
   { name: "Umang Gupta NRE", value: "umang gupta nre" },

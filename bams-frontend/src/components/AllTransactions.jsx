@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Badge, Button, Spinner, Tabs } from "@radix-ui/themes";
 import { FileSpreadsheet, FileText, TriangleAlert, Filter, Calendar, ChevronDown } from "lucide-react";
 import CustomTable from "./ui/CustomTable";
@@ -11,10 +12,18 @@ import CustomButton from "./ui/CustomButton";
 import { useSetupStore } from "../store/setupStore";
 import { getTransactionFilterOptionsFromBackend, formatTransactionDateRangeLabel, getDefaultTransactionDateRange } from "../lib/transactional-helper";
 import CustomDatePicker from "./ui/CustomDatePicker";
+import { ActionBadge, AmountColor, CategoryBadge, SourceBadge, TypeBadge } from "../utils/Badges";
 
 const tabTriggerClassName = "flex-1! justify-center! bg-white! hover:bg-gray-50! border border-gray-50! shadow-md! rounded-md! text-sm font-medium text-gray-900! transition-colors! data-[state=active]:border-b-2! data-[state=active]:border-blue-600! data-[state=active]:text-blue-600! data-[state=active]:hover:bg-white! [&_.rt-BaseTabListTriggerInner]:bg-transparent!";
 
-export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, syncDashboard }) {
+export function AllTransactions({ user }) {
+  const [searchParams] = useSearchParams();
+  const initialSortField = searchParams.get("sortField") || "date";
+  const initialSortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
+  const initialTab = ["transactions", "credit-card", "fastag"].includes(searchParams.get("tab"))
+    ? searchParams.get("tab")
+    : "transactions";
+
   const [emailPage, setEmailPage] = useState(1);
   const [emailPageSize, setEmailPageSize] = useState(10);
   const [transactions, setTransactions] = useState([]);
@@ -27,8 +36,8 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
   const [appliedFilters, setAppliedFilters] = useState({});
   const [openFilter, setOpenFilter] = useState(false);
   const refreshTrigger = useSetupStore((state) => state.refreshTrigger);
-  const [sort, setSort] = useState({ field: "date", order: "desc" });
-  const [tabValue, setTabValue] = useState("transactions");
+  const [sort, setSort] = useState({ field: initialSortField, order: initialSortOrder });
+  const [tabValue, setTabValue] = useState(initialTab);
 
   const [dateRange, setDateRange] = useState(getDefaultTransactionDateRange(new Date(), 30));
   const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
@@ -105,176 +114,176 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
   }, [appliedFilters, emailPage, emailPageSize, refreshTrigger, sort, dateRange, tabValue]);
 
   const totalEmailPages = Math.max(Math.ceil(totalCount / emailPageSize), 1);
-  
+
   const hasActiveFilters = Object.keys(appliedFilters).some(
     (key) => appliedFilters[key] && appliedFilters[key] !== "all" && appliedFilters[key].length !== 0
   );
 
-  const emailColumns = [
-    {
-      key: "txn_date",
-      header: "Date",
-      columnWidth: "120px",
-      cellClassName: "whitespace-nowrap",
-      sortable: true,
-      sortKey: "date",
-      render: (transaction) => (
-        <p className="text-xs text-gray-700">
-          {formatDateAndTime(transaction?.txn_date).date || "-"}
-        </p>
-      ),
-    },
-    {
-      key: "bank_name",
-      header: "Bank / Account",
-      columnWidth: "260px",
-      sortable: true,
-      sortKey: "bank",
-      render: (transaction) => (
-        <div className="min-w-0 ">
-          <p className="truncate text-sm max-w-80 text-black" title={transaction?.bank_name} >
-            {transaction?.bank_name || "Unknown bank"}
+  const emailColumns = useMemo(() => {
+    const columns = [
+      {
+        key: "txn_date",
+        header: "Date",
+        columnWidth: "120px",
+        cellClassName: "whitespace-nowrap",
+        sortable: true,
+        sortKey: "date",
+        render: (transaction) => (
+          <p className="text-xs text-gray-700">
+            {formatDateAndTime(transaction?.txn_date).date || "-"}
           </p>
-          <p className="mt-0.5 truncate text-xs font-medium! text-gray-800" title={transaction?.account_holder_name}>
-            {transaction?.account_holder_name || "-"}
-          </p>
-          <p className="mt-0.5 truncate text-xs text-gray-500" title={transaction?.account_number}>
-            {transaction?.account_number || "-"}
-          </p>
-        </div>
-      ),
-    },
-    // {
-    //   key: "account_holder_name",
-    //   header: "Account Holder Name",
-    //   cellClassName: "max-w-[280px]",
-    //   render: (transaction) => {
-    //     const accountHolderName = cleanText(transaction?.account_holder_name);
+        ),
+      },
+      {
+        key: "bank_name",
+        header: "Bank / Account",
+        columnWidth: "200px",
+        sortable: true,
+        sortKey: "bank",
+        render: (transaction) => (
+          <div className="min-w-0 ">
+            <p className="truncate text-sm max-w-80 text-black" title={transaction?.bank_name} >
+              {transaction?.bank_name || "Unknown bank"}
+            </p>
+            <p className="mt-0.5 truncate text-xs font-medium! text-gray-800" title={transaction?.account_holder_name}>
+              {transaction?.account_holder_name || "-"}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-gray-500" title={transaction?.account_number}>
+              {transaction?.account_number || "-"}
+            </p>
+          </div>
+        ),
+      },
+      {
+        key: "counterparty",
+        header: "Counterparty",
+        columnWidth: "240px",
+        cellClassName: "max-w-[280px]",
+        sortable: true,
+        render: (transaction) => {
+          const counterparty = cleanText(transaction?.counterparty);
 
-    //     return (
-    //       <p
-    //         className="max-w-72 truncate text-sm font-medium leading-6 text-gray-800"
-    //         title={accountHolderName}
-    //       >
-    //         {accountHolderName || "-"}
-    //       </p>
-    //     );
-    //   },
-    // },
-    {
-      key: "txn_type",
-      header: "Credit / Debit",
-      columnWidth: "130px",
-      cellClassName: "whitespace-nowrap",
-      sortable: true,
-      sortKey: "type",
-      render: (transaction) => {
-        const transactionType = String(transaction?.txn_type || "").toLowerCase();
-        const statusColor = transactionType === "debit"
-          ? "red"
-          : transactionType === "credit"
-            ? "green"
-            : "gray";
-        const label = transactionType === "debit"
-          ? "Debit"
-          : transactionType === "credit"
-            ? "Credit"
-            : "-";
+          return (
+            <p
+              className="max-w-72 truncate text-sm leading-6 font-medium text-gray-800"
+              title={counterparty}
+            >
+              {counterparty || "-"}
+            </p>
+          );
+        },
+      },
+      {
+        key: "txn_type",
+        header: "TYPE",
+        columnWidth: "100px",
+        cellClassName: "whitespace-nowrap",
+        sortable: true,
+        sortKey: "type",
+        render: (transaction) => <TypeBadge type={transaction?.txn_type} />
+      },
+      {
+        key: "amount",
+        header: "Amount",
+        columnWidth: "160px",
+        cellClassName: "whitespace-nowrap",
+        sortable: true,
+        render: (transaction) => <AmountColor type={transaction?.txn_type} amount={transaction?.amount} />
+      },
+      {
+        key: "category",
+        header: "Category",
+        columnWidth: "160px",
+        cellClassName: "",
+        sortable: true,
+        render: (row) => (
+          <CategoryBadge category={row.category} type={row.txn_type} />
+        ),
+      },
+      {
+        key: "narration",
+        header: "Narration",
+        columnWidth: "340px",
+        cellClassName: "max-w-[420px]",
+        sortable: true,
+        render: (transaction) => {
+          const narration = cleanText(transaction?.narration || transaction?.email_metadata?.subject);
 
-        return (
-          <Badge
-            color={statusColor}
-            variant="soft"
-            radius="full"
-            className="font-semibold capitalize"
-          >
-            {label}
-          </Badge>
-        );
+          return (
+            <p
+              className="max-w-120 truncate text-mid font-medium leading-6 text-gray-800"
+              title={narration}
+            >
+              {narration || "No narration available"}
+            </p>
+          );
+        },
       },
-    },
-    {
-      key: "amount",
-      header: "Amount",
-      columnWidth: "140px",
-      cellClassName: "whitespace-nowrap",
-      sortable: true,
-      render: (transaction) => {
-        const amount = transaction?.amount || transaction?.inr_equivalent;
-        return (
-          <p className={`w-full ${amount ? "text-right" : "text-center"} text-sm font-semibold text-gray-900`}>
-            {amount ? `₹ ${formatAmount(amount)}` : "-"}
-          </p>
-        );
+      {
+        key: "source",
+        header: "Source",
+        columnWidth: "90px",
+        cellClassName: "whitespace-nowrap",
+        sortable: true,
+        render: (transaction) => {
+          return (
+            <SourceBadge source={transaction?.source} gmail_msg_id={transaction?.gmail_message_id} />
+          );
+        },
       },
-    },
-    {
-      key: "counterparty",
-      header: "Counterparty",
-      columnWidth: "240px",
-      cellClassName: "max-w-[280px]",
-      sortable: true,
-      render: (transaction) => {
-        const counterparty = cleanText(transaction?.counterparty);
+      {
+        key: "actions",
+        header: "Actions",
+        columnWidth: "90px",
+        width: "w-20",
+        render: (row) => (
+          <ActionBadge row={row} />
+        ),
+      },
+    ];
 
-        return (
-          <p
-            className="max-w-72 truncate text-sm leading-6 text-gray-800"
-            title={counterparty}
-          >
-            {counterparty || "-"}
-          </p>
-        );
-      },
-    },
-    {
-      key: "narration",
-      header: "Narration",
-      columnWidth: "340px",
-      cellClassName: "max-w-[420px]",
-      sortable: true,
-      render: (transaction) => {
-        const narration = cleanText(transaction?.narration || transaction?.email_metadata?.subject);
+    if (tabValue !== "fastag") {
+      return columns;
+    }
 
-        return (
-          <p
-            className="max-w-120 truncate text-sm leading-6 text-gray-800"
-            title={narration}
-          >
-            {narration || "No narration available"}
+    const fastagColumns = columns.filter(
+      (column) => !["txn_type", "amount"].includes(column.key),
+    );
+    const actionsIdx = fastagColumns.findIndex((column) => column.key === "actions");
+    const insertIdx = actionsIdx === -1 ? fastagColumns.length : actionsIdx;
+
+    fastagColumns.splice(
+      insertIdx,
+      0,
+      {
+        key: "vehicle_number",
+        header: "Vehicle Number",
+        columnWidth: "150px",
+        render: (transaction) => (
+          <p className="truncate text-sm font-semibold text-gray-900" title={transaction?.optional_fields?.vehicle_number}>
+            {transaction?.optional_fields?.vehicle_number || "-"}
           </p>
-        );
+        ),
       },
-    },
-    {
-      key: "source",
-      header: "Source",
-      columnWidth: "90px",
-      cellClassName: "whitespace-nowrap",
-      sortable: true,
-      render: (transaction) => {
-        const isEmail = transaction?.source === "email";
-        
-        return (
-          <a href={`https://mail.google.com/mail/u/0/#inbox/${transaction?.gmail_message_id}`} target="_blank" rel="noopener" className="flex items-center justify-center w-full gap-1">
-            {isEmail ? (
-              // Email source
-              <div className="flex items-center">
-                <img src="./gmail-icon.png" alt="Gmail" className="w-5 h-5" />
-              </div>
-            ) : 
-              <span><FileText className="text-blue-600 w-5 h-5"/></span>
-            }
-          </a>
-        );
+      {
+        key: "trips_left",
+        header: "Trips Left",
+        columnWidth: "120px",
+        render: (transaction) => (
+          <p className="text-sm font-medium text-gray-700">
+            {transaction?.optional_fields?.trips_left || "-"}
+          </p>
+        ),
       },
-    },
-  ];
+    );
+
+    return fastagColumns;
+  }, [tabValue]);
 
   return (
     <div className="w-full flex flex-col gap-2">
       {/* Synced Emails Table Section */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
         {/* Header */}
         <div className="flex flex-col gap-4 border-b border-gray-200 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -296,10 +305,21 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto mt-2 lg:mt-0">
+
+            <Badge
+              size="2"
+              color="gray"
+              variant="soft"
+              radius="full"
+              className="px-3 py-1 font-semibold"
+            >
+              {totalCount} Total
+            </Badge>
+
             {/* Date Range Filter */}
             <div ref={dateRangePopoverRef} className="relative">
               <CustomButton color="gray" radius="large" className="text-gray-800!" variant="outline" size="2" onClick={() => setOpenDateRangeFilter((prev) => !prev)} >
-                <Calendar className="mr-1 h-4 w-4" /> 
+                <Calendar className="mr-1 h-4 w-4" />
                 <span className="hidden sm:inline">{dateRangeLabel.long}</span>
                 <span className="sm:hidden">{dateRangeLabel.short}</span>
                 <ChevronDown className="ml-1 h-4 w-4" />
@@ -343,21 +363,11 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
               variant={hasActiveFilters ? "solid" : "outline"}
               size="2"
               className={`ml-2 ${hasActiveFilters ? "text-white" : "text-gray-900"}!`}
-              onClick={() =>setOpenFilter((prev) => !prev)}
+              onClick={() => setOpenFilter((prev) => !prev)}
             >
-              <Filter className="sm:mr-1 h-4 w-4" /> 
+              <Filter className="sm:mr-1 h-4 w-4" />
               <span className="hidden sm:flex">Filter</span>
             </CustomButton>
-
-            <Badge
-              size="2"
-              color="gray"
-              variant="soft"
-              radius="full"
-              className="px-3 py-1 font-semibold"
-            >
-              {totalCount} Total
-            </Badge>
 
             {user?.spreadsheet_id && (
               <Button
@@ -430,12 +440,6 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
           </div>
         )}
 
-        {isSyncing && (
-          <div className="border-b border-blue-100 bg-blue-50 px-4 py-3 text-xs font-semibold text-blue-700">
-            {syncMessage || "Syncing your last 30 days of emails in the background. New rows may appear gradually."}
-          </div>
-        )}
-
         {/* Optional filter/search bar */}
         {/* <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50/60 px-6 py-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2 ml-auto">
@@ -452,7 +456,7 @@ export function AllTransactions({ user, isSyncing, syncMessage, lastSyncAt, sync
         </div> */}
 
         {/* Content */}
-        <div className="overflow-x-auto">
+        <div>
 
           {/* Loading State */}
           {loading && transactions.length === 0 ? (
