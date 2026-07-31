@@ -2,13 +2,55 @@ import { create } from "zustand";
 import { useAuthStore } from "./authStore";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import api from "../lib/api";
-import { useEmailStore } from "./emailStore";
+import { toast } from "react-toastify";
 
 const SYNC_STATUS_RUNNING = "running";
 const SYNC_STATUS_COMPLETED = "completed";
 const SYNC_STATUS_FAILED = "failed";
 const SYNC_POLL_INTERVAL_MS = 15000;
 const DASHBOARD_REFRESH_INTERVAL_MS = 30000;
+const SYNC_START_TOAST_ID = "latest-email-sync-started";
+const SYNC_COMPLETE_TOAST_ID = "latest-email-sync-complete";
+const SYNC_FAILED_TOAST_ID = "latest-email-sync-failed";
+
+const getSyncCompleteMessage = (payload = {}) => {
+  const rowsAdded = Number(
+    payload.new_rows ?? payload.rows_written ?? payload.rows ?? 0,
+  );
+
+  if (rowsAdded > 0) {
+    return `${rowsAdded} new ${rowsAdded === 1 ? "transaction" : "transactions"} added.`;
+  }
+
+  const message = String(payload.message || "").trim();
+  if (message.toLowerCase().includes("up to date")) {
+    return "Dashboard is already up to date.";
+  }
+
+  return "Email sync complete. Dashboard data refreshed.";
+};
+
+const showSyncStartedToast = () => {
+  toast.dismiss(SYNC_COMPLETE_TOAST_ID);
+  toast.dismiss(SYNC_FAILED_TOAST_ID);
+  toast.info("Latest email sync started.", {
+    toastId: SYNC_START_TOAST_ID,
+  });
+};
+
+const showSyncCompleteToast = (payload) => {
+  toast.dismiss(SYNC_START_TOAST_ID);
+  toast.success(getSyncCompleteMessage(payload), {
+    toastId: SYNC_COMPLETE_TOAST_ID,
+  });
+};
+
+const showSyncFailedToast = (message = "Email sync failed.") => {
+  toast.dismiss(SYNC_START_TOAST_ID);
+  toast.error(message, {
+    toastId: SYNC_FAILED_TOAST_ID,
+  });
+};
 
 export const useSetupStore = create((set, get) => ({
   // States
@@ -164,13 +206,14 @@ export const useSetupStore = create((set, get) => ({
                 syncStatus,
                 isSyncing: isBackgroundSyncRunning,
                 syncMessage: isBackgroundSyncRunning
-                  ? "Syncing your last 30 days of emails in the background..."
+                  ? "Initial email sync is running..."
                   : "Setup complete.",
                 abortController: null,
               });
 
               get().triggerRefresh();
               if (isBackgroundSyncRunning) {
+                showSyncStartedToast();
                 get().startSyncStatusPolling();
               }
               abortController.abort();
@@ -269,12 +312,30 @@ export const useSetupStore = create((set, get) => ({
       const isRunning = syncStatus === SYNC_STATUS_RUNNING;
       const isCompleted = syncStatus === SYNC_STATUS_COMPLETED;
       const isFailed = syncStatus === SYNC_STATUS_FAILED;
+      const currentUserSyncStatus = useAuthStore.getState().user?.sync_status;
+      const wasSyncing = get().isSyncing;
+      const wasKnownRunning =
+        wasSyncing ||
+        get().syncStatus === SYNC_STATUS_RUNNING ||
+        currentUserSyncStatus === SYNC_STATUS_RUNNING;
+
+      if (isRunning && !wasSyncing) {
+        showSyncStartedToast();
+      }
+
+      if (isCompleted && wasKnownRunning) {
+        showSyncCompleteToast(data);
+      }
+
+      if (isFailed && wasKnownRunning) {
+        showSyncFailedToast();
+      }
 
       set({
         syncStatus,
         isSyncing: isRunning,
         syncMessage: isRunning
-          ? "Syncing your last 30 days of emails in the background..."
+          ? "Syncing latest emails..."
           : isCompleted
             ? "Sync complete."
             : isFailed
@@ -352,6 +413,7 @@ export const useSetupStore = create((set, get) => ({
       error: null,
       syncMessage: "Syncing latest emails...",
     });
+    showSyncStartedToast();
 
     try {
       const response = await api.post("/setup/sync");
@@ -382,6 +444,11 @@ export const useSetupStore = create((set, get) => ({
       if (isRunning) {
         get().startSyncStatusPolling();
       } else {
+        if (syncStatus === SYNC_STATUS_FAILED) {
+          showSyncFailedToast(response.data.message || "Email sync failed.");
+        } else {
+          showSyncCompleteToast(response.data);
+        }
         get().triggerRefresh();
       }
 
@@ -394,6 +461,7 @@ export const useSetupStore = create((set, get) => ({
         error: errMsg,
         syncMessage: "Sync failed.",
       });
+      showSyncFailedToast(errMsg);
     }
   },
 }));

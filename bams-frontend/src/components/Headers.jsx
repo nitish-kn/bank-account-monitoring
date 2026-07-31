@@ -6,8 +6,27 @@ import { formatRelativeSyncTime } from "../lib/helper";
 import { ChevronDown, Menu, Upload, CloudUpload, FileText, X } from "lucide-react";
 import DialogPopup from "./ui/DialogPopup";
 import api from "../lib/api";
+import { toast } from "react-toastify";
+import { useSetupStore } from "../store/setupStore";
+
+const STATEMENT_UPLOAD_POLL_INTERVAL_MS = 5000;
+const STATEMENT_UPLOAD_STARTED_TOAST_ID = "statement-upload-started";
+const STATEMENT_UPLOAD_SUCCESS_TOAST_ID = "statement-upload-success";
+const STATEMENT_UPLOAD_FAILED_TOAST_ID = "statement-upload-failed";
+
+const getStatementSuccessMessage = (job) => {
+  const result = job?.result || {};
+  const rowsWritten = Number(result.rows_written || 0);
+
+  if (rowsWritten > 0) {
+    return `Statement parsing completed. ${rowsWritten} ${rowsWritten === 1 ? "transaction" : "transactions"} added.`;
+  }
+
+  return job?.message || "Statement parsing completed successfully.";
+};
 
 const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
+  const triggerRefresh = useSetupStore((state) => state.triggerRefresh);
   const pathname = useLocation().pathname.split("/")[1];
   const pageTitle = pathname[0].toUpperCase() + pathname.slice(1);
   const [now, setNow] = useState(() => new Date());
@@ -17,9 +36,11 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [statementJobId, setStatementJobId] = useState(null);
+  const [statementProcessing, setStatementProcessing] = useState(false);
   const [uploadError, setUploadError] = useState(null);
-  const [uploadSuccess, setUploadSuccess] = useState(null);
   const fileInputRef = useRef(null);
+  const isStatementUploadBusy = uploading || statementProcessing;
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -27,19 +48,19 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
 
   const handleDrop = (e) => {
     e.preventDefault();
-    if (uploading) return;
+    if (isStatementUploadBusy) return;
     const files = Array.from(e.dataTransfer.files);
     setSelectedFiles((prev) => [...prev, ...files]);
   };
 
   const handleFileSelect = (e) => {
-    if (uploading) return;
+    if (isStatementUploadBusy) return;
     const files = Array.from(e.target.files);
     setSelectedFiles((prev) => [...prev, ...files]);
   };
 
   const removeFile = (indexToRemove) => {
-    if (uploading) return;
+    if (isStatementUploadBusy) return;
     setSelectedFiles((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
@@ -47,7 +68,6 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
     if (selectedFiles.length === 0) return;
     setUploading(true);
     setUploadError(null);
-    setUploadSuccess(null);
 
     const formData = new FormData();
     selectedFiles.forEach((file) => {
@@ -60,18 +80,24 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
           "Content-Type": "multipart/form-data",
         },
       });
-      setUploadSuccess(response.data.message || "Statements uploaded successfully!");
-      setSelectedFiles([]);
-      if (syncDashboard) {
-        syncDashboard();
+
+      const jobId = response.data?.job_id;
+      if (!jobId) {
+        throw new Error("Statement upload did not return a background job id.");
       }
-      setTimeout(() => {
-        setShowUploadDialog(false);
-        setUploadSuccess(null);
-      }, 2000);
+
+      setSelectedFiles([]);
+      setShowUploadDialog(false);
+      setStatementJobId(jobId);
+      setStatementProcessing(true);
+      toast.info(
+        response.data?.message || "Statement upload started. Parsing will continue in the background.",
+        { toastId: STATEMENT_UPLOAD_STARTED_TOAST_ID },
+      );
     } catch (err) {
       const errMsg = err.response?.data?.detail || err.message || "Failed to upload statements.";
       setUploadError(errMsg);
+      toast.error(errMsg, { toastId: STATEMENT_UPLOAD_FAILED_TOAST_ID });
     } finally {
       setUploading(false);
     }
@@ -99,6 +125,53 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
       document.removeEventListener("touchstart", handleOutsideClick);
     };
   }, [showSyncTime]);
+
+  useEffect(() => {
+    if (!statementJobId) return undefined;
+
+    let isMounted = true;
+
+    const stopStatementPolling = () => {
+      if (!isMounted) return;
+      setStatementJobId(null);
+      setStatementProcessing(false);
+    };
+
+    const pollStatementStatus = async () => {
+      try {
+        const response = await api.get(`/statements/upload/${statementJobId}/status`);
+        const job = response.data || {};
+
+        if (job.status === "success") {
+          toast.dismiss(STATEMENT_UPLOAD_STARTED_TOAST_ID);
+          toast.success(getStatementSuccessMessage(job), {
+            toastId: STATEMENT_UPLOAD_SUCCESS_TOAST_ID,
+          });
+          triggerRefresh();
+          stopStatementPolling();
+        } else if (job.status === "failed") {
+          toast.dismiss(STATEMENT_UPLOAD_STARTED_TOAST_ID);
+          toast.error(job.message || "Statement parsing failed.", {
+            toastId: STATEMENT_UPLOAD_FAILED_TOAST_ID,
+          });
+          stopStatementPolling();
+        }
+      } catch (err) {
+        const errMsg = err.response?.data?.detail || err.message || "Failed to check statement upload status.";
+        toast.dismiss(STATEMENT_UPLOAD_STARTED_TOAST_ID);
+        toast.error(errMsg, { toastId: STATEMENT_UPLOAD_FAILED_TOAST_ID });
+        stopStatementPolling();
+      }
+    };
+
+    pollStatementStatus();
+    const intervalId = window.setInterval(pollStatementStatus, STATEMENT_UPLOAD_POLL_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [statementJobId, triggerRefresh]);
 
 
   // useEffect(() => {
@@ -133,8 +206,8 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
           </p>
         </div>
         <div className="flex md:flex-row items-center gap-1 md:gap-2.5 relative">
-          <CustomButton onClick={() => setShowUploadDialog(true)} variant="soft" disabled={uploading}>
-            {uploading ? "Processing..." : (
+          <CustomButton onClick={() => setShowUploadDialog(true)} variant="soft" disabled={isStatementUploadBusy}>
+            {isStatementUploadBusy ? "Processing..." : (
               <>
                 <Upload className="h-4 w-4" /> 
                 <span className="hidden md:inline">Upload Statements</span>
@@ -232,12 +305,6 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
             </div>
           )}
 
-          {uploadSuccess && (
-            <div className="p-3 bg-green-50 border border-green-200 text-green-600 text-xs rounded-lg font-medium">
-              {uploadSuccess}
-            </div>
-          )}
-
           {/* Modal Actions */}
           <div className="flex gap-3 mt-4 justify-end">
             <button
@@ -245,10 +312,9 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
               onClick={() => {
                 setSelectedFiles([]);
                 setUploadError(null);
-                setUploadSuccess(null);
                 setShowUploadDialog(false);
               }}
-              disabled={uploading}
+              disabled={isStatementUploadBusy}
               className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
@@ -256,7 +322,7 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
             <button
               type="button"
               onClick={handleUpload}
-              disabled={selectedFiles.length === 0 || uploading}
+              disabled={selectedFiles.length === 0 || isStatementUploadBusy}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-all shadow-md shadow-blue-100 flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:bg-blue-300 disabled:cursor-not-allowed"
             >
               {uploading ? (

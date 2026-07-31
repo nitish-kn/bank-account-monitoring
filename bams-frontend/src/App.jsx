@@ -8,12 +8,15 @@ import ConsolidatedView from "./pages/ConsolidatedView";
 import { Transactions } from "./pages/Transactions";
 import Dashboard from "./pages/Dashboard";
 import Accounts from "./pages/Accounts";
+import AuditLog from "./pages/AuditLog";
+import { Bounce, ToastContainer } from "react-toastify";
 
 function App() {
   const { isAuthenticated, accessToken } = useAuthStore();
   const isAuthenticatedWithToken = isAuthenticated && Boolean(accessToken);
 
   return (
+    <>
     <Routes>
       <Route path="/" element={<PublicRoute><Login /></PublicRoute>} />
       
@@ -22,6 +25,7 @@ function App() {
         <Route path="/consolidated-view" element={<ConsolidatedView />} />
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/all-accounts" element={<Accounts />} />
+        <Route path="/audit-log" element={<AuditLog />} />
       </Route>
       
       <Route
@@ -31,6 +35,23 @@ function App() {
         }
       />
     </Routes>
+
+    <ToastContainer
+      position="bottom-right"
+      autoClose={5000}
+      hideProgressBar={false}
+      newestOnTop={false}
+      closeOnClick={false}
+      rtl={false}
+      pauseOnFocusLoss
+      draggable
+      pauseOnHover
+      theme="light"
+      transition={Bounce}
+      bodyClassName="text-xs font-medium"
+    />
+    </>
+
   );
 }
 

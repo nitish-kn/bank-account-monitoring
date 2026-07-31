@@ -13,6 +13,7 @@ const TopItemList = ({
   data,
   btnColor,
   titleColor,
+  onButtonClick,
 }) => {
   return (
     <main className="bg-white flex flex-col flex-1 gap-4 p-4 rounded-xl shadow-md">
@@ -28,6 +29,7 @@ const TopItemList = ({
             variant="outline"
             size={{ initial: "1", md: "2" }}
             className="hover:bg-gray-100 ml-auto"
+            onClick={onButtonClick}
           >
             {btnText}
           </CustomButton>

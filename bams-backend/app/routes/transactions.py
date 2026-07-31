@@ -7,6 +7,8 @@ from ..core.dependencies import get_current_user
 from ..database import get_db
 from ..models.user import User
 from ..services.transaction_service import get_paginated_transactions, get_dashboard_summary, get_filter_options
+from fastapi import Request
+from ..services.transaction_service import update_transaction, query_audit_logs
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -45,3 +47,56 @@ def query_transactions(req: TransactionQueryRequest, current_user: User = Depend
         result["summary"] = get_dashboard_summary(db, current_user.id, req.filters)
         
     return result
+
+
+class EditTransactionRequest(BaseModel):
+    category: Optional[str] = None
+    narration: Optional[str] = None
+    counterparty: Optional[str] = None
+    account_number: Optional[str] = None
+    account_holder_name: Optional[str] = None
+    txn_date: Optional[str] = None
+    mode: Optional[str] = None
+    ref_number: Optional[str] = None
+    changed_by: str
+    reason: Optional[str] = None
+
+
+@router.put("/{id}")
+def edit_transaction(
+    id: str,
+    payload: EditTransactionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    ip_address = request.client.host if request.client else "unknown"
+    return update_transaction(
+        db=db,
+        user_id=current_user.id,
+        txn_id=id,
+        payload=payload,
+        ip_address=ip_address
+    )
+
+@router.get("/audit-log")
+def get_audit_log(
+    page: int = 1,
+    pageSize: int = 50,
+    search: Optional[str] = None,
+    changed_by: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return query_audit_logs(
+        db=db,
+        user_id=current_user.id,
+        page=page,
+        page_size=pageSize,
+        search=search,
+        changed_by=changed_by,
+        start_date=start_date,
+        end_date=end_date
+    )

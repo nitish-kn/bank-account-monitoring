@@ -14,5 +14,15 @@ export const transactionApi = {
       sort
     });
     return response.data;
+  },
+
+  editTransaction: async (id, body) => {
+    const response = await api.put(`/transactions/${id}`, body);
+    return response.data;
+  },
+
+  getAuditLogs: async (params) => {
+    const response = await api.get("/transactions/audit-log", { params });
+    return response.data;
   }
 };
