@@ -38,7 +38,8 @@ def extract_transactions(emails):
                 "id": email.get("id"),
                 "from": email.get("from"),
                 "subject": email.get("subject"),
-                "body": cleaned_body
+                "body": cleaned_body,
+                "attachments": email.get("attachments") or [],
             }
         )
 
@@ -139,6 +140,7 @@ def extract_transactions(emails):
             "original_from_name": display_name or None,
             "subject": email.get("subject"),
             "body": email.get("body"),
+            "attachments": email.get("attachments") or [],
         }
 
         validated_result = (

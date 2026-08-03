@@ -621,6 +621,8 @@ def _batch_extract_transactions(
                     submit_batch(next_index)
                     next_index += 1
 
+
+
 # ------------- Main function that orchestrates the entire setup process with progress updates for the frontend to consume via SSE.
 
 # Initial Setup Workflow - 1
@@ -685,6 +687,7 @@ async def setup_process_with_progress(user: User, db: Session):
             "message": f"Setup error: {str(error)}",
             "status": "failed"
         }
+
 
 # Incremental Sync Workflow - 2
 def perform_incremental_sync(user: User, db: Session):
