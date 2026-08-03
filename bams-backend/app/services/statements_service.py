@@ -55,8 +55,14 @@ def get_statement_upload_job(user_id: int, job_id: str) -> dict:
 
 
 # -------------------------- Main function which calls LLM ------------
-def _parse_statement_pdf_sync(pdf_path: Path, user_id: int) -> list[dict]:
-    """Parse a statement PDF through the shared LLM statement function."""
+def _parse_statement_pdf_sync(pdf_path: Path, user_id: int, original_filename: str) -> list[dict]:
+    """Parse a statement PDF through the shared LLM statement function.
+
+    original_filename (the name the user uploaded, before _safe_upload_name
+    renamed it to a UUID'd path) is passed through so the account-number
+    lookup — used to resolve passwords for encrypted statements — can read
+    the last-4 digits embedded in it.
+    """
     try:
         from ..ds.llm.main import process_statement
     except ModuleNotFoundError as error:
@@ -69,7 +75,13 @@ def _parse_statement_pdf_sync(pdf_path: Path, user_id: int) -> list[dict]:
             ),
         ) from error
 
-    return asyncio.run(process_statement(file_path=str(pdf_path), user_id=user_id))
+    return asyncio.run(
+        process_statement(
+            file_path=str(pdf_path),
+            user_id=user_id,
+            original_filename=original_filename,
+        )
+    )
 
 
 # --------------------------- Helper function -------------------------
@@ -259,7 +271,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
     for original_filename, saved_path in saved_files:
         try:
             # 5. Parse statement PDF using app.ds.llm.app.run(Path)
-            extracted_txns = _parse_statement_pdf_sync(saved_path, user.id)
+            extracted_txns = _parse_statement_pdf_sync(saved_path, user.id, original_filename)
             print(
                 "Statement parsed: "
                 f"user={user.id} file={original_filename} rows={len(extracted_txns or [])}"

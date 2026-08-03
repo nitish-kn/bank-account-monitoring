@@ -117,6 +117,7 @@ async def process_statement(
     file: Optional[UploadFile] = File(None),
     file_path: Optional[str] = Form(None),
     user_id: Optional[int] = Form(None),
+    original_filename: Optional[str] = Form(None),
 ):
     """
     Test the bank-statement PDF extraction pipeline.
@@ -133,6 +134,7 @@ async def process_statement(
     upload_file = _direct_upload_file(file)
     resolved_file_path = _direct_form_text(file_path)
     resolved_user_id = _direct_form_int(user_id)
+    resolved_original_filename = _direct_form_text(original_filename)
 
     if upload_file is None and resolved_file_path is None:
         raise HTTPException(
@@ -155,7 +157,11 @@ async def process_statement(
                 detail=f"File not found: {resolved_file_path}"
             )
 
-        transactions = await run_in_threadpool(extract_statement_transactions, pdf_path)
+        transactions = await run_in_threadpool(
+            extract_statement_transactions,
+            pdf_path,
+            original_filename=resolved_original_filename or pdf_path.name,
+        )
         print(
             "Statement parse result: "
             f"source=file_path rows={len(transactions or [])}"
@@ -181,7 +187,11 @@ async def process_statement(
     tmp_path = await run_in_threadpool(_write_temp_pdf, contents)
 
     try:
-        transactions = await run_in_threadpool(extract_statement_transactions, tmp_path)
+        transactions = await run_in_threadpool(
+            extract_statement_transactions,
+            tmp_path,
+            original_filename=resolved_original_filename or upload_file.filename,
+        )
         print(
             "Statement parse result: "
             f"source=upload rows={len(transactions or [])}"

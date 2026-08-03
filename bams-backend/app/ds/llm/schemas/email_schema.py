@@ -17,6 +17,8 @@ class EmailPayload(BaseModel):
     subject: str
     body: str
 
+    #attachments : array of files ( pdf)
+
     snippet: Optional[str] = None
 
     model_config = {
