@@ -117,21 +117,24 @@ def _format_email_date(date_header: str) -> str:
             return " ".join(date_parts[:5])
         return date_header
 
-def _decode_gmail_base64(raw_data: str) -> str:
-    """Google passes email bodies over web parameters using a slightly modified base64 format (base64url). 
-        This method replaces - and _ characters back into standard base64 variants, appends required = padding, and decodes it to raw text."""
-
-    
+def _decode_gmail_base64_bytes(raw_data: str) -> bytes:
     if not raw_data:
-        return ""
+        return b""
 
     raw_data = raw_data.replace("-", "+").replace("_", "/")
     padding = len(raw_data) % 4
     if padding:
         raw_data += "=" * (4 - padding)
 
+    return base64.b64decode(raw_data)
+
+
+def _decode_gmail_base64(raw_data: str) -> str:
+    """Google passes email bodies over web parameters using a slightly modified base64 format (base64url).
+        This method replaces - and _ characters back into standard base64 variants, appends required = padding, and decodes it to raw text."""
+
     try:
-        decoded_bytes = base64.b64decode(raw_data)
+        decoded_bytes = _decode_gmail_base64_bytes(raw_data)
         return decoded_bytes.decode("utf-8", errors="replace")
     except Exception:
         return ""
@@ -178,6 +181,33 @@ def _extract_message_body(payload: dict) -> str:
             return text
 
     return ""
+
+
+def _extract_attachments(payload: dict) -> list[dict]:
+    """Recursively extract PDF attachment metadata from the message payload parts."""
+    attachments = []
+    if not payload:
+        return attachments
+
+    body = payload.get("body", {})
+    attachment_id = body.get("attachmentId")
+    filename = payload.get("filename")
+
+    if attachment_id and filename:
+        mime_type = payload.get("mimeType", "")
+        if filename.lower().endswith(".pdf") or mime_type.lower() == "application/pdf":
+            attachments.append({
+                "id": attachment_id,
+                "filename": filename,
+                "mimeType": mime_type,
+                "size": body.get("size", 0),
+            })
+
+    # Recurse on subparts
+    for part in payload.get("parts", []) or []:
+        attachments.extend(_extract_attachments(part))
+
+    return attachments
 
 
 
@@ -252,6 +282,7 @@ def _parse_message_detail(detail: dict) -> dict | None:
         "date": _format_email_date(headers_dict.get("Date", "")),
         "snippet": detail.get("snippet", ""),
         "body": _extract_message_body(detail.get("payload", {}))[:MAX_EMAIL_BODY_CHARS],
+        "attachments": _extract_attachments(detail.get("payload", {})),
     }
 
 
@@ -407,3 +438,21 @@ def get_latest_gmail_message_id(user: User) -> str | None:
         return None
 
     return messages[0].get("id")
+
+
+def fetch_gmail_attachment_bytes(user: User, message_id: str, attachment_id: str) -> bytes:
+    """Fetch the raw binary bytes of a specific email attachment on-demand from the Gmail API."""
+    creds = build_credentials(user)
+    headers = _auth_headers_for_credentials(creds)
+    if not headers:
+        raise RuntimeError("No access token available.")
+
+    url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}/attachments/{attachment_id}"
+    response = _request_get_with_backoff(url, headers=headers, timeout=15)
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to fetch attachment from Gmail API: HTTP {response.status_code}")
+
+    attachment_data = response.json()
+    raw_data = attachment_data.get("data", "")
+
+    return _decode_gmail_base64_bytes(raw_data)

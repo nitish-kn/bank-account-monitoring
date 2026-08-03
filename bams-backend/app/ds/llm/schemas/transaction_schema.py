@@ -8,6 +8,9 @@ class EmailMetadata(BaseModel):
     original_from_name: Optional[str] = None
     subject: Optional[str] = None
     body: Optional[str] = None
+    attachments: List[dict] = Field(
+        default_factory=list
+    )
 
 
 class ParserMetadata(BaseModel):
