@@ -29,7 +29,7 @@ import logging
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Iterable, Optional
 
 import fitz  # PyMuPDF
 from openai import OpenAI
@@ -38,11 +38,20 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ...config import settings
 from .schemas.transaction_schema import Transaction
-from .utils.account_lookup import fill_missing_account_details
+from .utils.account_lookup import (
+    fill_missing_account_details,
+    get_pdf_password_from_email_body,
+    get_pdf_password_from_filename,
+)
 from .utils.credit_card_lookup import fill_missing_credit_card_details
 # from tracing import init_tracing
 
 OPENAI_API_KEY = settings.openai_api_key
+
+
+class PdfPasswordError(Exception):
+    """Raised when a password-protected statement PDF could not be unlocked —
+    either no password could be resolved, or the one we had was wrong."""
 
 
 # ------------------------------------------------------------------ #
@@ -443,13 +452,42 @@ Before returning:
 # ------------------------------------------------------------------ #
 
 
-def pdf_to_images(pdf_path: Path, dpi: int = DPI) -> list[bytes]:
+def pdf_to_images(
+    pdf_path: Path,
+    dpi: int = DPI,
+    password_candidates: Optional[Callable[[], Iterable[Optional[str]]]] = None,
+) -> list[bytes]:
     """
     Render every page of *pdf_path* to a JPEG byte-string.
     Returns a list ordered by page number (0-indexed internally,
     but page_number stored in metadata is 1-based).
+
+    `password_candidates` is only ever called if the PDF actually turns out
+    to be encrypted — unprotected PDFs (the common case) never trigger it,
+    so the (potentially costly — Excel loads, an LLM call) password-guessing
+    work in `_pdf_password_candidates` is skipped entirely when it isn't
+    needed. When it IS needed, each yielded candidate is actually tried
+    against the PDF in order (a wrong guess from one source — e.g. an
+    email-body LLM guess that misidentified the account — must fall through
+    to the next source, e.g. the filename match, rather than giving up).
     """
     doc = fitz.open(str(pdf_path))
+
+    if doc.needs_pass:
+        unlocked = False
+        for candidate in (password_candidates() if password_candidates else []):
+            if candidate and doc.authenticate(candidate):
+                unlocked = True
+                break
+
+        if not unlocked:
+            doc.close()
+            raise PdfPasswordError(
+                f"PDF '{pdf_path.name}' is password protected and the correct "
+                "password could not be resolved/verified."
+            )
+        log.info("Unlocked password-protected PDF: %s", pdf_path.name)
+
     images: list[bytes] = []
     zoom = dpi / 72  # 72 is the PDF baseline DPI
     mat = fitz.Matrix(zoom, zoom)
@@ -480,6 +518,48 @@ def pdf_to_images(pdf_path: Path, dpi: int = DPI) -> list[bytes]:
 
 def images_to_base64(images: list[bytes]) -> list[str]:
     return [base64.b64encode(img).decode("utf-8") for img in images]
+
+
+def _pdf_password_candidates(
+    pdf_path: Path,
+    original_filename: Optional[str],
+    password: Optional[str] = None,
+    email_body: Optional[str] = None,
+) -> Iterable[Optional[str]]:
+    """
+    Yield password candidates for an encrypted statement PDF, in order:
+      1. An explicit, caller-supplied password.
+      2. Account hints an LLM extracts from `email_body` (set when this PDF
+         arrived as an email attachment during Gmail sync).
+      3. The existing filename-based last-4/full-account-number match.
+    Each candidate is computed lazily (a generator) and — critically — the
+    caller (`pdf_to_images`) actually TRIES each one against the PDF rather
+    than trusting the first non-None guess: a wrong guess from an earlier
+    source (e.g. email-body LLM misidentifying the account) must fall
+    through to the next source instead of failing outright.
+
+    Uploaded statements are frequently saved to disk under a sanitized/
+    UUID'd name, so the account's last-4 digits (embedded in the *original*
+    filename) may no longer be present in pdf_path.name — prefer the
+    caller-supplied original filename and fall back to the on-disk name only
+    when no original was passed through.
+    """
+    filename_for_lookup = original_filename or pdf_path.name
+
+    if password:
+        log.info("Trying caller-supplied password for: %s", filename_for_lookup)
+        yield password
+
+    if email_body:
+        guessed = get_pdf_password_from_email_body(email_body)
+        if guessed:
+            log.info("Trying email-body LLM-guessed password for: %s", filename_for_lookup)
+            yield guessed
+
+    guessed = get_pdf_password_from_filename(filename_for_lookup)
+    if guessed:
+        log.info("Trying filename-matched password from bank accounts mapping for: %s", filename_for_lookup)
+        yield guessed
 
 
 # ------------------------------------------------------------------ #
@@ -693,6 +773,9 @@ def extract_transactions_from_pdf(
     pdf_path: Path,
     batch_size: int = BATCH_SIZE,
     dpi: int = DPI,
+    original_filename: Optional[str] = None,
+    password: Optional[str] = None,
+    email_body: Optional[str] = None,
 ) -> list[Transaction]:
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
@@ -704,8 +787,16 @@ def extract_transactions_from_pdf(
 
     client = OpenAI(api_key=OPENAI_API_KEY)
 
+    def _password_candidates() -> Iterable[Optional[str]]:
+        return _pdf_password_candidates(
+            pdf_path,
+            original_filename,
+            password=password,
+            email_body=email_body,
+        )
+
     # 1 — Render all pages
-    raw_images = pdf_to_images(pdf_path, dpi=dpi)
+    raw_images = pdf_to_images(pdf_path, dpi=dpi, password_candidates=_password_candidates)
     total_pages = len(raw_images)
     log.info("Total pages: %d", total_pages)
 
@@ -828,8 +919,18 @@ def extract_transactions_from_pdf(
 
 
 
-def run(pdf_path: Path) -> list[dict]:
-    transactions = extract_transactions_from_pdf(pdf_path)
+def run(
+    pdf_path: Path,
+    original_filename: Optional[str] = None,
+    password: Optional[str] = None,
+    email_body: Optional[str] = None,
+) -> list[dict]:
+    transactions = extract_transactions_from_pdf(
+        pdf_path,
+        original_filename=original_filename,
+        password=password,
+        email_body=email_body,
+    )
 
     return [
         tx.model_dump(mode="json")

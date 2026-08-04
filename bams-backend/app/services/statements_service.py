@@ -67,10 +67,15 @@ def _safe_upload_name(filename: str | None, index: int) -> str:
     return f"{stem}_{uuid4().hex}{suffix}"
 
 
-async def _save_uploaded_statements(files: List[UploadFile]) -> list[tuple[str, Path]]:
-    """ """
+async def _save_uploaded_statements(
+    files: List[UploadFile],
+    password: str | None = None,
+) -> list[tuple[str, Path, str | None]]:
+    """ `password`, if given, comes from the frontend's "this PDF needs a
+    password" popup — the retry request it sends carries just the one file
+    that failed plus this one password, so no per-file list is needed. """
     await run_in_threadpool(UPLOAD_DIR.mkdir, parents=True, exist_ok=True)
-    saved_files: list[tuple[str, Path]] = []
+    saved_files: list[tuple[str, Path, str | None]] = []
 
     try:
         # Process every uploaded files
@@ -95,7 +100,7 @@ async def _save_uploaded_statements(files: List[UploadFile]) -> list[tuple[str, 
 
             saved_path = UPLOAD_DIR / _safe_upload_name(file.filename, index)
             await run_in_threadpool(saved_path.write_bytes, content)
-            saved_files.append((file.filename or saved_path.name, saved_path))
+            saved_files.append((file.filename or saved_path.name, saved_path, password))
     except Exception:
         _delete_saved_statements(saved_files)
         raise
@@ -112,8 +117,8 @@ def _delete_saved_statement(saved_path: Path) -> None:
         print(f"Failed to delete temporary statement file {saved_path}: {error}")
 
 
-def _delete_saved_statements(saved_files: list[tuple[str, Path]]) -> None:
-    for _, saved_path in saved_files:
+def _delete_saved_statements(saved_files: list[tuple[str, Path, str | None]]) -> None:
+    for _, saved_path, _password in saved_files:
         _delete_saved_statement(saved_path)
 
 
@@ -123,9 +128,10 @@ def _statement_error_message(error: Exception) -> str:
     return str(error) or "Statement parsing failed."
 
 
-def _run_statement_upload_job(job_id: str, user_id: int, saved_files: list[tuple[str, Path]]) -> None:
+def _run_statement_upload_job(job_id: str, user_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
     try:
         result = _process_saved_statements_sync(user_id, saved_files)
+
         _set_statement_job(
             job_id,
             status=STATEMENT_JOB_SUCCESS,
@@ -144,7 +150,7 @@ def _run_statement_upload_job(job_id: str, user_id: int, saved_files: list[tuple
         )
 
 
-def _start_statement_job_thread(job_id: str, user_id: int, saved_files: list[tuple[str, Path]]) -> None:
+def _start_statement_job_thread(job_id: str, user_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
     thread = threading.Thread(
         target=_run_statement_upload_job,
         args=(job_id, user_id, saved_files),
@@ -160,7 +166,7 @@ def _start_statement_job_thread(job_id: str, user_id: int, saved_files: list[tup
 
 
 
-def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Path]]) -> dict:
+def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Path, str | None]]) -> dict:
     """
     Blocking statement pipeline. It runs in a worker thread so PDF rendering,
     LLM calls, Google Sheets calls, and DB commits do not block FastAPI's event loop.
@@ -180,7 +186,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
         sheets_service = build("sheets", "v4", credentials=credentials)
         sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
     except Exception as e:
-        for _, saved_path in saved_files:
+        for _, saved_path, _password in saved_files:
             _delete_saved_statement(saved_path)
         db.close()
         if isinstance(e, HTTPException):
@@ -193,24 +199,37 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
     total_flagged_for_review = 0        # Rows saved but flagged as low-confidence/incomplete.
     processed_files = []                # Stores per-file summary information.
 
-    # 4. Iterate and process saved statement PDFs one-by-one
-    for original_filename, saved_path in saved_files:
+    # 4. Iterate and process saved statement PDFs one-by-one. Each file is
+    # isolated — a locked or otherwise failing PDF is recorded and skipped
+    # rather than aborting the rest of the batch.
+    for original_filename, saved_path, password in saved_files:
+        file_result = {
+            "filename": original_filename,
+            "stored_path": str(saved_path),
+            "status": "success",
+            "needs_password": False,
+            "error": None,
+            "transactions_found": 0,
+            "rows_written": 0,
+            "duplicates_skipped": 0,
+            "flagged_for_review": 0,
+        }
+
         try:
             # 5. Parse statement PDF using app.ds.llm.app.run(Path)
-            extracted_txns = parse_statement_pdf_sync(saved_path, user.id)
+            extracted_txns = parse_statement_pdf_sync(
+                saved_path,
+                user.id,
+                original_filename=original_filename,
+                password=password,
+            )
             print(
                 "Statement parsed: "
                 f"user={user.id} file={original_filename} rows={len(extracted_txns or [])}"
             )
             if not extracted_txns:
-                processed_files.append({
-                    "filename": original_filename,
-                    "stored_path": str(saved_path),
-                    "transactions_found": 0,
-                    "rows_written": 0,
-                    "duplicates_skipped": 0,
-                    "flagged_for_review": 0,
-                })
+                file_result["status"] = "no_transactions_found"
+                processed_files.append(file_result)
                 continue
 
             # 6. Normalize every statement row and let the DB upsert layer handle
@@ -219,6 +238,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
                 normalize_statement_transaction(txn, original_filename)
                 for txn in extracted_txns
             ]
+            file_result["transactions_found"] = len(extracted_txns)
 
             if not statement_txns:
                 print(
@@ -226,16 +246,10 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
                     f"user={user.id} file={original_filename} "
                     f"transactions_saved=0"
                 )
-                processed_files.append({
-                    "filename": original_filename,
-                    "stored_path": str(saved_path),
-                    "transactions_found": len(extracted_txns),
-                    "rows_written": 0,
-                    "duplicates_skipped": 0,
-                    "flagged_for_review": 0,
-                })
+                file_result["status"] = "no_transactions_found"
+                processed_files.append(file_result)
                 continue
-            
+
             # 7. Add normalized transactions to overall list
             all_extracted_txns.extend(statement_txns)
 
@@ -289,62 +303,91 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
                 f"user={user.id} file={original_filename} rows_written={rows_written}"
             )
 
-            processed_files.append({
-                "filename": original_filename,
-                "stored_path": str(saved_path),
-                "transactions_found": len(extracted_txns),
+            file_result.update({
                 "rows_written": rows_written,
                 "duplicates_skipped": duplicates_skipped,
                 "flagged_for_review": flagged_for_review,
             })
-                
-        except HTTPException:
-            # Re-raise HTTP exceptions to propagate cleaner API error codes
-            _delete_saved_statements(saved_files)
-            db.close()
-            raise
+            processed_files.append(file_result)
+
+        except HTTPException as e:
+            # Isolate the failure to this one file (e.g. a locked PDF) so the
+            # rest of the batch still gets processed instead of aborting.
+            file_result["status"] = "needs_password" if e.status_code == 422 else "failed"
+            file_result["needs_password"] = e.status_code == 422
+            file_result["error"] = str(e.detail)
+            processed_files.append(file_result)
+            print(
+                "Statement parse failed: "
+                f"user={user.id} file={original_filename} error={e.detail}"
+            )
         except Exception as e:
-            # Fallback error wrapper for unexpected process-interrupts
-            _delete_saved_statements(saved_files)
-            db.close()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed processing statement '{original_filename}': {str(e)}"
+            file_result["status"] = "failed"
+            file_result["error"] = str(e)
+            processed_files.append(file_result)
+            print(
+                "Statement parse failed unexpectedly: "
+                f"user={user.id} file={original_filename} error={e}"
             )
         finally:
             _delete_saved_statement(saved_path)
 
+    needs_password_files = [f["filename"] for f in processed_files if f.get("needs_password")]
+    failed_files = [f["filename"] for f in processed_files if f["status"] == "failed"]
+
+    message = f"Successfully parsed and appended {total_rows_written} transactions from {len(saved_files)} files."
+    if needs_password_files:
+        message += f" {len(needs_password_files)} file(s) need a password: {', '.join(needs_password_files)}."
+    if failed_files:
+        message += f" {len(failed_files)} file(s) failed: {', '.join(failed_files)}."
+
     try:
         return {
             "status": "success",
-            "message": f"Successfully parsed and appended {total_rows_written} transactions from {len(saved_files)} files.",
+            "message": message,
             "transactions_count": len(all_extracted_txns),
             "rows_written": total_rows_written,
             "duplicates_skipped": total_duplicates_skipped,
             "flagged_for_review": total_flagged_for_review,
             "files": processed_files,
+            "password_required": needs_password_files,
         }
     finally:
         db.close()
 
 
 # --------------------------- Main orchestrator function -----------------
-async def process_and_upload_statements(user: User, files: List[UploadFile], db: Session) -> dict:
+async def process_and_upload_statements(
+    user: User,
+    files: List[UploadFile],
+    db: Session,
+    password: str | None = None,
+) -> dict:
     """
     Service to process uploaded bank statement files.
     Saves files, invokes the PDF LLM parser sequentially for each statement,
     saves extracted transactions into DB, then projects unsynced rows to Google Sheets.
+
+    `password`, if given, comes from the frontend's password-entry popup
+    (shown after a PDF fails to unlock) — the retry request re-sends that one
+    file along with this password, used directly instead of guessed.
     """
 
     if not files:
         raise HTTPException(status_code=400, detail="No statement files uploaded.")
 
+    if password and len(files) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="A password can only be supplied when uploading a single statement.",
+        )
+
     if not user.spreadsheet_id:
         raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
 
-    saved_files = await _save_uploaded_statements(files)
+    saved_files = await _save_uploaded_statements(files, password=password)
     job_id = uuid4().hex
-    filenames = [original_filename for original_filename, _ in saved_files]
+    filenames = [original_filename for original_filename, _saved_path, _password in saved_files]
 
     _set_statement_job(
         job_id,

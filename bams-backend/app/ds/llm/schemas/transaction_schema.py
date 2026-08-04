@@ -2,13 +2,21 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 
 
+class EmailAttachmentMetadata(BaseModel):
+
+    id: Optional[str] = None
+    filename: Optional[str] = None
+    mimeType: Optional[str] = None
+    size: Optional[int] = None
+
+
 class EmailMetadata(BaseModel):
 
     original_from_email: Optional[str] = None
     original_from_name: Optional[str] = None
     subject: Optional[str] = None
     body: Optional[str] = None
-    attachments: List[dict] = Field(
+    attachments: List[EmailAttachmentMetadata] = Field(
         default_factory=list
     )
 

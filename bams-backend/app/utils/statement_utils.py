@@ -5,8 +5,20 @@ from pathlib import Path
 from fastapi import HTTPException
 
 
-def parse_statement_pdf_sync(pdf_path: Path, user_id: int) -> list[dict]:
-    """Parse a statement PDF through the shared LLM statement function."""
+def parse_statement_pdf_sync(
+    pdf_path: Path,
+    user_id: int,
+    original_filename: str | None = None,
+    password: str | None = None,
+    email_body: str | None = None,
+) -> list[dict]:
+    """Parse a statement PDF through the shared LLM statement function.
+
+    original_filename lets the password-lookup step read account digits
+    embedded in the filename; email_body lets it try an LLM-guessed
+    password from the source email. `password`, if the caller already has
+    one (e.g. a manual-upload retry), is tried first before either guess.
+    """
     try:
         from ..ds.llm.main import process_statement
     except ModuleNotFoundError as error:
@@ -19,7 +31,15 @@ def parse_statement_pdf_sync(pdf_path: Path, user_id: int) -> list[dict]:
             ),
         ) from error
 
-    return asyncio.run(process_statement(file_path=str(pdf_path), user_id=user_id))
+    return asyncio.run(
+        process_statement(
+            file_path=str(pdf_path),
+            user_id=user_id,
+            original_filename=original_filename or pdf_path.name,
+            password=password,
+            email_body=email_body,
+        )
+    )
 
 
 def _fallback_reference(transaction: dict) -> str:

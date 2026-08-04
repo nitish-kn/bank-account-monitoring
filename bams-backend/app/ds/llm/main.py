@@ -9,7 +9,7 @@ from ...database import SessionLocal
 from ...services.ledger_service import persist_transactions_batch, reconcile_statement_batch
 from .schemas.email_schema import EmailPayload
 from .services.extractor import extract_transactions
-from .app import run as extract_statement_transactions
+from .app import PdfPasswordError, run as extract_statement_transactions
 
 app = FastAPI()
 
@@ -117,6 +117,9 @@ async def process_statement(
     file: Optional[UploadFile] = File(None),
     file_path: Optional[str] = Form(None),
     user_id: Optional[int] = Form(None),
+    original_filename: Optional[str] = Form(None),
+    password: Optional[str] = Form(None),
+    email_body: Optional[str] = Form(None),
 ):
     """
     Test the bank-statement PDF extraction pipeline.
@@ -133,6 +136,9 @@ async def process_statement(
     upload_file = _direct_upload_file(file)
     resolved_file_path = _direct_form_text(file_path)
     resolved_user_id = _direct_form_int(user_id)
+    resolved_original_filename = _direct_form_text(original_filename)
+    resolved_password = _direct_form_text(password)
+    resolved_email_body = _direct_form_text(email_body)
 
     if upload_file is None and resolved_file_path is None:
         raise HTTPException(
@@ -155,7 +161,16 @@ async def process_statement(
                 detail=f"File not found: {resolved_file_path}"
             )
 
-        transactions = await run_in_threadpool(extract_statement_transactions, pdf_path)
+        try:
+            transactions = await run_in_threadpool(
+                extract_statement_transactions,
+                pdf_path,
+                original_filename=resolved_original_filename or pdf_path.name,
+                password=resolved_password,
+                email_body=resolved_email_body,
+            )
+        except PdfPasswordError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
         print(
             "Statement parse result: "
             f"source=file_path rows={len(transactions or [])}"
@@ -181,7 +196,16 @@ async def process_statement(
     tmp_path = await run_in_threadpool(_write_temp_pdf, contents)
 
     try:
-        transactions = await run_in_threadpool(extract_statement_transactions, tmp_path)
+        try:
+            transactions = await run_in_threadpool(
+                extract_statement_transactions,
+                tmp_path,
+                original_filename=resolved_original_filename or upload_file.filename,
+                password=resolved_password,
+                email_body=resolved_email_body,
+            )
+        except PdfPasswordError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
         print(
             "Statement parse result: "
             f"source=upload rows={len(transactions or [])}"
