@@ -1,11 +1,9 @@
-import asyncio
 import threading
 from datetime import datetime, timezone
 
 from fastapi import UploadFile, HTTPException
 from googleapiclient.discovery import build
 from pathlib import Path
-import hashlib
 import re
 from uuid import uuid4
 from typing import List
@@ -21,6 +19,10 @@ from ..utils.db_utils import (
     update_parsed_status_to_db,
 )
 from ..utils.sheets_utils import _get_sheet_title
+from ..utils.statement_utils import (
+    normalize_statement_transaction,
+    parse_statement_pdf_sync,
+)
 from .setup_service import _sync_transactions_to_sheet
 
 
@@ -54,24 +56,6 @@ def get_statement_upload_job(user_id: int, job_id: str) -> dict:
         return dict(job)
 
 
-# -------------------------- Main function which calls LLM ------------
-def _parse_statement_pdf_sync(pdf_path: Path, user_id: int) -> list[dict]:
-    """Parse a statement PDF through the shared LLM statement function."""
-    try:
-        from ..ds.llm.main import process_statement
-    except ModuleNotFoundError as error:
-        missing_dependency = error.name or "PDF extraction dependency"
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"Statement PDF extraction dependency missing: {missing_dependency}. "
-                "Install backend PDF LLM dependencies from requirements.txt."
-            ),
-        ) from error
-
-    return asyncio.run(process_statement(file_path=str(pdf_path), user_id=user_id))
-
-
 # --------------------------- Helper function -------------------------
 def _safe_upload_name(filename: str | None, index: int) -> str:
     """ Generate filename with uuid to prevent collisions """
@@ -81,52 +65,6 @@ def _safe_upload_name(filename: str | None, index: int) -> str:
     stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", path.stem).strip("._") or f"statement_{index}"
     suffix = path.suffix.lower() or ".pdf"
     return f"{stem}_{uuid4().hex}{suffix}"
-
-
-def _fallback_reference(transaction: dict) -> str:
-    """ Create fallback reference number"""
-    raw_key = "|".join(
-        str(transaction.get(field) or "").strip()
-        for field in (
-            "bank_name",
-            "account_number",
-            "txn_date",
-            "txn_type",
-            "amount",
-            "balance_after_txn",
-            "narration",
-        )
-    )
-    return f"stmt_{hashlib.sha256(raw_key.encode('utf-8')).hexdigest()[:20]}"
-
-
-def _normalize_statement_transaction(transaction: dict, source_file: str) -> dict:
-    """ Makes statement parser output look like a parsed transaction."""
-
-    normalized = dict(transaction or {})
-    ref_number = str(normalized.get("ref_number") or "").strip() or _fallback_reference(normalized)
-    parser_metadata = normalized.get("parser_metadata") or {}
-    optional_fields = normalized.get("optional_fields") or None
-
-    # If parser_metadata is a Pydantic model, it converts it to a dictionary
-    if hasattr(parser_metadata, "model_dump"):
-        parser_metadata = parser_metadata.model_dump()
-
-    parser_metadata = {
-        **(parser_metadata if isinstance(parser_metadata, dict) else {}),
-        "parsed_status": "parsed",
-        "source_file": source_file,
-    }
-
-    normalized["ref_number"] = ref_number
-    normalized.setdefault("gmail_message_id", None)
-    normalized["source"] = "statement"
-    normalized.setdefault("email_metadata", None)
-    normalized["parser_metadata"] = parser_metadata
-    normalized["optional_fields"] = optional_fields
-
-
-    return normalized
 
 
 async def _save_uploaded_statements(files: List[UploadFile]) -> list[tuple[str, Path]]:
@@ -259,7 +197,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
     for original_filename, saved_path in saved_files:
         try:
             # 5. Parse statement PDF using app.ds.llm.app.run(Path)
-            extracted_txns = _parse_statement_pdf_sync(saved_path, user.id)
+            extracted_txns = parse_statement_pdf_sync(saved_path, user.id)
             print(
                 "Statement parsed: "
                 f"user={user.id} file={original_filename} rows={len(extracted_txns or [])}"
@@ -278,7 +216,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
             # 6. Normalize every statement row and let the DB upsert layer handle
             # ref-number matching first, with dedupe-key matching as fallback.
             statement_txns = [
-                _normalize_statement_transaction(txn, original_filename)
+                normalize_statement_transaction(txn, original_filename)
                 for txn in extracted_txns
             ]
 

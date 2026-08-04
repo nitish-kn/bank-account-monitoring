@@ -2,7 +2,10 @@ import asyncio
 from datetime import timedelta
 from threading import Thread
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from pathlib import Path
+import re
 import time
+from uuid import uuid4
 
 from fastapi import HTTPException
 from googleapiclient.discovery import build
@@ -13,14 +16,17 @@ from ..core.constants import (
     EMAIL_EXTRACTION_BATCH_SIZE,
     EMAIL_EXTRACTION_MAX_IN_FLIGHT,
     EMAIL_EXTRACTION_MAX_WORKERS,
+    PDF_MIME_TYPE,
     REQUIRED_SCHEMA,
     SHEET_NAME,
+    STATEMENT_ATTACHMENT_KEYWORDS,
     SYNC_STATUS_COMPLETED,
     SYNC_STATUS_FAILED,
     SYNC_STATUS_RUNNING,
     SYNC_TIMEOUT_SECONDS,
     TRANSACTION_DATA_RANGE,
     TRANSACTION_HEADER_RANGE,
+    UPLOAD_DIR,
 )
 from ..database import SessionLocal
 from ..models.user import User
@@ -36,6 +42,7 @@ from ..utils.db_utils import (
 )
 from .credentials import build_credentials
 from .gmail_service import (
+    fetch_gmail_attachment_bytes,
     get_latest_gmail_message_id,
     hydrate_user_message_page,
     iter_user_message_pages,
@@ -44,6 +51,7 @@ from .ledger_service import recalculate_ledgers_for_transactions
 
 
 from ..utils.sheets_utils import _get_sheet_title, _append_sheet_rows, _read_existing_column_values
+from ..utils.statement_utils import normalize_statement_transaction, parse_statement_pdf_sync
 from ..utils.transaction_utils import (
     transactions_to_sheet_rows,
     transaction_column_for_field,
@@ -202,6 +210,200 @@ def _is_sync_genuinely_running(user_id: int) -> bool:
     return True
 
 
+
+
+def _safe_error_text(error: Exception) -> str:
+    return str(error).encode("ascii", "replace").decode("ascii")
+
+
+def _parsed_transaction_count(transactions: list[dict]) -> int:
+    return sum(
+        1
+        for transaction in transactions or []
+        if str(
+            (transaction.get("parser_metadata") or {}).get("parsed_status") or ""
+        ).strip().lower() == "parsed"
+    )
+
+
+def _text_contains_statement_keyword(*values) -> bool:
+    text = " ".join(str(value or "").lower() for value in values)
+    return any(keyword.lower() in text for keyword in STATEMENT_ATTACHMENT_KEYWORDS)
+
+
+def _pdf_attachments_for_email(email: dict) -> list[dict]:
+    pdf_attachments = []
+
+    for attachment in email.get("attachments") or []:
+        filename = str(attachment.get("filename") or "")
+        mime_type = str(
+            attachment.get("mimeType")
+            or attachment.get("mime_type")
+            or ""
+        ).lower()
+
+        if filename.lower().endswith(".pdf") or mime_type == PDF_MIME_TYPE:
+            pdf_attachments.append(attachment)
+
+    return pdf_attachments
+
+
+def _split_statement_attachment_emails(emails: list[dict]) -> tuple[list[dict], list[dict]]:
+    statement_emails = []
+    normal_emails = []
+
+    for email in emails:
+        if (
+            _text_contains_statement_keyword(email.get("subject"), email.get("snippet"))
+            and _pdf_attachments_for_email(email)
+        ):
+            statement_emails.append(email)
+        else:
+            normal_emails.append(email)
+
+    return statement_emails, normal_emails
+
+
+def _attachment_temp_path(email: dict, attachment: dict, index: int) -> Path:
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+    email_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(email.get("id") or "message"))
+    original_name = Path(attachment.get("filename") or f"statement_{index}.pdf").name
+    original_path = Path(original_name)
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", original_path.stem).strip("._") or f"statement_{index}"
+
+    return UPLOAD_DIR / f"gmail_{email_id}_{stem}_{uuid4().hex}.pdf"
+
+
+def _attachment_email_metadata(email: dict, attachment: dict) -> dict:
+    return {
+        "original_from_email": email.get("from"),
+        "subject": email.get("subject"),
+        "body": email.get("body"),
+        "attachments": [attachment],
+    }
+
+
+def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[list[dict], list[str]]:
+    transactions = []
+    errors = []
+    message_id = email.get("id")
+
+    for index, attachment in enumerate(_pdf_attachments_for_email(email), start=1):
+        attachment_id = attachment.get("id")
+        filename = attachment.get("filename") or f"statement_{index}.pdf"
+        saved_path = None
+
+        if not message_id or not attachment_id:
+            errors.append("Missing Gmail message ID or attachment ID.")
+            continue
+
+        try:
+            file_bytes = fetch_gmail_attachment_bytes(user, message_id, attachment_id)
+            if not file_bytes:
+                raise RuntimeError("Gmail attachment was empty.")
+
+            saved_path = _attachment_temp_path(email, attachment, index)
+            saved_path.write_bytes(file_bytes)
+
+            extracted_txns = parse_statement_pdf_sync(saved_path, user.id)
+            normalized_txns = [
+                normalize_statement_transaction(
+                    transaction,
+                    str(filename),
+                    gmail_message_id=message_id,
+                    email_metadata=_attachment_email_metadata(email, attachment),
+                )
+                for transaction in extracted_txns or []
+            ]
+            transactions.extend(normalized_txns)
+            print(
+                "Email statement attachment parsed: "
+                f"user={user.id} gmail_message_id={message_id} "
+                f"file={filename} rows={len(normalized_txns)}"
+            )
+        except Exception as error:
+            safe_error = _safe_error_text(error)
+            errors.append(safe_error)
+            print(
+                "Email statement attachment failed: "
+                f"user={user.id} gmail_message_id={message_id} "
+                f"file={filename} error={safe_error[:200]}"
+            )
+        finally:
+            if saved_path:
+                try:
+                    saved_path.unlink(missing_ok=True)
+                except OSError as error:
+                    print(f"Failed to delete temporary email attachment {saved_path}: {error}")
+
+    return transactions, errors
+
+
+def _persist_extracted_transactions(
+    user: User,
+    db: Session,
+    sheets_service,
+    sheet_title: str,
+    emails: list[dict],
+    transactions: list[dict],
+    log_label: str,
+) -> list:
+    try:
+        parsed_result_count = _parsed_transaction_count(transactions)
+        saved_transactions = save_valid_transaction_to_db(
+            transactions,
+            user.id,
+            db,
+        )
+
+        update_parsed_status_to_db(
+            user.id,
+            transactions,
+            db,
+            emails=emails,
+        )
+
+        ledger_result = recalculate_ledgers_for_transactions(
+            db,
+            saved_transactions,
+            user.id,
+        )
+
+        db.add(user)
+        db.commit()
+        print(
+            f"{log_label} saved: "
+            f"user={user.id} emails={len(emails)} "
+            f"llm_rows={len(transactions)} parsed={parsed_result_count} "
+            f"transactions_saved={len(saved_transactions)} "
+            f"ledger_rows={ledger_result.get('accounts_recalculated', 0)}"
+        )
+    except Exception as error:
+        db.rollback()
+        safe_error = _safe_error_text(error)
+        print(f"Failed to persist {log_label.lower()}: {safe_error[:300]}")
+        update_parsed_status_to_db(
+            user.id,
+            [],
+            db,
+            emails=emails,
+            error=safe_error,
+        )
+        db.add(user)
+        db.commit()
+        return []
+
+    if saved_transactions:
+        _sync_transactions_to_sheet(
+            user,
+            db,
+            sheets_service=sheets_service,
+            sheet_title=sheet_title,
+            transaction_ids=[transaction.id for transaction in saved_transactions],
+        )
+
+    return saved_transactions
 
 
 # -------------------------- Setup Functions ---------------------------
@@ -371,8 +573,43 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
 
             print(f"Emails from Gmail Api - Page {page_idx}/{total_pages} (count: {len(new_emails)})\n")
 
-            # 7. Send hydrated emails to LLM batches
-            for batch_result in _batch_extract_transactions(new_emails, user_id=user_id):
+            statement_emails, email_parser_emails = _split_statement_attachment_emails(new_emails)
+            if statement_emails:
+                print(
+                    "Email route: "
+                    f"user={user_id} statement_pdf_emails={len(statement_emails)} "
+                    f"normal_email_parser={len(email_parser_emails)}"
+                )
+
+            for statement_email in statement_emails:
+                statement_transactions, attachment_errors = _parse_statement_attachments_from_email(
+                    user,
+                    statement_email,
+                )
+
+                if statement_transactions:
+                    _persist_extracted_transactions(
+                        user,
+                        db,
+                        sheets_service,
+                        sheet_title,
+                        [statement_email],
+                        statement_transactions,
+                        "Statement attachment",
+                    )
+                    if statement_email.get("id"):
+                        existing_gmail_message_ids.add(statement_email.get("id"))
+                    continue
+
+                print(
+                    "Email route fallback: "
+                    f"user={user_id} gmail_message_id={statement_email.get('id')} "
+                    f"attachment_errors={len(attachment_errors)}"
+                )
+                email_parser_emails.append(statement_email)
+
+            # 7. Send non-statement or fallback emails to LLM batches
+            for batch_result in _batch_extract_transactions(email_parser_emails, user_id=user_id):
                 if not batch_result:
                     continue
 
@@ -401,74 +638,15 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                     )
                     continue
 
-                try:
-                    # 8. Save parsed transaction objects to DB as returned by the extractor
-                    parsed_result_count = sum(
-                        1
-                        for transaction in transactions
-                        if str(
-                            (transaction.get("parser_metadata") or {}).get("parsed_status") or ""
-                        ).strip().lower() == "parsed"
-                    )
-                    saved_transactions = save_valid_transaction_to_db(
-                        transactions,
-                        user_id,
-                        db,
-                    )
-
-                    # 9. Save parsed/not_transaction/failed status
-                    update_parsed_status_to_db(
-                        user_id,
-                        transactions,
-                        db,
-                        emails=batch_emails,
-                    )
-
-                    ledger_result = recalculate_ledgers_for_transactions(
-                        db,
-                        saved_transactions,
-                        user_id,
-                    )
-
-                    # 10. Commit DB batch
-                    db.add(user)
-                    db.commit()
-                    print(
-                        "Email batch saved: "
-                        f"user={user_id} emails={len(batch_emails)} "
-                        f"llm_rows={len(transactions)} parsed={parsed_result_count} "
-                        f"transactions_saved={len(saved_transactions)} "
-                        f"ledger_rows={ledger_result.get('accounts_recalculated', 0)}"
-                    )
-                except Exception as error:
-                    db.rollback()
-                    safe_error = str(error).encode('ascii', 'replace').decode('ascii')
-                    print(f"Failed to persist extracted batch: {safe_error[:300]}")
-                    update_parsed_status_to_db(
-                        user_id,
-                        [],
-                        db,
-                        emails=batch_emails,
-                        error=safe_error,
-                    )
-                    db.add(user)
-                    db.commit()
-                    existing_gmail_message_ids.update(
-                        email.get("id")
-                        for email in batch_emails
-                        if email.get("id")
-                    )
-                    continue
-
-                # 11. Append committed DB rows to Sheets
-                if saved_transactions:
-                    _sync_transactions_to_sheet(
-                        user,
-                        db,
-                        sheets_service=sheets_service,
-                        sheet_title=sheet_title,
-                        transaction_ids=[transaction.id for transaction in saved_transactions],
-                    )
+                _persist_extracted_transactions(
+                    user,
+                    db,
+                    sheets_service,
+                    sheet_title,
+                    batch_emails,
+                    transactions,
+                    "Email batch",
+                )
 
                 existing_gmail_message_ids.update(
                     email.get("id")

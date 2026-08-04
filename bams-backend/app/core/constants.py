@@ -50,6 +50,8 @@ BASE_RETRY_DELAY_SECONDS = 1
 MAX_RETRY_DELAY_SECONDS = 16
 PAGE_THROTTLE_SECONDS = 0.35
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+PDF_MIME_TYPE = "application/pdf"
+STATEMENT_ATTACHMENT_KEYWORDS = ("statement","summary", "bank statement", "account statement", "transaction history", "account summary")
 TRACKED_EMAIL_DOMAINS = [
     "github.com",
     "flodataanalytics.com",
