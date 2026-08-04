@@ -55,13 +55,19 @@ def get_statement_upload_job(user_id: int, job_id: str) -> dict:
 
 
 # -------------------------- Main function which calls LLM ------------
-def _parse_statement_pdf_sync(pdf_path: Path, user_id: int, original_filename: str) -> list[dict]:
+def _parse_statement_pdf_sync(
+    pdf_path: Path,
+    user_id: int,
+    original_filename: str,
+    password: str | None = None,
+) -> list[dict]:
     """Parse a statement PDF through the shared LLM statement function.
 
     original_filename (the name the user uploaded, before _safe_upload_name
     renamed it to a UUID'd path) is passed through so the account-number
     lookup — used to resolve passwords for encrypted statements — can read
-    the last-4 digits embedded in it.
+    the last-4 digits embedded in it. `password`, if the user supplied one
+    while uploading, is used directly instead of guessing.
     """
     try:
         from ..ds.llm.main import process_statement
@@ -80,6 +86,7 @@ def _parse_statement_pdf_sync(pdf_path: Path, user_id: int, original_filename: s
             file_path=str(pdf_path),
             user_id=user_id,
             original_filename=original_filename,
+            password=password,
         )
     )
 
@@ -141,10 +148,15 @@ def _normalize_statement_transaction(transaction: dict, source_file: str) -> dic
     return normalized
 
 
-async def _save_uploaded_statements(files: List[UploadFile]) -> list[tuple[str, Path]]:
-    """ """
+async def _save_uploaded_statements(
+    files: List[UploadFile],
+    password: str | None = None,
+) -> list[tuple[str, Path, str | None]]:
+    """ `password`, if given, comes from the frontend's "this PDF needs a
+    password" popup — the retry request it sends carries just the one file
+    that failed plus this one password, so no per-file list is needed. """
     await run_in_threadpool(UPLOAD_DIR.mkdir, parents=True, exist_ok=True)
-    saved_files: list[tuple[str, Path]] = []
+    saved_files: list[tuple[str, Path, str | None]] = []
 
     try:
         # Process every uploaded files
@@ -169,7 +181,7 @@ async def _save_uploaded_statements(files: List[UploadFile]) -> list[tuple[str, 
 
             saved_path = UPLOAD_DIR / _safe_upload_name(file.filename, index)
             await run_in_threadpool(saved_path.write_bytes, content)
-            saved_files.append((file.filename or saved_path.name, saved_path))
+            saved_files.append((file.filename or saved_path.name, saved_path, password))
     except Exception:
         _delete_saved_statements(saved_files)
         raise
@@ -186,8 +198,8 @@ def _delete_saved_statement(saved_path: Path) -> None:
         print(f"Failed to delete temporary statement file {saved_path}: {error}")
 
 
-def _delete_saved_statements(saved_files: list[tuple[str, Path]]) -> None:
-    for _, saved_path in saved_files:
+def _delete_saved_statements(saved_files: list[tuple[str, Path, str | None]]) -> None:
+    for _, saved_path, _password in saved_files:
         _delete_saved_statement(saved_path)
 
 
@@ -197,7 +209,7 @@ def _statement_error_message(error: Exception) -> str:
     return str(error) or "Statement parsing failed."
 
 
-def _run_statement_upload_job(job_id: str, user_id: int, saved_files: list[tuple[str, Path]]) -> None:
+def _run_statement_upload_job(job_id: str, user_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
     try:
         result = _process_saved_statements_sync(user_id, saved_files)
         _set_statement_job(
@@ -218,7 +230,7 @@ def _run_statement_upload_job(job_id: str, user_id: int, saved_files: list[tuple
         )
 
 
-def _start_statement_job_thread(job_id: str, user_id: int, saved_files: list[tuple[str, Path]]) -> None:
+def _start_statement_job_thread(job_id: str, user_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
     thread = threading.Thread(
         target=_run_statement_upload_job,
         args=(job_id, user_id, saved_files),
@@ -234,7 +246,7 @@ def _start_statement_job_thread(job_id: str, user_id: int, saved_files: list[tup
 
 
 
-def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Path]]) -> dict:
+def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Path, str | None]]) -> dict:
     """
     Blocking statement pipeline. It runs in a worker thread so PDF rendering,
     LLM calls, Google Sheets calls, and DB commits do not block FastAPI's event loop.
@@ -254,7 +266,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
         sheets_service = build("sheets", "v4", credentials=credentials)
         sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
     except Exception as e:
-        for _, saved_path in saved_files:
+        for _, saved_path, _password in saved_files:
             _delete_saved_statement(saved_path)
         db.close()
         if isinstance(e, HTTPException):
@@ -268,10 +280,10 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
     processed_files = []                # Stores per-file summary information.
 
     # 4. Iterate and process saved statement PDFs one-by-one
-    for original_filename, saved_path in saved_files:
+    for original_filename, saved_path, password in saved_files:
         try:
             # 5. Parse statement PDF using app.ds.llm.app.run(Path)
-            extracted_txns = _parse_statement_pdf_sync(saved_path, user.id, original_filename)
+            extracted_txns = _parse_statement_pdf_sync(saved_path, user.id, original_filename, password=password)
             print(
                 "Statement parsed: "
                 f"user={user.id} file={original_filename} rows={len(extracted_txns or [])}"
@@ -403,11 +415,20 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
 
 
 # --------------------------- Main orchestrator function -----------------
-async def process_and_upload_statements(user: User, files: List[UploadFile], db: Session) -> dict:
+async def process_and_upload_statements(
+    user: User,
+    files: List[UploadFile],
+    db: Session,
+    password: str | None = None,
+) -> dict:
     """
     Service to process uploaded bank statement files.
     Saves files, invokes the PDF LLM parser sequentially for each statement,
     saves extracted transactions into DB, then projects unsynced rows to Google Sheets.
+
+    `password`, if given, comes from the frontend's password-entry popup
+    (shown after a PDF fails to unlock) — the retry request re-sends that one
+    file along with this password, used directly instead of guessed.
     """
 
     if not files:
@@ -416,9 +437,9 @@ async def process_and_upload_statements(user: User, files: List[UploadFile], db:
     if not user.spreadsheet_id:
         raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
 
-    saved_files = await _save_uploaded_statements(files)
+    saved_files = await _save_uploaded_statements(files, password=password)
     job_id = uuid4().hex
-    filenames = [original_filename for original_filename, _ in saved_files]
+    filenames = [original_filename for original_filename, _saved_path, _password in saved_files]
 
     _set_statement_job(
         job_id,

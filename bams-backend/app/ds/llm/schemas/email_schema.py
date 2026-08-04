@@ -1,9 +1,12 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
+from fastapi import File, UploadFile
+
 
 class AttachmentMetadata(BaseModel):
     id: str
+    file: Optional[UploadFile] = File(None)
     filename: str
     mimeType: Optional[str] = None
     size: Optional[int] = 0
