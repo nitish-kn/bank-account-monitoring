@@ -88,7 +88,10 @@ def normalize_statement_transaction(
 
     normalized["ref_number"] = ref_number
     normalized["gmail_message_id"] = gmail_message_id or normalized.get("gmail_message_id")
-    normalized["source"] = "statement"
+    # A gmail_message_id means this statement PDF came in as an email
+    # attachment rather than a manual upload — tagged distinctly so the two
+    # origins can be told apart downstream (analytics, UI, filtering).
+    normalized["source"] = "email_statement" if gmail_message_id else "statement"
     normalized["email_metadata"] = {
         **existing_email_metadata,
         **(email_metadata or {}),
