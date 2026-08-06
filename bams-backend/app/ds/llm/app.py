@@ -127,6 +127,7 @@ Before extracting any row, classify it as one of:
 * FOOTER_ROW
 * CARRIED_FORWARD
 * INFORMATION_ROW
+* ILLUSTRATIVE_EXAMPLE
 
 Only extract rows classified as **TRANSACTION**.
 
@@ -152,8 +153,35 @@ Only extract rows classified as **TRANSACTION**.
 * Notes
 * Messages
 * Account Information Rows
+* Illustrative / Sample Calculation Rows
+* Example / Hypothetical Transaction Rows
 
 A row is a **TRANSACTION** only if it represents a distinct movement of money (credit or debit).
+
+### Illustrative / sample content (common on credit card statements)
+
+Credit card statements often include an illustration or worked example that is
+NOT part of the actual transaction history — e.g. "Illustration for
+calculation of Finance Charges", "Sample calculation of Minimum Amount Due",
+a "How is interest calculated" box, an EMI-conversion example, a reward-points
+illustration table, or a hypothetical walkthrough ("If you spend ₹X and pay
+only the minimum due..."). These are explanatory content, not things the
+cardholder actually did — never extract them as transactions.
+
+Recognize these by cues such as:
+
+* A heading/label containing "Illustration", "Example", "Sample", "For
+  illustration purposes only", "Hypothetical", or "How is ... calculated".
+* Generic placeholder merchant/payee names (e.g. "Merchant A", "XYZ", "ABC
+  Store") instead of a real counterparty.
+* Dates that fall outside the statement's actual billing period, or no date
+  at all.
+* Numbers used purely to walk through a formula/calculation rather than tied
+  to a specific dated purchase/payment on this account.
+
+When genuinely unsure whether a row is a real transaction or part of an
+illustration, exclude it — a missed real transaction is far less harmful than
+fabricating one from a worked example.
 
 ---
 
@@ -454,8 +482,8 @@ Before returning:
 1. Count transaction rows on the page.
 2. Count extracted Transaction objects.
 3. They must match.
-4. Exclude all balance, summary, total, carried-forward, header, footer, and informational rows.
-5. Return only actual money-movement transactions.
+4. Exclude all balance, summary, total, carried-forward, header, footer, informational, and illustrative/example rows.
+5. Return only actual money-movement transactions the cardholder/account holder genuinely made.
 """
 # ------------------------------------------------------------------ #
 # PDF → image helpers                                                 #
@@ -645,18 +673,42 @@ def _is_credit_card_statement_context(account_context: dict[str, str]) -> bool:
     return str(account_context.get("account_type") or "").strip().lower() == "credit card"
 
 
+def _recover_credit_card_number(tx_dict: dict) -> dict:
+    """
+    A vision pass that (even momentarily) treated a row as a bank
+    transaction often parks the card's visible digits in account_number
+    instead of optional_fields.credit_card_number. If we clear
+    account_number without rescuing that value first, it's gone for good —
+    fill_missing_credit_card_details's very first check is
+    `if not optional_fields.get("credit_card_number"): return transaction`,
+    so it bails out immediately and every optional_fields entry stays
+    empty. Move it over before it can be lost.
+    """
+    optional_fields = tx_dict.get("optional_fields")
+    if not isinstance(optional_fields, dict):
+        optional_fields = {}
+        tx_dict["optional_fields"] = optional_fields
+
+    if not optional_fields.get("credit_card_number") and tx_dict.get("account_number"):
+        optional_fields["credit_card_number"] = tx_dict["account_number"]
+
+    tx_dict["account_number"] = None
+    return tx_dict
+
+
 def _force_credit_card_transaction(tx_dict: dict) -> dict:
     """
     Statement-level override: once we know (from this page or an earlier
     one) that the whole statement is a credit card statement, every row
     belongs to that card — never trust a per-row LLM slip that left
     txn_via as "Bank Transaction". A card statement has no bank account
-    number of its own, so account_number is cleared too, matching the
-    same rule already enforced for credit card rows from the email flow.
+    number of its own, so account_number is cleared too (after rescuing
+    any card digits parked there — see _recover_credit_card_number),
+    matching the same rule already enforced for credit card rows from the
+    email flow.
     """
     tx_dict["txn_via"] = "Credit Card"
-    tx_dict["account_number"] = None
-    return tx_dict
+    return _recover_credit_card_number(tx_dict)
 
 
 def _format_account_context_for_prompt(account_context: dict[str, str]) -> Optional[str]:
@@ -873,6 +925,12 @@ def extract_transactions_from_pdf(
             # poison the context every later page inherits.
             if _is_credit_card_statement_context(statement_account_context):
                 tx_dict = _force_credit_card_transaction(tx_dict)
+            elif str(tx_dict.get("txn_via") or "").strip().lower() == "credit card":
+                # The LLM already got txn_via right on its own for this row
+                # (independent of whole-statement detection) — still rescue
+                # a card number it may have parked in account_number instead
+                # of optional_fields.credit_card_number.
+                tx_dict = _recover_credit_card_number(tx_dict)
 
             _merge_account_context(statement_account_context, _transaction_account_context(tx_dict))
             tx_dict = _apply_account_context(tx_dict, statement_account_context)
