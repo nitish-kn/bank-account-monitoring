@@ -99,6 +99,45 @@ def find_credit_card_in_excel(last_four_digits: str, df: pd.DataFrame) -> Option
     }
 
 
+def get_all_credit_card_passwords(df: pd.DataFrame = None) -> list[str]:
+    """
+    Credit card statement PDFs are password-protected with the first 4
+    letters of the cardholder's name (uppercase, letters only) plus the
+    last 4 digits of the card number — e.g. "Arvind Kumar Gupta" + card
+    ending 1000 -> "ARVI1000". Returns the derived password for every row
+    in the mapping sheet (skipping rows missing either piece).
+    """
+    if df is None:
+        try:
+            df = load_credit_card_data()
+        except Exception as exc:
+            print(f"Warning: Could not load credit card mapping data: {exc}")
+            return []
+
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return []
+
+    owner_col, card_col = "Credit Card Owner", "Credit Card No."
+    if owner_col not in df.columns or card_col not in df.columns:
+        return []
+
+    passwords = []
+    for _, row in df.iterrows():
+        owner = _clean_cell(row.get(owner_col))
+        card_number = row.get(card_col)
+        if not owner:
+            continue
+
+        first_four = re.sub(r"[^A-Za-z]", "", owner).upper()[:4]
+        last_four = _digits_only(card_number)[-4:]
+
+        if len(first_four) == 4 and len(last_four) == 4:
+            passwords.append(f"{first_four}{last_four}")
+
+    # Dedupe while preserving order.
+    return list(dict.fromkeys(passwords))
+
+
 def fill_missing_credit_card_details(transaction: Dict[str, Any], df: pd.DataFrame = None) -> Dict[str, Any]:
     """
     For credit card transactions, look up the full card details from the

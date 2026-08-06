@@ -310,7 +310,6 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
                 saved_path,
                 user.id,
                 original_filename=str(filename),
-                email_body=email.get("body"),
             )
             normalized_txns = [
                 normalize_statement_transaction(
