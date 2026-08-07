@@ -29,7 +29,7 @@ import logging
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Iterable, Optional
 
 import fitz  # PyMuPDF
 from openai import OpenAI
@@ -39,10 +39,16 @@ from pydantic import BaseModel, Field, ValidationError
 from ...config import settings
 from .schemas.transaction_schema import Transaction
 from .utils.account_lookup import fill_missing_account_details
+from .utils.pdf_password_lookup import get_all_known_pdf_passwords
 from .utils.credit_card_lookup import fill_missing_credit_card_details
 # from tracing import init_tracing
 
 OPENAI_API_KEY = settings.openai_api_key
+
+
+class PdfPasswordError(Exception):
+    """Raised when a password-protected statement PDF could not be unlocked —
+    either no password could be resolved, or the one we had was wrong."""
 
 
 # ------------------------------------------------------------------ #
@@ -121,6 +127,7 @@ Before extracting any row, classify it as one of:
 * FOOTER_ROW
 * CARRIED_FORWARD
 * INFORMATION_ROW
+* ILLUSTRATIVE_EXAMPLE
 
 Only extract rows classified as **TRANSACTION**.
 
@@ -146,8 +153,35 @@ Only extract rows classified as **TRANSACTION**.
 * Notes
 * Messages
 * Account Information Rows
+* Illustrative / Sample Calculation Rows
+* Example / Hypothetical Transaction Rows
 
 A row is a **TRANSACTION** only if it represents a distinct movement of money (credit or debit).
+
+### Illustrative / sample content (common on credit card statements)
+
+Credit card statements often include an illustration or worked example that is
+NOT part of the actual transaction history — e.g. "Illustration for
+calculation of Finance Charges", "Sample calculation of Minimum Amount Due",
+a "How is interest calculated" box, an EMI-conversion example, a reward-points
+illustration table, or a hypothetical walkthrough ("If you spend ₹X and pay
+only the minimum due..."). These are explanatory content, not things the
+cardholder actually did — never extract them as transactions.
+
+Recognize these by cues such as:
+
+* A heading/label containing "Illustration", "Example", "Sample", "For
+  illustration purposes only", "Hypothetical", or "How is ... calculated".
+* Generic placeholder merchant/payee names (e.g. "Merchant A", "XYZ", "ABC
+  Store") instead of a real counterparty.
+* Dates that fall outside the statement's actual billing period, or no date
+  at all.
+* Numbers used purely to walk through a formula/calculation rather than tied
+  to a specific dated purchase/payment on this account.
+
+When genuinely unsure whether a row is a real transaction or part of an
+illustration, exclude it — a missed real transaction is far less harmful than
+fabricating one from a worked example.
 
 ---
 
@@ -365,6 +399,19 @@ Always exactly one of: `Bank Transaction` | `Credit Card` | `FASTag`
 * `FASTag` — toll deduction, FASTag recharge or payment.
 * Everything else (UPI, NEFT, RTGS, IMPS, cash, cheque, ECS/NACH, salary, interest, etc.) → `Bank Transaction`.
 
+### Whole-statement credit card detection
+
+If THIS STATEMENT is a credit card statement — evidenced by any of: a card
+number printed in the header (e.g. "XXXX XXXX XXXX 1234"), "Credit Limit",
+"Available Credit Limit", "Total Amount Due", "Minimum Amount Due", "Payment
+Due Date", "Reward Points", or `account_type` = "Credit Card" — then EVERY
+transaction row on EVERY page of this statement must be classified
+`txn_via = "Credit Card"`, never "Bank Transaction", even for rows that
+individually look like a plain purchase/payment/fee with no explicit
+"credit card" wording on that specific row. Never mix "Bank Transaction"
+rows into a credit card statement — a card statement has no bank account
+number of its own, so `account_number` must stay null throughout.
+
 ## counterparty
 
 * Extract ONLY the merchant/person/bank/entity name from the narration.
@@ -435,21 +482,48 @@ Before returning:
 1. Count transaction rows on the page.
 2. Count extracted Transaction objects.
 3. They must match.
-4. Exclude all balance, summary, total, carried-forward, header, footer, and informational rows.
-5. Return only actual money-movement transactions.
+4. Exclude all balance, summary, total, carried-forward, header, footer, informational, and illustrative/example rows.
+5. Return only actual money-movement transactions the cardholder/account holder genuinely made.
 """
 # ------------------------------------------------------------------ #
 # PDF → image helpers                                                 #
 # ------------------------------------------------------------------ #
 
 
-def pdf_to_images(pdf_path: Path, dpi: int = DPI) -> list[bytes]:
+def pdf_to_images(
+    pdf_path: Path,
+    dpi: int = DPI,
+    password_candidates: Optional[Callable[[], Iterable[Optional[str]]]] = None,
+) -> list[bytes]:
     """
     Render every page of *pdf_path* to a JPEG byte-string.
     Returns a list ordered by page number (0-indexed internally,
     but page_number stored in metadata is 1-based).
+
+    `password_candidates` is only ever called if the PDF actually turns out
+    to be encrypted — unprotected PDFs (the common case) never trigger it,
+    so the (Excel-loading) work in `_pdf_password_candidates` is skipped
+    entirely when it isn't needed. When it IS needed, each yielded candidate
+    is actually tried against the PDF in order — a wrong candidate just
+    moves on to the next one rather than giving up.
     """
     doc = fitz.open(str(pdf_path))
+
+    if doc.needs_pass:
+        unlocked = False
+        for candidate in (password_candidates() if password_candidates else []):
+            if candidate and doc.authenticate(candidate):
+                unlocked = True
+                break
+
+        if not unlocked:
+            doc.close()
+            raise PdfPasswordError(
+                f"PDF '{pdf_path.name}' is password protected and the correct "
+                "password could not be resolved/verified."
+            )
+        log.info("Unlocked password-protected PDF: %s", pdf_path.name)
+
     images: list[bytes] = []
     zoom = dpi / 72  # 72 is the PDF baseline DPI
     mat = fitz.Matrix(zoom, zoom)
@@ -480,6 +554,45 @@ def pdf_to_images(pdf_path: Path, dpi: int = DPI) -> list[bytes]:
 
 def images_to_base64(images: list[bytes]) -> list[str]:
     return [base64.b64encode(img).decode("utf-8") for img in images]
+
+
+def _pdf_password_candidates(
+    pdf_path: Path,
+    original_filename: Optional[str],
+    password: Optional[str] = None,
+) -> Iterable[Optional[str]]:
+    """
+    Yield password candidates for an encrypted statement PDF, in order:
+      1. An explicit, caller-supplied password (e.g. from the frontend's
+         "this PDF needs a password" popup) — tried first since it's the
+         most direct source.
+      2. Every distinct known password: the Bank Accounts V1 mapping sheet,
+         derived credit-card statement passwords (first 4 letters of the
+         cardholder name + last 4 card digits), and the manually-maintained
+         extra_passwords.json list. No attempt is made to first guess
+         *which* account/card the PDF belongs to — the correct password is
+         guaranteed to be in that (small, <100-entry) combined list if it's
+         one we monitor, so we just try them all against the PDF until one
+         actually unlocks it.
+    Each candidate is computed lazily (a generator) and the caller
+    (`pdf_to_images`) actually TRIES each one against the PDF, moving on to
+    the next if it's wrong, rather than trusting the first candidate blindly.
+    """
+    filename_for_lookup = original_filename or pdf_path.name
+
+    if password:
+        log.info("Trying caller-supplied password for: %s", filename_for_lookup)
+        yield password
+
+    all_passwords = get_all_known_pdf_passwords()
+    if all_passwords:
+        log.info(
+            "Trying %d known password(s) (bank accounts + credit cards + extras) for: %s",
+            len(all_passwords),
+            filename_for_lookup,
+        )
+    for candidate in all_passwords:
+        yield candidate
 
 
 # ------------------------------------------------------------------ #
@@ -554,6 +667,48 @@ def _apply_account_context(
             transaction[field] = value
 
     return transaction
+
+
+def _is_credit_card_statement_context(account_context: dict[str, str]) -> bool:
+    return str(account_context.get("account_type") or "").strip().lower() == "credit card"
+
+
+def _recover_credit_card_number(tx_dict: dict) -> dict:
+    """
+    A vision pass that (even momentarily) treated a row as a bank
+    transaction often parks the card's visible digits in account_number
+    instead of optional_fields.credit_card_number. If we clear
+    account_number without rescuing that value first, it's gone for good —
+    fill_missing_credit_card_details's very first check is
+    `if not optional_fields.get("credit_card_number"): return transaction`,
+    so it bails out immediately and every optional_fields entry stays
+    empty. Move it over before it can be lost.
+    """
+    optional_fields = tx_dict.get("optional_fields")
+    if not isinstance(optional_fields, dict):
+        optional_fields = {}
+        tx_dict["optional_fields"] = optional_fields
+
+    if not optional_fields.get("credit_card_number") and tx_dict.get("account_number"):
+        optional_fields["credit_card_number"] = tx_dict["account_number"]
+
+    tx_dict["account_number"] = None
+    return tx_dict
+
+
+def _force_credit_card_transaction(tx_dict: dict) -> dict:
+    """
+    Statement-level override: once we know (from this page or an earlier
+    one) that the whole statement is a credit card statement, every row
+    belongs to that card — never trust a per-row LLM slip that left
+    txn_via as "Bank Transaction". A card statement has no bank account
+    number of its own, so account_number is cleared too (after rescuing
+    any card digits parked there — see _recover_credit_card_number),
+    matching the same rule already enforced for credit card rows from the
+    email flow.
+    """
+    tx_dict["txn_via"] = "Credit Card"
+    return _recover_credit_card_number(tx_dict)
 
 
 def _format_account_context_for_prompt(account_context: dict[str, str]) -> Optional[str]:
@@ -693,6 +848,8 @@ def extract_transactions_from_pdf(
     pdf_path: Path,
     batch_size: int = BATCH_SIZE,
     dpi: int = DPI,
+    original_filename: Optional[str] = None,
+    password: Optional[str] = None,
 ) -> list[Transaction]:
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
@@ -704,8 +861,15 @@ def extract_transactions_from_pdf(
 
     client = OpenAI(api_key=OPENAI_API_KEY)
 
+    def _password_candidates() -> Iterable[Optional[str]]:
+        return _pdf_password_candidates(
+            pdf_path,
+            original_filename,
+            password=password,
+        )
+
     # 1 — Render all pages
-    raw_images = pdf_to_images(pdf_path, dpi=dpi)
+    raw_images = pdf_to_images(pdf_path, dpi=dpi, password_candidates=_password_candidates)
     total_pages = len(raw_images)
     log.info("Total pages: %d", total_pages)
 
@@ -754,6 +918,20 @@ def extract_transactions_from_pdf(
         enriched_transactions = []
         for tx in batch_result.transactions:
             tx_dict = tx.model_dump()
+
+            # Correct BEFORE merging this row into statement_account_context —
+            # otherwise a mislabeled "Bank Transaction" row on a credit card
+            # statement could leak a card number into account_number and
+            # poison the context every later page inherits.
+            if _is_credit_card_statement_context(statement_account_context):
+                tx_dict = _force_credit_card_transaction(tx_dict)
+            elif str(tx_dict.get("txn_via") or "").strip().lower() == "credit card":
+                # The LLM already got txn_via right on its own for this row
+                # (independent of whole-statement detection) — still rescue
+                # a card number it may have parked in account_number instead
+                # of optional_fields.credit_card_number.
+                tx_dict = _recover_credit_card_number(tx_dict)
+
             _merge_account_context(statement_account_context, _transaction_account_context(tx_dict))
             tx_dict = _apply_account_context(tx_dict, statement_account_context)
             # print(f"BEFORE ENRICHMENT - {tx_dict}")
@@ -794,6 +972,21 @@ def extract_transactions_from_pdf(
         all_transactions.extend(valid)
         all_log_entries.append(log_entry)
 
+    # Safety net: if the statement turned out to be a credit card statement
+    # but that only became clear from a LATER page (e.g. page 1 was a plain
+    # transaction table with no "Credit Limit"/card-number header), the
+    # per-row correction above wouldn't have caught the earlier pages'
+    # transactions yet. Re-check with the FINAL merged account context and
+    # retroactively fix + re-run credit card enrichment on anything missed.
+    if _is_credit_card_statement_context(statement_account_context):
+        for index, txn in enumerate(all_transactions):
+            if str(txn.txn_via or "").strip().lower() == "credit card":
+                continue
+
+            txn_dict = _force_credit_card_transaction(txn.model_dump())
+            txn_dict = fill_missing_credit_card_details(txn_dict)
+            all_transactions[index] = Transaction.model_validate(txn_dict)
+
     failed_batches = [entry for entry in all_log_entries if entry.error]
     if batches and len(failed_batches) == len(batches):
         first_error = failed_batches[0].error or "Unknown extraction error"
@@ -828,8 +1021,16 @@ def extract_transactions_from_pdf(
 
 
 
-def run(pdf_path: Path) -> list[dict]:
-    transactions = extract_transactions_from_pdf(pdf_path)
+def run(
+    pdf_path: Path,
+    original_filename: Optional[str] = None,
+    password: Optional[str] = None,
+) -> list[dict]:
+    transactions = extract_transactions_from_pdf(
+        pdf_path,
+        original_filename=original_filename,
+        password=password,
+    )
 
     return [
         tx.model_dump(mode="json")

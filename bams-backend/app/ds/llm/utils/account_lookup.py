@@ -8,6 +8,13 @@ from typing import Any, Dict, Optional
 import pandas as pd
 
 
+def _clean_account_value(value: Any) -> Optional[str]:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def load_bank_accounts_data() -> pd.DataFrame:
     """
     Load bank accounts data from the Excel file.
@@ -49,6 +56,34 @@ def extract_last_four_digits(account_number: str) -> Optional[str]:
         return account_str[-4:]
     
     return None
+
+
+def get_all_bank_account_passwords(df: pd.DataFrame = None) -> list[str]:
+    """
+    Return every distinct, non-blank password in the bank accounts mapping
+    sheet's "Password" column, in sheet order. A statement PDF's password is
+    guaranteed to be one of these (if the account is one we monitor at all),
+    so the caller can just try them all against the PDF rather than trying
+    to first figure out which account the PDF belongs to.
+    """
+    if df is None:
+        try:
+            df = load_bank_accounts_data()
+        except Exception as exc:
+            print(f"Warning: Could not load bank accounts data: {exc}")
+            return []
+
+    if not isinstance(df, pd.DataFrame) or df.empty or "Password" not in df.columns:
+        return []
+
+    passwords = [
+        cleaned
+        for value in df["Password"]
+        if (cleaned := _clean_account_value(value))
+    ]
+
+    # Dedupe while preserving order — no point trying the same password twice.
+    return list(dict.fromkeys(passwords))
 
 
 def find_account_in_excel(last_four_digits: str, df: pd.DataFrame) -> Optional[Dict[str, Any]]:

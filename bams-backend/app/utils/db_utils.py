@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import difflib
+import logging
 from collections import Counter
 from hashlib import sha256
 import re
@@ -20,6 +21,8 @@ from ..models.parsed import Parsed
 from ..models.transactions import Transactions
 from .date_utils import utc_now
 from .transaction_utils import normalize_transaction_date, normalize_transaction_datetime
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_parsed_status(status: str | None) -> str:
@@ -656,11 +659,9 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
             updated_count += 1
 
     if transactions:
-        print(
-            "Transactions DB: "
-            f"user={user_id} parsed_valid={parsed_input_count} "
-            f"inserted={inserted_count} updated={updated_count} "
-            f"flagged_duplicates={flagged_count} skipped_non_parsed={skipped_count}"
+        logger.info(
+            "Transactions DB | user=%s parsed_valid=%d inserted=%d updated=%d flagged_duplicates=%d skipped_non_parsed=%d",
+            user_id, parsed_input_count, inserted_count, updated_count, flagged_count, skipped_count,
         )
 
     return saved_transactions
@@ -682,6 +683,7 @@ def _upsert_parsed_status(
     status: str,
     db: Session,
     optional: dict | None = None,
+    force: bool = False,
 ) -> Parsed:
     parsed = (
         db.query(Parsed)
@@ -693,7 +695,11 @@ def _upsert_parsed_status(
     )
 
     if parsed:
-        parsed.status = _choose_status(parsed.status, status)
+        # Normally "parsed" is sticky (see _choose_status) so a later partial
+        # result can't downgrade an already-successful message. `force`
+        # bypasses that — used when the caller already knows the definitive
+        # outcome and needs it to stick regardless of what's there.
+        parsed.status = status if force else _choose_status(parsed.status, status)
         parsed.optional = optional
     else:
         parsed = Parsed(
@@ -714,40 +720,60 @@ def update_parsed_status_to_db(
     db: Session,
     emails: list[dict] | None = None,
     error: str | None = None,
+    force_status: str | None = None,
 ) -> list[Parsed]:
-    """Upsert one parse-status row per Gmail message. Caller owns commit/rollback."""
+    """Upsert one parse-status row per Gmail message. Caller owns commit/rollback.
+
+    force_status, if given, is written for every email in `emails` as-is,
+    skipping the per-transaction status aggregation below and the "parsed
+    wins" merge in _upsert_parsed_status. Use it when the caller already
+    knows the definitive outcome — e.g. a statement email where one
+    attachment parsed but another didn't: the successful transactions still
+    get saved elsewhere, but the message itself should still show as
+    failed so the problem isn't hidden by the partial success. `error`
+    becomes that row's `optional.error` note when forcing.
+    """
     parsed_rows: list[Parsed] = []
     status_by_message_id: dict[str, tuple[str, dict | None]] = {}
 
-    for transaction in transactions or []:
-        gmail_message_id = _clean_text(transaction.get("gmail_message_id"))
-        if not gmail_message_id:
-            continue
+    if force_status:
+        for email in emails or []:
+            gmail_message_id = _clean_text(email.get("id"))
+            if gmail_message_id:
+                status_by_message_id[gmail_message_id] = (
+                    force_status,
+                    {"error": error} if error else None,
+                )
+    else:
+        for transaction in transactions or []:
+            gmail_message_id = _clean_text(transaction.get("gmail_message_id"))
+            if not gmail_message_id:
+                continue
 
-        status = normalize_parsed_status(
-            (transaction.get("parser_metadata") or {}).get("parsed_status")
-        )
-        existing = status_by_message_id.get(gmail_message_id)
-        chosen_status = _choose_status(existing[0], status) if existing else status
-        optional = None if chosen_status in {PARSED_STATUS, NOT_TRANSACTION_STATUS} else transaction
-        status_by_message_id[gmail_message_id] = (chosen_status, optional)
+            status = normalize_parsed_status(
+                (transaction.get("parser_metadata") or {}).get("parsed_status")
+            )
+            existing = status_by_message_id.get(gmail_message_id)
+            chosen_status = _choose_status(existing[0], status) if existing else status
+            optional = None if chosen_status in {PARSED_STATUS, NOT_TRANSACTION_STATUS} else transaction
+            status_by_message_id[gmail_message_id] = (chosen_status, optional)
 
-    if error:
+        if error:
+            for email in emails or []:
+                gmail_message_id = _clean_text(email.get("id"))
+                if gmail_message_id and gmail_message_id not in status_by_message_id:
+                    status_by_message_id[gmail_message_id] = (
+                        FAILED_STATUS,
+                        {"error": error},
+                    )
+
         for email in emails or []:
             gmail_message_id = _clean_text(email.get("id"))
             if gmail_message_id and gmail_message_id not in status_by_message_id:
                 status_by_message_id[gmail_message_id] = (
                     FAILED_STATUS,
-                    {"error": error},
+                    {"error": "LLM response did not include this Gmail message ID."},
                 )
-
-    for email in emails or []:
-        gmail_message_id = _clean_text(email.get("id"))
-        if gmail_message_id and gmail_message_id not in status_by_message_id:
-            status_by_message_id[gmail_message_id] = (
-                FAILED_STATUS,
-                {"error": "LLM response did not include this Gmail message ID."},
-            )
 
     existing_message_ids = set()
     if status_by_message_id:
@@ -780,6 +806,7 @@ def update_parsed_status_to_db(
                 status=status,
                 db=db,
                 optional=optional,
+                force=bool(force_status),
             )
         )
 
@@ -788,10 +815,9 @@ def update_parsed_status_to_db(
             f"{status}={count}"
             for status, count in sorted(status_counts.items())
         )
-        print(
-            "Parsed status DB: "
-            f"user={user_id} inserted={inserted_count} updated={updated_count} "
-            f"{status_summary}"
+        logger.info(
+            "Parsed status DB | user=%s inserted=%d updated=%d %s",
+            user_id, inserted_count, updated_count, status_summary,
         )
 
     return parsed_rows

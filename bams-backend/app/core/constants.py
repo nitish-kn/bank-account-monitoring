@@ -50,9 +50,9 @@ BASE_RETRY_DELAY_SECONDS = 1
 MAX_RETRY_DELAY_SECONDS = 16
 PAGE_THROTTLE_SECONDS = 0.35
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+PDF_MIME_TYPE = "application/pdf"
+STATEMENT_ATTACHMENT_KEYWORDS = ("statement","summary", "bank statement", "account statement", "transaction history", "account summary")
 TRACKED_EMAIL_DOMAINS = [
-    "github.com",
-    "flodataanalytics.com",
     "axis.bank.in",
     "hdfcbank.bank.in",
     "indusind.com",
@@ -83,15 +83,14 @@ TRANSACTION_DATA_RANGE = f"A2:{TRANSACTION_SHEET_END_COLUMN}"
 
 # Sync/setup flow
 REQUIRED_SCHEMA = TRANSACTION_SCHEMA
-SHEET_NAME = "Transaction Data"
+SHEET_NAME = "Transaction Data Local"
 SYNC_STATUS_NOT_STARTED = "not_started"
 SYNC_STATUS_RUNNING = "running"
 SYNC_STATUS_COMPLETED = "completed"
 SYNC_STATUS_FAILED = "failed"
 SYNC_TIMEOUT_SECONDS = 30 * 60
-EMAIL_EXTRACTION_BATCH_SIZE = 5
-EMAIL_EXTRACTION_MAX_WORKERS = 2
-EMAIL_EXTRACTION_MAX_IN_FLIGHT = 2
+EMAIL_EXTRACTION_BATCH_SIZE = 5    # emails grouped together per LLM extraction call
+SYNC_MAX_PARALLEL_JOBS = 4         # concurrent extraction jobs during a sync (statement PDFs + email batches, combined)
 
 
 # Invite flow
