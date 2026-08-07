@@ -119,7 +119,6 @@ async def process_statement(
     user_id: Optional[int] = Form(None),
     original_filename: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
-    email_body: Optional[str] = Form(None),
 ):
     """
     Test the bank-statement PDF extraction pipeline.
@@ -138,7 +137,6 @@ async def process_statement(
     resolved_user_id = _direct_form_int(user_id)
     resolved_original_filename = _direct_form_text(original_filename)
     resolved_password = _direct_form_text(password)
-    resolved_email_body = _direct_form_text(email_body)
 
     if upload_file is None and resolved_file_path is None:
         raise HTTPException(
@@ -167,7 +165,6 @@ async def process_statement(
                 pdf_path,
                 original_filename=resolved_original_filename or pdf_path.name,
                 password=resolved_password,
-                email_body=resolved_email_body,
             )
         except PdfPasswordError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
@@ -202,7 +199,6 @@ async def process_statement(
                 tmp_path,
                 original_filename=resolved_original_filename or upload_file.filename,
                 password=resolved_password,
-                email_body=resolved_email_body,
             )
         except PdfPasswordError as exc:
             raise HTTPException(status_code=422, detail=str(exc))

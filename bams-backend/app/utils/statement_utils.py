@@ -10,14 +10,14 @@ def parse_statement_pdf_sync(
     user_id: int,
     original_filename: str | None = None,
     password: str | None = None,
-    email_body: str | None = None,
 ) -> list[dict]:
     """Parse a statement PDF through the shared LLM statement function.
 
-    original_filename lets the password-lookup step read account digits
-    embedded in the filename; email_body lets it try an LLM-guessed
-    password from the source email. `password`, if the caller already has
-    one (e.g. a manual-upload retry), is tried first before either guess.
+    `password`, if the caller already has one (e.g. a manual-upload retry
+    via the frontend's password popup), is tried first. Otherwise the
+    statement pipeline just tries every password in the Bank Accounts V1
+    mapping sheet against the PDF until one unlocks it — no need to first
+    guess which account the PDF belongs to.
     """
     try:
         from ..ds.llm.main import process_statement
@@ -37,7 +37,6 @@ def parse_statement_pdf_sync(
             user_id=user_id,
             original_filename=original_filename or pdf_path.name,
             password=password,
-            email_body=email_body,
         )
     )
 

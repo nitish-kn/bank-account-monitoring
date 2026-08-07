@@ -3,6 +3,7 @@ import logging
 from datetime import timedelta
 from threading import Thread
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from itertools import zip_longest
 from pathlib import Path
 import re
 import time
@@ -356,7 +357,6 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
                 saved_path,
                 user.id,
                 original_filename=str(filename),
-                email_body=email.get("body"),
             )
             normalized_txns = [
                 normalize_statement_transaction(
@@ -869,7 +869,18 @@ def _build_extraction_jobs(
         (lambda batch=batch: _extract_transactions_for_email_batch(batch, user.id))
         for batch in email_batches
     ]
-    return statement_jobs + batch_jobs
+
+    # Email batches first, statement PDFs second, then interleaved one-for-one: with
+    # max_workers=4 this hands out roughly 2 workers to each kind up front, instead of
+    # every statement job (slow: password guessing + multi-page vision LLM calls) queuing
+    # ahead of every email batch and starving it of a worker. Once one kind runs out,
+    # the leftover jobs of the other kind keep the now-free workers busy.
+    return [
+        job
+        for pair in zip_longest(batch_jobs, statement_jobs)
+        for job in pair
+        if job is not None
+    ]
 
 
 def _run_extraction_jobs(jobs: list[Callable[[], dict]], max_workers: int):
