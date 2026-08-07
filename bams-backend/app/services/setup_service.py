@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
 from threading import Thread
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
@@ -66,6 +67,23 @@ logger = logging.getLogger(__name__)
 # Thread tracking for stuck-sync detection
 # Maps user_id -> {"thread": Thread, "started_at": float (time.time())}
 _active_sync_threads: dict[int, dict] = {}
+
+
+@dataclass(frozen=True)
+class SyncUserSnapshot:
+    id: int
+    access_token: str | None
+    refresh_token: str | None
+    token_expiry: object | None
+
+
+def _snapshot_sync_user(user: User) -> SyncUserSnapshot:
+    return SyncUserSnapshot(
+        id=user.id,
+        access_token=user.access_token,
+        refresh_token=user.refresh_token,
+        token_expiry=user.token_expiry,
+    )
 
 
 # --------------------- Helper functions
@@ -662,7 +680,7 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
             # job below only does the extraction call (Gmail fetch / LLM);
             # this loop is the single place that writes to `db`/`sheets_service`,
             # so persistence always happens through one session.
-            jobs = _build_extraction_jobs(user, statement_emails, email_parser_emails)
+            jobs = _build_extraction_jobs(_snapshot_sync_user(user), statement_emails, email_parser_emails)
             job_counts: dict[str, int] = {}
 
             for result in _run_extraction_jobs(jobs, max_workers=SYNC_MAX_PARALLEL_JOBS):
@@ -783,7 +801,7 @@ def _statement_job_result(
     }
 
 
-def _extract_transactions_for_statement_email(user: User, email: dict) -> dict:
+def _extract_transactions_for_statement_email(user: SyncUserSnapshot, email: dict) -> dict:
     """Extraction job for one statement email: parse its PDF attachment(s).
 
     - All attachments parse cleanly -> normal "Statement attachment" result.
@@ -849,7 +867,7 @@ def _extract_transactions_for_email_batch(batch: list[dict], user_id: int | None
 
 
 def _build_extraction_jobs(
-    user: User,
+    user: SyncUserSnapshot,
     statement_emails: list[dict],
     normal_emails: list[dict],
     batch_size: int = EMAIL_EXTRACTION_BATCH_SIZE,
@@ -865,8 +883,9 @@ def _build_extraction_jobs(
         normal_emails[i:i + batch_size]
         for i in range(0, len(normal_emails), batch_size)
     ]
+    user_id = user.id
     batch_jobs = [
-        (lambda batch=batch: _extract_transactions_for_email_batch(batch, user.id))
+        (lambda batch=batch: _extract_transactions_for_email_batch(batch, user_id))
         for batch in email_batches
     ]
 

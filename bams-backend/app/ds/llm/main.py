@@ -1,3 +1,4 @@
+import threading
 import tempfile
 from pathlib import Path
 from typing import List, Optional
@@ -12,6 +13,18 @@ from .services.extractor import extract_transactions
 from .app import PdfPasswordError, run as extract_statement_transactions
 
 app = FastAPI()
+
+_ledger_locks: dict[int, threading.Lock] = {}
+_ledger_locks_guard = threading.Lock()
+
+
+def _ledger_lock_for_user(user_id: int) -> threading.Lock:
+    with _ledger_locks_guard:
+        lock = _ledger_locks.get(user_id)
+        if lock is None:
+            lock = threading.Lock()
+            _ledger_locks[user_id] = lock
+        return lock
 
 
 def _direct_upload_file(file):
@@ -45,11 +58,12 @@ def _write_temp_pdf(contents: bytes) -> Path:
 
 
 def _reconcile_statement_transactions(transactions: list[dict], user_id: int) -> None:
-    db = SessionLocal()
-    try:
-        reconcile_statement_batch(db, transactions, user_id)
-    finally:
-        db.close()
+    with _ledger_lock_for_user(user_id):
+        db = SessionLocal()
+        try:
+            reconcile_statement_batch(db, transactions, user_id)
+        finally:
+            db.close()
 
 
 @app.get("/")
@@ -103,11 +117,12 @@ async def process_emails(
     # transactions table — persist_transactions_batch mutates each dict in
     # `transactions` in place with its computed balance_after_txn.
     if user_id is not None:
-        db = SessionLocal()
-        try:
-            persist_transactions_batch(db, transactions, user_id)
-        finally:
-            db.close()
+        with _ledger_lock_for_user(user_id):
+            db = SessionLocal()
+            try:
+                persist_transactions_batch(db, transactions, user_id)
+            finally:
+                db.close()
 
     return transactions
 
