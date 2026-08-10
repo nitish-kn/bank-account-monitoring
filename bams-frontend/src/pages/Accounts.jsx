@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Badge, Spinner } from "@radix-ui/themes";
-import { AlertTriangle, CheckCircle2, ChevronRight, Filter, Plus, RotateCcw } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Badge, Spinner, Table } from "@radix-ui/themes";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Filter, Plus, RotateCcw } from "lucide-react";
 
 import { accountsApi } from "../api/accounts";
 import CustomButton from "../components/ui/CustomButton";
@@ -8,9 +8,10 @@ import CustomDropDown from "../components/ui/CustomDropDown";
 import CustomSearchBar from "../components/ui/CustomSearchBar";
 import CustomTable from "../components/ui/CustomTable";
 import Pagination from "../components/Pagination";
-import { formatAmount, formatDate } from "../lib/helper";
+import { cleanText, formatAmount, formatDate, formatDateAndTime } from "../lib/helper";
 import { getAccountFilterOptions } from "../lib/transactional-helper";
 import AddAcounts from "../components/AddAcounts";
+import { AmountColor, TypeBadge } from "../utils/Badges";
 
 const ALL_FILTER_VALUE = "all";
 
@@ -37,6 +38,7 @@ const getDefaultAccountFilters = () => ({
 const dropdownTriggerClassName = "h-9! w-full justify-between! text-sm";
 const dropdownContentClassName = "min-w-56 max-h-72 overflow-y-auto";
 const ACCOUNT_CACHE_FETCH_LIMIT = 1000;
+const RECENT_ACCOUNT_TXN_LIMIT = 5;
 
 const getAllOptionLabel = (options = [], fallback = "All") => (
   options?.find((option) => option?.value === ALL_FILTER_VALUE)?.label || fallback
@@ -130,6 +132,10 @@ const Accounts = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [addAccounts, setAddAccounts] = useState(false);
+  const [expandedAccountIds, setExpandedAccountIds] = useState({});
+  const [recentTransactionsByAccountId, setRecentTransactionsByAccountId] = useState({});
+  const [recentTransactionsLoading, setRecentTransactionsLoading] = useState({});
+  const [recentTransactionsError, setRecentTransactionsError] = useState({});
 
   const updateDraftFilter = (key, value) => {
     setDraftFilters((currentFilters) => ({
@@ -157,6 +163,40 @@ const Accounts = () => {
     }));
     setPage(1);
   };
+
+  const toggleAccountTransactions = useCallback(async (account) => {
+    const accountId = account?.id;
+    if (!accountId) return;
+
+    if (expandedAccountIds[accountId]) {
+      setExpandedAccountIds((current) => ({ ...current, [accountId]: false }));
+      return;
+    }
+
+    setExpandedAccountIds((current) => ({ ...current, [accountId]: true }));
+
+    if (recentTransactionsByAccountId[accountId] || recentTransactionsLoading[accountId]) {
+      return;
+    }
+
+    setRecentTransactionsLoading((current) => ({ ...current, [accountId]: true }));
+    setRecentTransactionsError((current) => ({ ...current, [accountId]: "" }));
+
+    try {
+      const result = await accountsApi.getRecentTransactions(accountId, RECENT_ACCOUNT_TXN_LIMIT);
+      setRecentTransactionsByAccountId((current) => ({
+        ...current,
+        [accountId]: result.transactions || [],
+      }));
+    } catch (err) {
+      setRecentTransactionsError((current) => ({
+        ...current,
+        [accountId]: err.response?.data?.detail || err.message || "Failed to load recent transactions.",
+      }));
+    } finally {
+      setRecentTransactionsLoading((current) => ({ ...current, [accountId]: false }));
+    }
+  }, [expandedAccountIds, recentTransactionsByAccountId, recentTransactionsLoading]);
 
   useEffect(() => {
     const fetchAccounts = async () => {
@@ -201,9 +241,24 @@ const Accounts = () => {
         columnWidth: "360px",
         render: (account) => (
           <div className="flex min-w-0 items-center gap-3 pl-2">
-            {/* <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400">
-              <ChevronRight className="h-4 w-4" />
-            </span> */}
+            <CustomButton
+              type="button"
+              color={expandedAccountIds[account.id] ? "blue" : "gray"}
+              variant={expandedAccountIds[account.id] ? "solid" : "soft"}
+              size="1"
+              radius="medium"
+              aria-label={`Show recent transactions for ${account.account_holder_name || "account"}`}
+              aria-expanded={!!expandedAccountIds[account.id]}
+              disabled={recentTransactionsLoading[account.id]}
+              onClick={() => toggleAccountTransactions(account)}
+              className="h-6! w-6! min-w-0! shrink-0! p-0! disabled:cursor-wait! disabled:opacity-70!"
+            >
+              {expandedAccountIds[account.id] ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </CustomButton>
 
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-slate-950" title={account.account_holder_name}>
@@ -292,8 +347,138 @@ const Accounts = () => {
         ),
       },
     ],
-    [],
+    [expandedAccountIds, recentTransactionsLoading, toggleAccountTransactions],
   );
+
+  const recentTransactionColumns = useMemo(() => [
+    {
+      key: "date",
+      header: "Date",
+      columnWidth: "100px",
+      render: (transaction) => {
+        const { date, time } = formatDateAndTime(transaction.txn_date || transaction.created_at);
+
+        return (
+          <div className="min-w-0 text-xs font-medium text-slate-500">
+            <p>{date}</p>
+            <p className="mt-0.5 text-slate-400">{time || "-"}</p>
+          </div>
+        );
+      },
+    },
+    {
+      key: "counterparty",
+      header: "Counterparty",
+      columnWidth: "620px",
+      render: (transaction) => {
+        const subtitleParts = [
+          transaction.mode,
+          transaction.ref_number,
+        ].filter(Boolean);
+        const subtitle = subtitleParts.length
+          ? subtitleParts.join(" / ")
+          : cleanText(transaction.narration || transaction.category || "-");
+
+        return (
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-950" title={cleanText(transaction.counterparty || transaction.narration)}>
+              {cleanText(transaction.counterparty || transaction.narration || "Transaction")}
+            </p>
+            <p className="mt-1 truncate text-xs font-medium text-slate-400" title={subtitle}>
+              {subtitle}
+            </p>
+          </div>
+        );
+      },
+    },
+    {
+      key: "txn_type",
+      header: "Type",
+      columnWidth: "120px",
+      headerClassName: "text-center",
+      cellClassName: "justify-center",
+      render: (transaction) => (
+        <div className="flex w-full justify-center">
+          <TypeBadge type={transaction.txn_type} />
+        </div>
+      ),
+    },
+    {
+      key: "amount",
+      header: "Amount",
+      columnWidth: "170px",
+      headerClassName: "text-right pr-8",
+      cellClassName: "justify-end pr-6",
+      render: (transaction) => (
+        <div className="w-full pr-2">
+          <AmountColor type={transaction.txn_type} amount={transaction.amount} />
+        </div>
+      ),
+    },
+  ], []);
+
+  const renderRecentTransactionRows = useCallback((account) => {
+    if (!expandedAccountIds[account.id]) return null;
+
+    const transactions = recentTransactionsByAccountId[account.id] || [];
+    const isLoadingTransactions = recentTransactionsLoading[account.id];
+    const transactionError = recentTransactionsError[account.id];
+    const transactionCount = transactions.length;
+    const headingCount = isLoadingTransactions ? RECENT_ACCOUNT_TXN_LIMIT : transactionCount;
+    const headingLabel = headingCount === 1 ? "Transaction" : "Transactions";
+
+    return (
+      <Table.Row className="bg-slate-50">
+        <Table.Cell colSpan={columns.length} className="p-0">
+          <div className="">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">
+                Last {headingCount} {headingLabel}
+              </p>
+              {!isLoadingTransactions && transactionCount > 0 ? (
+                <p className="text-xs font-semibold text-blue-600">
+                  Showing {transactionCount} of latest {RECENT_ACCOUNT_TXN_LIMIT}
+                </p>
+              ) : null}
+            </div>
+
+            {isLoadingTransactions ? (
+              <div className="flex items-center gap-2 rounded-lg bg-white px-4 py-4 text-sm font-medium text-slate-500">
+                <Spinner size="2" />
+                Loading recent transactions...
+              </div>
+            ) : transactionError ? (
+              <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                {transactionError}
+              </div>
+            ) : transactionCount === 0 ? (
+              <div className="rounded-lg bg-white px-4 py-4 text-sm font-medium text-slate-500">
+                No transactions found for this account.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-lg border border-slate-100">
+                <CustomTable
+                  columns={recentTransactionColumns}
+                  data={transactions}
+                  minWidth="1050px"
+                  size="1"
+                  getRowKey={(transaction, idx) => transaction.id || transaction.gmail_message_id || transaction.ref_number || idx}
+                  emptyMessage="No transactions found for this account"
+                />
+              </div>
+            )}
+          </div>
+        </Table.Cell>
+      </Table.Row>
+    );
+  }, [
+    columns.length,
+    expandedAccountIds,
+    recentTransactionsByAccountId,
+    recentTransactionsError,
+    recentTransactionsLoading,
+    recentTransactionColumns,
+  ]);
 
   const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
     if (key === "search") return Boolean(String(value || "").trim());
@@ -508,6 +693,7 @@ const Accounts = () => {
                 emptyMessage="No accounts found"
                 sort={sort}
                 onSort={handleSort}
+                renderRowDetails={renderRecentTransactionRows}
               />
             </div>
 

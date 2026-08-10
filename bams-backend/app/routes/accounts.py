@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..core.dependencies import get_current_user
 from ..database import get_db
 from ..models.user import User
-from ..services.accounts_service import get_paginated_accounts, create_new_account
+from ..services.accounts_service import get_paginated_accounts, create_new_account, get_recent_account_transactions
 
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -48,6 +48,21 @@ def query_accounts(
         page=req.pagination.page,
         page_size=req.pagination.pageSize,
         sort=sort_dict,
+    )
+
+
+@router.get("/{account_id}/transactions")
+def get_account_transactions(
+    account_id: str,
+    limit: int = 5,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return get_recent_account_transactions(
+        db=db,
+        user_id=current_user.id,
+        account_id=account_id,
+        limit=limit,
     )
 
 

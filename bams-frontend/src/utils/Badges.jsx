@@ -12,7 +12,7 @@ export const TypeBadge = ({ type }) => {
 
   if (!isCredit && !isDebit) {
     return (
-      <span className="inline-flex items-center rounded-md! bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500">
+      <span className="inline-flex w-fit items-center justify-center rounded-md! bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500">
         -
       </span>
     );
@@ -24,7 +24,7 @@ export const TypeBadge = ({ type }) => {
 
   return (
     <span
-      className={`inline-flex items-center rounded-md! px-2.5 py-1 text-xs font-semibold ${bgColor} ${textColor}`}
+      className={`inline-flex w-fit items-center justify-center rounded-md! px-2.5 py-1 text-xs font-semibold ${bgColor} ${textColor}`}
     >
       {label}
     </span>

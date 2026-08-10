@@ -87,6 +87,7 @@ def get_audit_log(
     changed_by: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    txn_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -98,5 +99,6 @@ def get_audit_log(
         search=search,
         changed_by=changed_by,
         start_date=start_date,
-        end_date=end_date
+        end_date=end_date,
+        txn_id=txn_id
     )

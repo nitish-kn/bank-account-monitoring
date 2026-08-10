@@ -14,5 +14,13 @@ export const accountsApi = {
     const response = await api.post("/accounts", body);
 
     return response?.data;
-  }
+  },
+
+  getRecentTransactions: async (accountId, limit = 5) => {
+    const response = await api.get(`/accounts/${accountId}/transactions`, {
+      params: { limit },
+    });
+
+    return response.data;
+  },
 };
