@@ -868,6 +868,8 @@ def transaction_to_schema_dict(transaction: Transactions) -> dict:
 
     result = {field: data.get(field) for field in TRANSACTION_SCHEMA}
     result["is_flag"] = False
+    result["created_at"] = transaction.created_at.isoformat() if transaction.created_at else None
+    result["updated_at"] = transaction.updated_at.isoformat() if transaction.updated_at else None
     return result
 
 

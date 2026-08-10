@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   CalendarClock,
   CarFront,
   CreditCard,
   Eye,
   Hash,
-  Info,
+  History,
   Landmark,
   Mail,
   MapPin,
@@ -18,6 +18,8 @@ import DialogPopup from "./DialogPopup";
 import EditTransactionDialog from "./EditTransactionDialog";
 import { cleanText, formatAmount, formatDateAndTime } from "../../lib/helper";
 import { SourceBadge } from "../../utils/Badges";
+import { transactionApi } from "../../api/transactions";
+import AuditChangesTable from "./AuditChangesTable";
 
 const emptyValue = "-";
 
@@ -50,6 +52,16 @@ const toneClasses = {
 };
 
 const normalizeType = (type) => String(type || "").trim().toLowerCase();
+
+const hasTransactionUpdates = (data) => {
+  if (!data?.created_at || !data?.updated_at) return false;
+
+  const createdTime = new Date(data.created_at).getTime();
+  const updatedTime = new Date(data.updated_at).getTime();
+
+  if (Number.isNaN(createdTime) || Number.isNaN(updatedTime)) return false;
+  return createdTime !== updatedTime;
+};
 
 const formatConfidence = (value) => {
   if (isEmptyValue(value)) return emptyValue;
@@ -97,7 +109,7 @@ const DetailField = ({ label, value, children, className = "" }) => (
   </div>
 );
 
-const DetailSection = ({ title, icon: Icon, children }) => (
+const DetailSection = ({ title, icon: Icon, children, contentClassName = "grid grid-cols-1 gap-2 sm:grid-cols-2" }) => (
   <section className="rounded-xl border border-gray-100 bg-gray-50/70 p-3">
     <div className="mb-3 flex items-center gap-2">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm ring-1 ring-gray-100">
@@ -105,7 +117,7 @@ const DetailSection = ({ title, icon: Icon, children }) => (
       </span>
       <p className="text-sm font-bold text-gray-900">{title}</p>
     </div>
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">{children}</div>
+    <div className={contentClassName}>{children}</div>
   </section>
 );
 
@@ -151,9 +163,50 @@ const OptionalDetails = ({ data }) => {
 const ActionList = ({ data }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState("");
   const transactionType = normalizeType(data?.txn_type);
   const typeTone = transactionType === "credit" ? "green" : transactionType === "debit" ? "red" : "gray";
   const { date, time } = formatDateAndTime(data?.txn_date);
+  const hasUpdates = hasTransactionUpdates(data);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!openDialog || !data?.id || !hasUpdates) {
+      setAuditLogs([]);
+      setAuditError("");
+      setAuditLoading(false);
+      return undefined;
+    }
+
+    setAuditLoading(true);
+    setAuditError("");
+
+    transactionApi
+      .getAuditLogs({ txn_id: data.id, page: 1, pageSize: 20 })
+      .then((res) => {
+        if (!cancelled) {
+          setAuditLogs(res.logs || []);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setAuditLogs([]);
+          setAuditError(err.response?.data?.detail || err.message || "Failed to load update history.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAuditLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openDialog, data?.id, hasUpdates]);
 
   return (
     <>
@@ -181,6 +234,8 @@ const ActionList = ({ data }) => {
         </CustomButton>
       </div>
 
+
+      {/* Transaction Details Dialog */}
       <DialogPopup
         open={openDialog}
         setOpen={setOpenDialog}
@@ -190,7 +245,8 @@ const ActionList = ({ data }) => {
         {data ? (
           <div className="max-h-[72vh] space-y-5 overflow-y-auto pr-1">
             <div className="flex flex-col gap-5 mt-1.5 ">
-
+              
+              {/* Narration */}
               <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50/70 p-4">
 
                 <div className="w-full">
@@ -209,6 +265,7 @@ const ActionList = ({ data }) => {
               </div>
 
 
+              {/* Counterparty */}
               <div className="flex gap-3 w-full rounded-xl border border-blue-100 bg-blue-50/70 p-4">
 
                 <div className="w-full border-r border-gray-400 pr-6">
@@ -233,7 +290,8 @@ const ActionList = ({ data }) => {
               </div>
 
             </div>
-
+                
+            {/* Transaction */}
             <DetailSection title="Transaction" icon={ReceiptText}>
               <DetailField label="Date">
                 <div className="flex items-center gap-2">
@@ -241,6 +299,7 @@ const ActionList = ({ data }) => {
                   <span>{date || emptyValue}{time ? `, ${time}` : ""}</span>
                 </div>
               </DetailField>
+
               <DetailField label="Mode" value={data.mode} />
               {data?.txn_via.toLowerCase() !== "fastag" && <DetailField label="Reference ID">
                 <div className="flex min-w-0 items-center gap-2">
@@ -257,7 +316,8 @@ const ActionList = ({ data }) => {
               {data?.txn_via.toLowerCase() !== "fastag" && <DetailField label="Balance After" value={formatCurrency(data.balance_after_txn, data.currency)} />}
               <DetailField label="Counterparty Kind" value={data.counterparty_kind} />
             </DetailSection>
-
+            
+            {/* Account */}
             <DetailSection title="Account" icon={Landmark}>
               <DetailField label="Bank" value={data.bank_name} />
               <DetailField label="Account Holder">
@@ -269,7 +329,49 @@ const ActionList = ({ data }) => {
               <DetailField label="Account Number" value={data.account_number} />
               <DetailField label="Account Type" value={data.account_type} />
             </DetailSection>
+              
+            {hasUpdates && (
+              <DetailSection title="Update History" icon={History} contentClassName="space-y-3">
+                {auditLoading ? (
+                  <div className="rounded-lg border border-gray-100 bg-white px-3 py-2 text-xs font-medium text-gray-500">
+                    Loading update history...
+                  </div>
+                ) : auditError ? (
+                  <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                    {auditError}
+                  </div>
+                ) : auditLogs.length ? (
+                  auditLogs.map((log) => {
+                    const { date: changedDate, time: changedTime } = formatDateAndTime(log.created_at);
 
+                    return (
+                      <div key={log.id} className="rounded-lg border border-gray-100 bg-white p-2.5">
+                        <div className="mb-2 flex flex-col gap-1 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+                          <span className="font-semibold text-gray-800">
+                            {displayValue(log.changed_by || "Unknown operator")}
+                          </span>
+                          <span>{changedDate || emptyValue}{changedTime ? `, ${changedTime}` : ""}</span>
+                        </div>
+
+                        <AuditChangesTable changes={log.changes} />
+
+                        {log.reason ? (
+                          <p className="mt-2 rounded-md bg-gray-50 px-2.5 py-2 text-xs font-medium text-gray-600">
+                            Reason: {log.reason}
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-lg border border-gray-100 bg-white px-3 py-2 text-xs font-medium text-gray-500">
+                    No update history found for this transaction.
+                  </div>
+                )}
+              </DetailSection>
+            )}
+            
+            {/* Optional Details */}
             <OptionalDetails data={data} />
           </div>
         ) : (
