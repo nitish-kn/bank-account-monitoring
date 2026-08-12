@@ -90,3 +90,23 @@ export const ActionBadge = ({ row }) => {
     </CustomPopover>
   )
 }
+
+const colorMap = {
+  personal: "bg-yellow-100 text-yellow-800",
+  business: "bg-purple-100 text-purple-800",
+  huf: "bg-green-100 text-green-800",
+  family: "bg-blue-100 text-blue-800",
+  jointbusiness: "bg-red-100 text-red-800",
+  firm: "bg-orange-100 text-orange-800",
+  others: "bg-gray-100 text-gray-800",
+};
+
+export const AccountCategoryBadge = ({ category }) => {
+  const colorClass = colorMap[category?.toLowerCase()] || colorMap.others;
+  return (
+    <span className={`inline-flex w-fit items-center justify-center rounded-md! px-2.5 py-1 text-xs font-semibold ${colorClass}`}
+    >
+      {category || "Others"}
+    </span>
+  );
+};

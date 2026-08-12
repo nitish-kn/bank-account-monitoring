@@ -7,11 +7,13 @@ import CustomButton from "../components/ui/CustomButton";
 import CustomDropDown from "../components/ui/CustomDropDown";
 import CustomSearchBar from "../components/ui/CustomSearchBar";
 import CustomTable from "../components/ui/CustomTable";
+import DataCard from "../components/ui/DataCard";
 import Pagination from "../components/Pagination";
 import { cleanText, formatAmount, formatDate, formatDateAndTime } from "../lib/helper";
+import { getAccountSummaryCards } from "../lib/accounts-helper";
 import { getAccountFilterOptions } from "../lib/transactional-helper";
 import AddAcounts from "../components/AddAcounts";
-import { AmountColor, TypeBadge } from "../utils/Badges";
+import { AccountCategoryBadge, AmountColor, TypeBadge } from "../utils/Badges";
 
 const ALL_FILTER_VALUE = "all";
 
@@ -136,6 +138,7 @@ const Accounts = () => {
   const [recentTransactionsByAccountId, setRecentTransactionsByAccountId] = useState({});
   const [recentTransactionsLoading, setRecentTransactionsLoading] = useState({});
   const [recentTransactionsError, setRecentTransactionsError] = useState({});
+  const [openFilter, setOpenFilter] = useState(false);
 
   const updateDraftFilter = (key, value) => {
     setDraftFilters((currentFilters) => ({
@@ -231,6 +234,11 @@ const Accounts = () => {
     return accounts.slice(startIndex, startIndex + pageSize);
   }, [accounts, page, pageSize]);
 
+  const summaryCards = useMemo(
+    () => getAccountSummaryCards(accounts, { asOfDate: filters.date }),
+    [accounts, filters.date],
+  );
+
   const columns = useMemo(
     () => [
       {
@@ -270,6 +278,14 @@ const Accounts = () => {
             </div>
           </div>
         ),
+      },
+      {
+        key: "category",
+        header: "Category",
+        sortable: true,
+        sortKey: "category",
+        columnWidth: "150px",
+        render: (account) => <AccountCategoryBadge category={account?.category} />,
       },
       {
         key: "account_type",
@@ -481,6 +497,7 @@ const Accounts = () => {
   ]);
 
   const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
+    if (key === "date") return false;
     if (key === "search") return Boolean(String(value || "").trim());
     return Array.isArray(value)
       ? value.length > 0
@@ -490,13 +507,12 @@ const Accounts = () => {
   return (
     <main className="flex flex-col gap-4">
       <div className="rounded-xl bg-white p-4 shadow-md">
+
+        {/* Page Header */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-950">All Accounts</h1>
-            <p className="mt-1 text-xs font-medium text-slate-500">
-              Every account in one view — balances, reconciliation health, and
-              last activity
-            </p>
+            <p className="mt-1 text-xs font-medium text-slate-500"> Every account in one view — balances, reconciliation health, and last activity </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -509,6 +525,19 @@ const Accounts = () => {
               {totalCount} Accounts
             </Badge>
 
+            {/* Filter Button */}
+            <CustomButton
+              color={hasActiveFilters ? "blue" : "gray"}
+              radius="large"
+              variant={hasActiveFilters ? "solid" : "outline"}
+              size="sm"
+              className={`ml-2 ${hasActiveFilters ? "text-white" : "text-gray-900"}!`}
+              onClick={() =>setOpenFilter((prev) => !prev)}
+            >
+              <Filter className="sm:mr-1 h-4 w-4" /> 
+              <span className="hidden sm:flex">Filter</span>
+            </CustomButton>
+            
             <CustomButton
               className="h-9!"
               onClick={() => setAddAccounts((prev) => !prev)}
@@ -519,144 +548,163 @@ const Accounts = () => {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-8">
-          <div className="xl:col-span-2">
-            <CustomSearchBar
-              value={draftFilters.search}
-              onChange={(value) => updateDraftFilter("search", value)}
-              placeholder="Search account / bank / holder"
-              iconPosition="right"
-              inputClassName="rounded-md border-gray-200 pl-3 pr-10"
-            />
-          </div>
+        {/* Filter Bar */}
+        {openFilter &&
+          <>
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-8">
+              <div className="xl:col-span-2">
+                <CustomSearchBar
+                  value={draftFilters.search}
+                  onChange={(value) => updateDraftFilter("search", value)}
+                  placeholder="Search account / bank / holder"
+                  iconPosition="right"
+                  inputClassName="rounded-md border-gray-200 pl-3 pr-10"
+                />
+              </div>
 
-          <CustomDropDown
-            value={draftFilters.account}
-            options={filterOptions.accounts}
-            placeholder={getAllOptionLabel(
-              filterOptions.accounts,
-              "All Accounts",
-            )}
-            onValueChange={(value) => updateDraftFilter("account", value)}
-            multiple
-            showSearch
-            searchPlaceholder="Search accounts..."
-            align="start"
-            buttonVariant="outline"
-            buttonColor="gray"
-            buttonSize="2"
-            triggerClassName={dropdownTriggerClassName}
-            contentClassName={dropdownContentClassName}
+              <CustomDropDown
+                value={draftFilters.account}
+                options={filterOptions.accounts}
+                placeholder={getAllOptionLabel(
+                  filterOptions.accounts,
+                  "All Accounts",
+                )}
+                onValueChange={(value) => updateDraftFilter("account", value)}
+                multiple
+                showSearch
+                searchPlaceholder="Search accounts..."
+                align="start"
+                buttonVariant="outline"
+                buttonColor="gray"
+                buttonSize="2"
+                triggerClassName={dropdownTriggerClassName}
+                contentClassName={dropdownContentClassName}
+              />
+
+              <CustomDropDown
+                value={draftFilters.individualAccount}
+                options={filterOptions.individualAccounts}
+                placeholder={getAllOptionLabel(
+                  filterOptions.individualAccounts,
+                  "All Individual Accounts",
+                )}
+                onValueChange={(value) =>
+                  updateDraftFilter("individualAccount", value)
+                }
+                multiple
+                showSearch
+                searchPlaceholder="Search individual accounts..."
+                align="start"
+                buttonVariant="outline"
+                buttonColor="gray"
+                buttonSize="2"
+                triggerClassName={dropdownTriggerClassName}
+                contentClassName={dropdownContentClassName}
+              />
+
+              <CustomDropDown
+                value={draftFilters.bank}
+                options={filterOptions.banks}
+                placeholder={getAllOptionLabel(filterOptions.banks, "All Banks")}
+                onValueChange={(value) => updateDraftFilter("bank", value)}
+                multiple
+                showSearch
+                searchPlaceholder="Search banks..."
+                align="start"
+                buttonVariant="outline"
+                buttonColor="gray"
+                buttonSize="2"
+                triggerClassName={dropdownTriggerClassName}
+                contentClassName={dropdownContentClassName}
+              />
+
+              <CustomDropDown
+                value={draftFilters.accountType}
+                options={filterOptions.accountTypes}
+                placeholder={getAllOptionLabel(
+                  filterOptions.accountTypes,
+                  "All Account Types",
+                )}
+                onValueChange={(value) => updateDraftFilter("accountType", value)}
+                multiple
+                showSearch
+                searchPlaceholder="Search account types..."
+                align="start"
+                buttonVariant="outline"
+                buttonColor="gray"
+                buttonSize="2"
+                triggerClassName={dropdownTriggerClassName}
+                contentClassName={dropdownContentClassName}
+              />
+
+              <CustomDropDown
+                value={draftFilters.accountHolderName}
+                options={filterOptions.accountHolderNames}
+                placeholder={getAllOptionLabel(
+                  filterOptions.accountHolderNames,
+                  "All Account Holders",
+                )}
+                onValueChange={(value) =>
+                  updateDraftFilter("accountHolderName", value)
+                }
+                multiple
+                showSearch
+                searchPlaceholder="Search account holders..."
+                align="start"
+                buttonVariant="outline"
+                buttonColor="gray"
+                buttonSize="2"
+                triggerClassName={dropdownTriggerClassName}
+                contentClassName={dropdownContentClassName}
+              />
+
+              <div className="relative">
+                <input
+                  type="date"
+                  aria-label="Filter accounts by date"
+                  title="Filter accounts by date"
+                  value={draftFilters.date}
+                  onChange={(event) =>
+                    updateDraftFilter("date", event.target.value)
+                  }
+                  className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <CustomButton
+                variant="outline"
+                color="gray"
+                size="2"
+                className="h-9!"
+                onClick={resetFilters}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reset Filters
+              </CustomButton>
+
+              <CustomButton size="2" className="h-9!" onClick={applyFilters}>
+                <Filter className="h-4 w-4" />
+                Apply Filters
+              </CustomButton>
+            </div>
+          </>
+        }
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {summaryCards.map((card) => (
+          <DataCard
+            key={card.title}
+            compact
+            title={card.title}
+            value={card.value}
+            color={card.color}
+            description={card.description}
+            indicatorColor={card.indicatorColor}
           />
-
-          <CustomDropDown
-            value={draftFilters.individualAccount}
-            options={filterOptions.individualAccounts}
-            placeholder={getAllOptionLabel(
-              filterOptions.individualAccounts,
-              "All Individual Accounts",
-            )}
-            onValueChange={(value) =>
-              updateDraftFilter("individualAccount", value)
-            }
-            multiple
-            showSearch
-            searchPlaceholder="Search individual accounts..."
-            align="start"
-            buttonVariant="outline"
-            buttonColor="gray"
-            buttonSize="2"
-            triggerClassName={dropdownTriggerClassName}
-            contentClassName={dropdownContentClassName}
-          />
-
-          <CustomDropDown
-            value={draftFilters.bank}
-            options={filterOptions.banks}
-            placeholder={getAllOptionLabel(filterOptions.banks, "All Banks")}
-            onValueChange={(value) => updateDraftFilter("bank", value)}
-            multiple
-            showSearch
-            searchPlaceholder="Search banks..."
-            align="start"
-            buttonVariant="outline"
-            buttonColor="gray"
-            buttonSize="2"
-            triggerClassName={dropdownTriggerClassName}
-            contentClassName={dropdownContentClassName}
-          />
-
-          <CustomDropDown
-            value={draftFilters.accountType}
-            options={filterOptions.accountTypes}
-            placeholder={getAllOptionLabel(
-              filterOptions.accountTypes,
-              "All Account Types",
-            )}
-            onValueChange={(value) => updateDraftFilter("accountType", value)}
-            multiple
-            showSearch
-            searchPlaceholder="Search account types..."
-            align="start"
-            buttonVariant="outline"
-            buttonColor="gray"
-            buttonSize="2"
-            triggerClassName={dropdownTriggerClassName}
-            contentClassName={dropdownContentClassName}
-          />
-
-          <CustomDropDown
-            value={draftFilters.accountHolderName}
-            options={filterOptions.accountHolderNames}
-            placeholder={getAllOptionLabel(
-              filterOptions.accountHolderNames,
-              "All Account Holders",
-            )}
-            onValueChange={(value) =>
-              updateDraftFilter("accountHolderName", value)
-            }
-            multiple
-            showSearch
-            searchPlaceholder="Search account holders..."
-            align="start"
-            buttonVariant="outline"
-            buttonColor="gray"
-            buttonSize="2"
-            triggerClassName={dropdownTriggerClassName}
-            contentClassName={dropdownContentClassName}
-          />
-
-          <div className="relative">
-            <input
-              type="date"
-              aria-label="Filter accounts by date"
-              title="Filter accounts by date"
-              value={draftFilters.date}
-              onChange={(event) =>
-                updateDraftFilter("date", event.target.value)
-              }
-              className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        <div className="mt-4 flex justify-end gap-2">
-          <CustomButton
-            variant="outline"
-            color="gray"
-            size="2"
-            className="h-9!"
-            onClick={resetFilters}
-          >
-            <RotateCcw className="h-4 w-4" />
-            Reset Filters
-          </CustomButton>
-
-          <CustomButton size="2" className="h-9!" onClick={applyFilters}>
-            <Filter className="h-4 w-4" />
-            Apply Filters
-          </CustomButton>
-        </div>
+        ))}
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
