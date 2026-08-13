@@ -5,7 +5,7 @@ Credit card lookup utility for matching and filling credit card details from Exc
 import difflib
 import os
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -193,6 +193,91 @@ def find_credit_card_in_excel(
         "card_name": _clean_cell(match.get("Card Name")),
         "card_type": _clean_cell(match.get("Type")),
     }
+
+
+_FUZZY_FILLER_WORDS = {
+    "my", "the", "a", "an", "for", "of", "is", "are", "and", "or", "to", "in",
+    "on", "at", "account", "accounts", "card", "cards", "bank", "credit", "debit",
+    "please", "whats",
+}
+
+
+def _significant_tokens(text: str) -> List[str]:
+    return [
+        token for token in str(text or "").lower().split()
+        if len(token) >= 3 and token not in _FUZZY_FILLER_WORDS
+    ]
+
+
+def _token_substring_boost(query_tokens: List[str], *candidate_texts: str) -> float:
+    """See fuzzy_find_accounts_in_excel's sibling helper -- a whole-string
+    ratio can bury a strong single-keyword hit (e.g. "axis" in "Axis Bank
+    Debit Card") under filler words; a verbatim token hit is worth crossing
+    the threshold on its own."""
+    for token in query_tokens:
+        for candidate in candidate_texts:
+            if token in candidate.lower():
+                return 0.68
+    return 0.0
+
+
+def fuzzy_find_credit_cards_in_excel(
+    query_text: str,
+    df: pd.DataFrame,
+    threshold: float = 0.6,
+    limit: int = 3,
+) -> List[Dict[str, Any]]:
+    """
+    Fallback for when there's no usable digit signal (e.g. "my HDFC card",
+    not "card ending 1234") -- find_credit_card_in_excel() bails out before
+    scanning a single row when fewer than 4 digits are visible, so a
+    name/issuer-only query gets zero grounding from this sheet no matter how
+    many rows it has. Scans every row's Owner/Issuer/Card Name and ranks by
+    similarity instead. Threshold is a loose floor, not a precision cutoff --
+    see fuzzy_find_accounts_in_excel's docstring for why.
+    """
+    if not query_text or not isinstance(df, pd.DataFrame) or df.empty:
+        return []
+
+    card_col = "Credit Card No."
+    if card_col not in df.columns:
+        return []
+
+    query = str(query_text).strip().lower()
+    if not query:
+        return []
+
+    query_tokens = _significant_tokens(query)
+
+    scored: list[tuple[float, Dict[str, Any]]] = []
+    for _, row in df.iterrows():
+        owner = str(row.get("Credit Card Owner") or "").strip()
+        issuer = str(row.get("Credit Card Issuer") or "").strip()
+        card_name = str(row.get("Card Name") or "").strip()
+        candidate_text = f"{owner} {issuer} {card_name}".strip().lower()
+        if not candidate_text:
+            continue
+
+        score = max(
+            difflib.SequenceMatcher(None, query, owner.lower()).ratio(),
+            difflib.SequenceMatcher(None, query, issuer.lower()).ratio(),
+            difflib.SequenceMatcher(None, query, card_name.lower()).ratio(),
+            difflib.SequenceMatcher(None, query, candidate_text).ratio(),
+            _token_substring_boost(query_tokens, owner, issuer, card_name),
+        )
+        if score < threshold:
+            continue
+
+        scored.append((score, {
+            "credit_card_number": _clean_cell(_digits_only(row.get(card_col)) or None),
+            "credit_card_owner": _clean_cell(row.get("Credit Card Owner")),
+            "credit_card_issuer": _clean_cell(row.get("Credit Card Issuer")),
+            "card_name": _clean_cell(row.get("Card Name")),
+            "card_type": _clean_cell(row.get("Type")),
+        }))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [match for _, match in scored[:limit]]
 
 
 def get_all_credit_card_passwords(df: pd.DataFrame = None) -> list[str]:

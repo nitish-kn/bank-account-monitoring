@@ -37,3 +37,4 @@ class User(Base):
     bank_accounts = relationship("BankAccounts", back_populates="user")
     parsed = relationship("Parsed", back_populates="user")
     transaction_logs = relationship("TransactionLog", back_populates="user")
+    chat_sessions = relationship("ChatSession", back_populates="user")

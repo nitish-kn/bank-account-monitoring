@@ -470,6 +470,56 @@ def get_dashboard_summary(db: Session, user_id: int, filters: dict):
         "transactionsByMode": modes_data
     }
 
+def get_category_breakdown(db: Session, user_id: int, filters: dict, txn_type: str | None = None) -> list[dict]:
+    """Full (non-top-5) category breakdown -- get_dashboard_summary only returns
+    the top 5 categories per txn_type, which undercounts accounts with more
+    categories than that."""
+    query = apply_transaction_filters(build_base_query(db, user_id), filters)
+    if txn_type:
+        query = query.filter(func.lower(Transactions.txn_type) == txn_type.lower())
+
+    rows = query.with_entities(
+        Transactions.category,
+        Transactions.txn_type,
+        func.sum(Transactions.amount).label("total"),
+        func.count().label("count"),
+    ).group_by(Transactions.category, Transactions.txn_type).order_by(func.sum(Transactions.amount).desc()).all()
+
+    return [
+        {
+            "category": row.category or "Uncategorized",
+            "txn_type": row.txn_type,
+            "amount": float(row.total or 0),
+            "count": row.count or 0,
+        }
+        for row in rows
+    ]
+
+
+def get_via_breakdown(db: Session, user_id: int, filters: dict) -> list[dict]:
+    """Bank-transfer vs credit-card vs FASTag totals, reusing the same
+    txn_via normalization used for tab filtering elsewhere in this module."""
+    query = apply_transaction_filters(build_base_query(db, user_id), filters)
+    via_expr = _normalized_txn_via_expr()
+
+    rows = query.with_entities(
+        via_expr.label("txn_via"),
+        func.sum(Transactions.amount).filter(func.lower(Transactions.txn_type) == "credit").label("totalCredit"),
+        func.sum(Transactions.amount).filter(func.lower(Transactions.txn_type) == "debit").label("totalDebit"),
+        func.count().label("count"),
+    ).group_by(via_expr).all()
+
+    return [
+        {
+            "txn_via": row.txn_via,
+            "totalCredit": float(row.totalCredit or 0),
+            "totalDebit": float(row.totalDebit or 0),
+            "count": row.count or 0,
+        }
+        for row in rows
+    ]
+
+
 def get_filter_options(db: Session, user_id: int):
     query = build_base_query(db, user_id)
 

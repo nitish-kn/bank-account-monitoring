@@ -404,6 +404,43 @@ def get_paginated_accounts(
     }
 
 
+def get_account_balance_as_of(
+    db: Session,
+    user_id: int,
+    account_identifier: str,
+    as_of_date: str | None = None,
+) -> dict | None:
+    """Single-account narrowing of get_paginated_accounts, for callers (e.g. a
+    balance-drop scan, or a chat tool fed a natural-language identifier) that
+    need one account's balance as of a date without re-running the full
+    pagination/sort machinery in a loop.
+
+    A plain "search" filter only matches the WHOLE identifier string against
+    ONE column at a time, so a multi-word reference like "Arvind Kumar Gupta
+    Axis Bank Savings ****7989" never matches anything -- no single column
+    contains that literal string. Try the most specific signal first (account
+    number / last-4 digits via the "account" filter, which already does
+    digit-suffix + compact-text matching), then bank name, then holder name,
+    and only fall back to a blanket substring "search" last.
+    """
+    base_filters: dict = {"date": as_of_date} if as_of_date else {}
+
+    candidate_filters = [
+        {**base_filters, "account": account_identifier},
+        {**base_filters, "bank": account_identifier},
+        {**base_filters, "accountHolderName": account_identifier},
+        {**base_filters, "search": account_identifier},
+    ]
+
+    for filters in candidate_filters:
+        result = get_paginated_accounts(db, user_id, filters, page=1, page_size=1)
+        accounts = result.get("accounts") or []
+        if accounts:
+            return accounts[0]
+
+    return None
+
+
 def get_recent_account_transactions(
     db: Session,
     user_id: int,

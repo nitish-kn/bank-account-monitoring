@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import init_database, check_connection
 from . import models
-from .routes import accounts, auth, family, gmail, invites, sheets, setup, statements, transactions
+from .routes import accounts, auth, chat, family, gmail, invites, sheets, setup, statements, transactions
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi import status
 from .core.constants import FRONTEND_DIST_DIR, FRONTEND_INDEX_FILE, PROJECT_ROOT
@@ -30,6 +30,7 @@ app.include_router(setup.router)
 app.include_router(statements.router)
 app.include_router(transactions.router)
 app.include_router(accounts.router)
+app.include_router(chat.router)
 
 
 # @app.get("/", tags=["Root"])

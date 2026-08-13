@@ -120,7 +120,7 @@ const Layout = () => {
             </div>
           </>
         )}
-        <div className="flex-1 flex flex-col min-h-screen bg-gray-200/50 overflow-hidden">
+        <div className="flex-1 flex flex-col h-screen bg-gray-200/50 overflow-hidden">
           <Headers
             isSyncing={isSyncing}
             lastSyncAt={effectiveLastSyncAt}
@@ -128,7 +128,7 @@ const Layout = () => {
             setShowMenu={setShowMenu}
           />
 
-          <main className="flex-1 p-3.5 overflow-y-auto">
+          <main className="flex-1 min-h-0 p-3.5 overflow-y-auto">
             <Outlet />
           </main>
           
