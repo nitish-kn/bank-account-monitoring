@@ -8,6 +8,8 @@ from sqlalchemy import String, cast, func, or_, and_
 from sqlalchemy.orm import Session
 
 from ..models.bank_accounts import BankAccounts
+from ..models.transactions import Transactions
+from ..utils.db_utils import transaction_to_schema_dict
 from ..utils.sheets_utils import append_account_to_local_excel
 
 import uuid
@@ -156,6 +158,7 @@ def account_to_dict(account: BankAccounts) -> dict:
         "account_holder_name": account.account_holder_name,
         "account_type": account.account_type,
         "account_number": account.account_number,
+        "category": account.category,
         "current_balance": _decimal_to_string(current_balance),
         "calculated_balance": _decimal_to_string(current_balance),
         "statement_balance": _decimal_to_string(statement_balance),
@@ -163,6 +166,7 @@ def account_to_dict(account: BankAccounts) -> dict:
         "source": account.source,
         "statement_updated_at": _datetime_to_iso(statement_updated_at),
         "calculated_updated_at": _datetime_to_iso(calculated_updated_at),
+        "last_calculated_at": _datetime_to_iso(calculated_updated_at),
         "last_updated": _datetime_to_iso(calculated_updated_at),
         "created_at": _datetime_to_iso(account.created_at),
         "updated_at": _datetime_to_iso(account.updated_at),
@@ -398,6 +402,73 @@ def get_paginated_accounts(
         "accounts": [account_to_dict(account) for account in accounts],
         "totalCount": total_count,
     }
+
+
+def get_recent_account_transactions(
+    db: Session,
+    user_id: int,
+    account_id: str,
+    limit: int = 5,
+) -> dict:
+    safe_limit = min(max(int(limit or 5), 1), 10)
+
+    account = (
+        db.query(BankAccounts)
+        .filter(
+            BankAccounts.user_id == user_id,
+            BankAccounts.id == account_id,
+        )
+        .first()
+    )
+
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found.")
+
+    account_digits = "".join(ch for ch in str(account.account_number or "") if ch.isdigit())
+    account_filters = [Transactions.account_number == account.account_number]
+
+    if len(account_digits) >= 4:
+        account_filters.append(
+            _lower_text(Transactions.account_number).like(f"%{account_digits[-4:]}%")
+        )
+
+    query = db.query(Transactions).filter(
+        Transactions.user_id == user_id,
+        or_(*account_filters),
+    )
+
+    if account.bank_name:
+        bank_terms = _match_terms(account.bank_name, "bank")
+        if bank_terms:
+            query = query.filter(or_(*[
+                _lower_text(Transactions.bank_name).like(f"%{term}%")
+                for term in bank_terms
+            ]))
+
+    if account.account_holder_name:
+        query = query.filter(
+            _lower_text(Transactions.account_holder_name).like(
+                f"%{account.account_holder_name.lower()}%"
+            )
+        )
+
+    transactions = (
+        query
+        .order_by(
+            Transactions.txn_date.desc().nulls_last(),
+            Transactions.created_at.desc().nulls_last(),
+            Transactions.id.desc(),
+        )
+        .limit(safe_limit)
+        .all()
+    )
+
+    return {
+        "transactions": [transaction_to_schema_dict(transaction) for transaction in transactions],
+        "totalCount": len(transactions),
+        "limit": safe_limit,
+    }
+
 
 def create_new_account(db: Session, request: dict, user_id: int) -> None:
     """Create a new bank account for a user"""

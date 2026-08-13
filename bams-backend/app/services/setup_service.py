@@ -1,10 +1,14 @@
 import asyncio
+import logging
+from dataclasses import dataclass
 from datetime import timedelta
 from threading import Thread
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from itertools import zip_longest
 from pathlib import Path
 import re
 import time
+from typing import Callable
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -14,12 +18,12 @@ from sqlalchemy.orm import Session
 
 from ..core.constants import (
     EMAIL_EXTRACTION_BATCH_SIZE,
-    EMAIL_EXTRACTION_MAX_IN_FLIGHT,
-    EMAIL_EXTRACTION_MAX_WORKERS,
+    FAILED_STATUS,
     PDF_MIME_TYPE,
     REQUIRED_SCHEMA,
     SHEET_NAME,
     STATEMENT_ATTACHMENT_KEYWORDS,
+    SYNC_MAX_PARALLEL_JOBS,
     SYNC_STATUS_COMPLETED,
     SYNC_STATUS_FAILED,
     SYNC_STATUS_RUNNING,
@@ -58,9 +62,28 @@ from ..utils.transaction_utils import (
 )
 from ..ds.llm.main import process_emails
 
+logger = logging.getLogger(__name__)
+
 # Thread tracking for stuck-sync detection
 # Maps user_id -> {"thread": Thread, "started_at": float (time.time())}
 _active_sync_threads: dict[int, dict] = {}
+
+
+@dataclass(frozen=True)
+class SyncUserSnapshot:
+    id: int
+    access_token: str | None
+    refresh_token: str | None
+    token_expiry: object | None
+
+
+def _snapshot_sync_user(user: User) -> SyncUserSnapshot:
+    return SyncUserSnapshot(
+        id=user.id,
+        access_token=user.access_token,
+        refresh_token=user.refresh_token,
+        token_expiry=user.token_expiry,
+    )
 
 
 # --------------------- Helper functions
@@ -110,8 +133,7 @@ def _mark_sync_failed(user: User, db: Session) -> None:
         db.refresh(user)
     except Exception as error:
         db.rollback()
-        safe_error = str(error).encode('ascii', 'replace').decode('ascii')
-        print(f"Failed to update sync failure metadata: {safe_error}")
+        logger.error("Failed to update sync failure metadata | error=%s", _safe_error_text(error))
 
 
 def _sync_transactions_to_sheet(
@@ -203,7 +225,10 @@ def _is_sync_genuinely_running(user_id: int) -> bool:
     # Thread is alive — check soft timeout
     elapsed = time.time() - started_at
     if elapsed > SYNC_TIMEOUT_SECONDS:
-        print(f"Sync thread for user {user_id} exceeded {SYNC_TIMEOUT_SECONDS}s timeout (elapsed: {elapsed:.0f}s). Treating as stuck.")
+        logger.warning(
+            "Sync thread stuck | user=%s elapsed_s=%.0f timeout_s=%s",
+            user_id, elapsed, SYNC_TIMEOUT_SECONDS,
+        )
         _active_sync_threads.pop(user_id, None)
         return False
 
@@ -251,15 +276,35 @@ def _pdf_attachments_for_email(email: dict) -> list[dict]:
 def _split_statement_attachment_emails(emails: list[dict]) -> tuple[list[dict], list[dict]]:
     statement_emails = []
     normal_emails = []
+    keyword_but_no_pdf = 0
+    pdf_but_no_keyword = 0
 
     for email in emails:
-        if (
-            _text_contains_statement_keyword(email.get("subject"), email.get("snippet"))
-            and _pdf_attachments_for_email(email)
-        ):
+        has_keyword = _text_contains_statement_keyword(email.get("subject"), email.get("snippet"))
+        pdf_attachments = _pdf_attachments_for_email(email)
+
+        if has_keyword and pdf_attachments:
             statement_emails.append(email)
+            logger.info(
+                "Statement route matched | gmail_message_id=%s subject=%r pdf_count=%d filenames=%s",
+                email.get("id"), email.get("subject"), len(pdf_attachments),
+                [a.get("filename") for a in pdf_attachments],
+            )
         else:
             normal_emails.append(email)
+            if has_keyword and not pdf_attachments:
+                keyword_but_no_pdf += 1
+            elif pdf_attachments and not has_keyword:
+                # Has a real PDF attachment but subject/snippet wording didn't
+                # match — falls through to the text pipeline, which can't
+                # read the PDF. Logged so this silent gap is at least visible.
+                pdf_but_no_keyword += 1
+
+    if keyword_but_no_pdf or pdf_but_no_keyword:
+        logger.info(
+            "Statement route skipped | keyword_but_no_pdf=%d pdf_but_no_keyword_match=%d",
+            keyword_but_no_pdf, pdf_but_no_keyword,
+        )
 
     return statement_emails, normal_emails
 
@@ -288,23 +333,43 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
     transactions = []
     errors = []
     message_id = email.get("id")
+    pdf_attachments = _pdf_attachments_for_email(email)
 
-    for index, attachment in enumerate(_pdf_attachments_for_email(email), start=1):
+    if pdf_attachments:
+        logger.info(
+            "Statement attachments found | user=%s gmail_message_id=%s count=%d filenames=%s",
+            user.id, message_id, len(pdf_attachments),
+            [a.get("filename") for a in pdf_attachments],
+        )
+
+    for index, attachment in enumerate(pdf_attachments, start=1):
         attachment_id = attachment.get("id")
         filename = attachment.get("filename") or f"statement_{index}.pdf"
         saved_path = None
 
         if not message_id or not attachment_id:
             errors.append("Missing Gmail message ID or attachment ID.")
+            logger.warning(
+                "Statement attachment skipped, no message or attachment id | user=%s file=%s",
+                user.id, filename,
+            )
             continue
 
         try:
+            logger.info(
+                "Statement attachment downloading | user=%s gmail_message_id=%s file=%s reported_size_bytes=%s",
+                user.id, message_id, filename, attachment.get("size"),
+            )
             file_bytes = fetch_gmail_attachment_bytes(user, message_id, attachment_id)
             if not file_bytes:
                 raise RuntimeError("Gmail attachment was empty.")
 
             saved_path = _attachment_temp_path(email, attachment, index)
             saved_path.write_bytes(file_bytes)
+            logger.info(
+                "Statement attachment saved | user=%s gmail_message_id=%s file=%s bytes=%d temp_path=%s",
+                user.id, message_id, filename, len(file_bytes), saved_path,
+            )
 
             extracted_txns = parse_statement_pdf_sync(
                 saved_path,
@@ -321,25 +386,42 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
                 for transaction in extracted_txns or []
             ]
             transactions.extend(normalized_txns)
-            print(
-                "Email statement attachment parsed: "
-                f"user={user.id} gmail_message_id={message_id} "
-                f"file={filename} rows={len(normalized_txns)}"
+            logger.info(
+                "Statement attachment parsed | user=%s gmail_message_id=%s file=%s rows=%d",
+                user.id, message_id, filename, len(normalized_txns),
+            )
+        except HTTPException as error:
+            # process_statement raises 422 specifically when the PDF is
+            # password-protected and no password could be resolved/verified
+            # (explicit password / email-body guess / filename guess all
+            # failed) — flagged distinctly so it's not confused with a
+            # generic parsing failure when scanning logs.
+            needs_password = getattr(error, "status_code", None) == 422
+            safe_error = str(error.detail).encode("ascii", "replace").decode("ascii")
+            errors.append(safe_error)
+            logger.warning(
+                "Statement attachment %s | user=%s gmail_message_id=%s file=%s error=%s",
+                "needs password" if needs_password else "failed",
+                user.id, message_id, filename, safe_error[:200],
             )
         except Exception as error:
+            # Unexpected (not a known password/parsing failure) — error level
+            # so it stands out from the expected "needs password" case above.
             safe_error = _safe_error_text(error)
             errors.append(safe_error)
-            print(
-                "Email statement attachment failed: "
-                f"user={user.id} gmail_message_id={message_id} "
-                f"file={filename} error={safe_error[:200]}"
+            logger.error(
+                "Statement attachment failed unexpectedly | user=%s gmail_message_id=%s file=%s error=%s",
+                user.id, message_id, filename, safe_error[:200],
             )
         finally:
             if saved_path:
                 try:
                     saved_path.unlink(missing_ok=True)
                 except OSError as error:
-                    print(f"Failed to delete temporary email attachment {saved_path}: {error}")
+                    logger.error(
+                        "Failed to delete temp statement file | temp_path=%s error=%s",
+                        saved_path, error,
+                    )
 
     return transactions, errors
 
@@ -352,7 +434,15 @@ def _persist_extracted_transactions(
     emails: list[dict],
     transactions: list[dict],
     log_label: str,
+    force_status: str | None = None,
+    force_status_reason: str | None = None,
 ) -> list:
+    """Save extracted transactions, then upsert the parse-status row for each
+    of `emails`. `force_status`, if given, pins that status regardless of
+    what parser_metadata says on `transactions` — used when the caller
+    already knows the outcome should read as failed (e.g. a statement email
+    with a partially or fully unrecoverable attachment) even though some
+    transactions from it are still being saved."""
     try:
         parsed_result_count = _parsed_transaction_count(transactions)
         saved_transactions = save_valid_transaction_to_db(
@@ -366,6 +456,8 @@ def _persist_extracted_transactions(
             transactions,
             db,
             emails=emails,
+            error=force_status_reason,
+            force_status=force_status,
         )
 
         ledger_result = recalculate_ledgers_for_transactions(
@@ -376,17 +468,15 @@ def _persist_extracted_transactions(
 
         db.add(user)
         db.commit()
-        print(
-            f"{log_label} saved: "
-            f"user={user.id} emails={len(emails)} "
-            f"llm_rows={len(transactions)} parsed={parsed_result_count} "
-            f"transactions_saved={len(saved_transactions)} "
-            f"ledger_rows={ledger_result.get('accounts_recalculated', 0)}"
+        logger.info(
+            "%s saved | user=%s emails=%d llm_rows=%d parsed=%d transactions_saved=%d ledger_rows=%d forced_status=%s",
+            log_label, user.id, len(emails), len(transactions), parsed_result_count,
+            len(saved_transactions), ledger_result.get("accounts_recalculated", 0), force_status,
         )
     except Exception as error:
         db.rollback()
         safe_error = _safe_error_text(error)
-        print(f"Failed to persist {log_label.lower()}: {safe_error[:300]}")
+        logger.error("Failed to persist %s | error=%s", log_label.lower(), safe_error[:300])
         update_parsed_status_to_db(
             user.id,
             [],
@@ -526,11 +616,9 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                 if message.get("id") and message.get("id") not in existing_gmail_message_ids
             ]
             already_parsed_count = len(message_page) - len(new_messages)
-            print(
-                "Email sync page: "
-                f"user={user_id} page={page_idx}/{total_pages} "
-                f"gmail_ids={len(message_page)} already_parsed={already_parsed_count} "
-                f"new={len(new_messages)}"
+            logger.info(
+                "Sync page | user=%s page=%d/%d gmail_ids=%d already_parsed=%d new=%d",
+                user_id, page_idx, total_pages, len(message_page), already_parsed_count, len(new_messages),
             )
 
             if not new_messages:
@@ -551,10 +639,9 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                 for message in new_messages
                 if message.get("id") and message.get("id") not in hydrated_email_ids
             ]
-            print(
-                "Email hydrate: "
-                f"user={user_id} requested={len(new_messages)} "
-                f"hydrated={len(new_emails)} failed={len(missing_hydrated_messages)}"
+            logger.info(
+                "Sync hydrate | user=%s requested=%d hydrated=%d failed=%d",
+                user_id, len(new_messages), len(new_emails), len(missing_hydrated_messages),
             )
             if missing_hydrated_messages:
                 update_parsed_status_to_db(
@@ -575,93 +662,70 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
             if not new_emails:
                 continue
 
-            print(f"Emails from Gmail Api - Page {page_idx}/{total_pages} (count: {len(new_emails)})\n")
+            logger.info(
+                "Sync page emails ready | user=%s page=%d/%d count=%d",
+                user_id, page_idx, total_pages, len(new_emails),
+            )
 
             statement_emails, email_parser_emails = _split_statement_attachment_emails(new_emails)
-            if statement_emails:
-                print(
-                    "Email route: "
-                    f"user={user_id} statement_pdf_emails={len(statement_emails)} "
-                    f"normal_email_parser={len(email_parser_emails)}"
-                )
+            logger.info(
+                "Email route | user=%s page=%d/%d statement_pdf_emails=%d normal_email_parser=%d",
+                user_id, page_idx, total_pages, len(statement_emails), len(email_parser_emails),
+            )
 
-            for statement_email in statement_emails:
-                statement_transactions, attachment_errors = _parse_statement_attachments_from_email(
-                    user,
-                    statement_email,
-                )
+            # 7. Extract transactions from statement PDFs and normal emails
+            # concurrently instead of one phase fully draining before the
+            # other starts — a slow statement PDF no longer blocks the
+            # (usually much faster) normal emails queued behind it. Every
+            # job below only does the extraction call (Gmail fetch / LLM);
+            # this loop is the single place that writes to `db`/`sheets_service`,
+            # so persistence always happens through one session.
+            jobs = _build_extraction_jobs(_snapshot_sync_user(user), statement_emails, email_parser_emails)
+            job_counts: dict[str, int] = {}
 
-                if statement_transactions:
-                    _persist_extracted_transactions(
-                        user,
-                        db,
-                        sheets_service,
-                        sheet_title,
-                        [statement_email],
-                        statement_transactions,
-                        "Statement attachment",
+            for result in _run_extraction_jobs(jobs, max_workers=SYNC_MAX_PARALLEL_JOBS):
+                job_emails = result["emails"]
+                job_error = result["error"]
+                job_counts[result["label"]] = job_counts.get(result["label"], 0) + 1
+
+                if job_error:
+                    logger.warning(
+                        "%s failed | user=%s emails=%d error=%s",
+                        result["label"], user_id, len(job_emails), job_error[:300],
                     )
-                    if statement_email.get("id"):
-                        existing_gmail_message_ids.add(statement_email.get("id"))
-                    continue
-
-                print(
-                    "Email route fallback: "
-                    f"user={user_id} gmail_message_id={statement_email.get('id')} "
-                    f"attachment_errors={len(attachment_errors)}"
-                )
-                email_parser_emails.append(statement_email)
-
-            # 7. Send non-statement or fallback emails to LLM batches
-            for batch_result in _batch_extract_transactions(email_parser_emails, user_id=user_id):
-                if not batch_result:
-                    continue
-
-                batch_emails = batch_result.get("emails", [])
-                transactions = batch_result.get("transactions", [])
-                extraction_error = batch_result.get("error")
-
-                if extraction_error:
-                    print(
-                        "Email extraction batch failed: "
-                        f"user={user_id} emails={len(batch_emails)}"
-                    )
-                    update_parsed_status_to_db(
-                        user_id,
-                        [],
-                        db,
-                        emails=batch_emails,
-                        error=extraction_error,
-                    )
+                    update_parsed_status_to_db(user_id, [], db, emails=job_emails, error=job_error)
                     db.add(user)
                     db.commit()
-                    existing_gmail_message_ids.update(
-                        email.get("id")
-                        for email in batch_emails
-                        if email.get("id")
+                else:
+                    forced_status = result.get("forced_status")
+                    if forced_status:
+                        logger.warning(
+                            "%s flagged failed | user=%s gmail_message_id=%s reason=%s",
+                            result["label"], user_id,
+                            job_emails[0].get("id") if job_emails else None,
+                            result.get("forced_status_reason"),
+                        )
+                    _persist_extracted_transactions(
+                        user, db, sheets_service, sheet_title,
+                        job_emails, result["transactions"], result["label"],
+                        force_status=forced_status,
+                        force_status_reason=result.get("forced_status_reason"),
                     )
-                    continue
-
-                _persist_extracted_transactions(
-                    user,
-                    db,
-                    sheets_service,
-                    sheet_title,
-                    batch_emails,
-                    transactions,
-                    "Email batch",
-                )
 
                 existing_gmail_message_ids.update(
-                    email.get("id")
-                    for email in batch_emails
-                    if email.get("id")
+                    email.get("id") for email in job_emails if email.get("id")
+                )
+
+            if job_counts:
+                logger.info(
+                    "Extraction summary | user=%s page=%d/%d %s",
+                    user_id, page_idx, total_pages,
+                    " ".join(f"{label}={count}" for label, count in job_counts.items()),
                 )
 
         _mark_sync_success(user, db)
     except Exception as error:
-        safe_error = str(error).encode('ascii', 'replace').decode('ascii')
-        print(f"Background sync failed for user {user_id}: {safe_error[:300]}")
+        logger.error("Background sync failed | user=%s error=%s", user_id, _safe_error_text(error)[:300])
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             _mark_sync_failed(user, db)
@@ -700,7 +764,7 @@ def start_background_sync_for_user(user: User, db: Session) -> dict:
             }
         else:
             # DB says running but thread is dead or timed out — reset
-            print(f"Sync for user {user.id} marked as running but no active thread found. Resetting to failed.")
+            logger.warning("Sync marked running with no active thread, resetting | user=%s", user.id)
             _mark_sync_failed(user, db)
             db.refresh(user)
 
@@ -720,88 +784,142 @@ def start_background_sync_for_user(user: User, db: Session) -> dict:
     }
 
 
-def _batch_extract_transactions(
-    emails: list[dict],
-    user_id: int | None = None,
+def _statement_job_result(
+    email: dict,
+    transactions: list[dict],
+    label: str,
+    forced_status: str | None = None,
+    forced_status_reason: str | None = None,
+) -> dict:
+    return {
+        "emails": [email],
+        "transactions": transactions,
+        "label": label,
+        "error": None,
+        "forced_status": forced_status,
+        "forced_status_reason": forced_status_reason,
+    }
+
+
+def _extract_transactions_for_statement_email(user: SyncUserSnapshot, email: dict) -> dict:
+    """Extraction job for one statement email: parse its PDF attachment(s).
+
+    - All attachments parse cleanly -> normal "Statement attachment" result.
+    - Some parsed, some didn't (e.g. one of two PDFs was locked) -> the
+      successful transactions are still returned to be saved, but the job
+      is marked forced_status=FAILED_STATUS so the parse-status row reflects
+      the problem instead of being masked by the partial success.
+    - None parsed at all (e.g. password couldn't be cracked) -> falls back
+      to the normal text-extraction pipeline in case the email body itself
+      has something usable, but the message is still pinned to
+      forced_status=FAILED_STATUS either way, so an unresolved password
+      doesn't get buried under a coincidental "not_transaction" verdict
+      from that fallback scan.
+    """
+    transactions, attachment_errors = _parse_statement_attachments_from_email(user, email)
+
+    if transactions and not attachment_errors:
+        return _statement_job_result(email, transactions, "Statement attachment")
+
+    total_attachments = len(_pdf_attachments_for_email(email))
+    reason = (
+        f"{len(attachment_errors)}/{total_attachments} statement attachment(s) failed: "
+        + "; ".join(attachment_errors[:3])
+    )
+
+    if transactions:
+        # Partial failure: keep what parsed, but flag the whole email.
+        return _statement_job_result(email, transactions, "Statement attachment", FAILED_STATUS, reason)
+
+    logger.info(
+        "Statement fallback to email pipeline | gmail_message_id=%s attachment_errors=%d errors=%s",
+        email.get("id"), len(attachment_errors), attachment_errors[:3],
+    )
+    try:
+        fallback_transactions = asyncio.run(process_emails([email], user_id=user.id)) or []
+    except Exception as error:
+        fallback_transactions = []
+        reason = _safe_error_text(error)
+
+    return _statement_job_result(email, fallback_transactions, "Statement fallback", FAILED_STATUS, reason)
+
+
+def _extract_transactions_for_email_batch(batch: list[dict], user_id: int | None) -> dict:
+    """Extraction job for one batch of normal (non-statement) emails: a
+    single LLM call covering all of them."""
+    try:
+        result = asyncio.run(process_emails(batch, user_id=user_id))
+
+        if result is None:
+            return {"emails": batch, "transactions": [], "label": "Email batch", "error": "LLM extractor returned no response."}
+
+        if not isinstance(result, list):
+            return {
+                "emails": batch,
+                "transactions": [],
+                "label": "Email batch",
+                "error": f"LLM extractor returned {type(result).__name__} instead of list.",
+            }
+
+        return {"emails": batch, "transactions": result, "label": "Email batch", "error": None}
+    except Exception as error:
+        return {"emails": batch, "transactions": [], "label": "Email batch", "error": _safe_error_text(error)}
+
+
+def _build_extraction_jobs(
+    user: SyncUserSnapshot,
+    statement_emails: list[dict],
+    normal_emails: list[dict],
     batch_size: int = EMAIL_EXTRACTION_BATCH_SIZE,
-    max_workers: int = EMAIL_EXTRACTION_MAX_WORKERS,
-    max_in_flight: int = EMAIL_EXTRACTION_MAX_IN_FLIGHT,
-):
-    """ This is the limited-parallel streaming generator, at most 2 LLM calls run at once. As each batch finishes, it yields.
-        This allows the caller to save each batch to DB immediately."""
-
-    def safe_extract(batch_index, batch):
-        try:
-            print(f"Email LLM batch started: batch={batch_index} emails={len(batch)}")
-
-            result = asyncio.run(process_emails(batch, user_id=user_id))
-
-            if result is None:
-                print(f"Email LLM batch returned no response: batch={batch_index}")
-                return {"transactions": [], "error": "LLM extractor returned no response."}
-
-            if not isinstance(result, list):
-                print(
-                    "Email LLM batch returned invalid type: "
-                    f"batch={batch_index} type={type(result).__name__}"
-                )
-                return {"transactions": [], "error": f"LLM extractor returned {type(result).__name__} instead of list."}
-
-            print(f"Email LLM batch success: batch={batch_index} transactions={len(result)}")
-            return {"transactions": result, "error": None}
-
-        except Exception as e:
-            safe_e = str(e).encode('ascii', 'replace').decode('ascii')
-            print(
-                "Email LLM batch failed: "
-                f"batch={batch_index} emails={len(batch)} error={safe_e[:300]}"
-            )
-            return {"transactions": [], "error": safe_e}
-
-    batches = [
-        emails[i:i + batch_size]
-        for i in range(0, len(emails), batch_size)
+) -> list[Callable[[], dict]]:
+    """Build one zero-arg job per statement email and one per batch of
+    normal emails, so both kinds can be submitted to the same worker pool
+    and run side by side instead of one phase blocking the other."""
+    statement_jobs = [
+        (lambda statement_email=statement_email: _extract_transactions_for_statement_email(user, statement_email))
+        for statement_email in statement_emails
+    ]
+    email_batches = [
+        normal_emails[i:i + batch_size]
+        for i in range(0, len(normal_emails), batch_size)
+    ]
+    user_id = user.id
+    batch_jobs = [
+        (lambda batch=batch: _extract_transactions_for_email_batch(batch, user_id))
+        for batch in email_batches
     ]
 
-    if not batches:
-        return 
-    
+    # Email batches first, statement PDFs second, then interleaved one-for-one: with
+    # max_workers=4 this hands out roughly 2 workers to each kind up front, instead of
+    # every statement job (slow: password guessing + multi-page vision LLM calls) queuing
+    # ahead of every email batch and starving it of a worker. Once one kind runs out,
+    # the leftover jobs of the other kind keep the now-free workers busy.
+    return [
+        job
+        for pair in zip_longest(batch_jobs, statement_jobs)
+        for job in pair
+        if job is not None
+    ]
+
+
+def _run_extraction_jobs(jobs: list[Callable[[], dict]], max_workers: int):
+    """Run extraction jobs (statement-PDF or email-batch, mixed freely)
+    concurrently and yield each job's result as soon as it completes.
+    Jobs must only do extraction (Gmail fetch / LLM call) — the thread
+    consuming this generator is the sole place that should touch
+    `db`/`sheets_service`, so all persistence stays on one session."""
+    if not jobs:
+        return
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        pending = {}
-
-        def submit_batch(index):
-            batch = batches[index]
-            future = executor.submit(safe_extract, index + 1, batch)
-            pending[future] = (index, batch)
-
-        next_index = 0
-
-        while next_index < min(max_in_flight, len(batches)):
-            submit_batch(next_index)
-            next_index += 1
-
+        pending = {executor.submit(job) for job in jobs}
         while pending:
-            done, _ = wait(pending, return_when=FIRST_COMPLETED)
-
+            done, pending = wait(pending, return_when=FIRST_COMPLETED)
             for future in done:
-                index, batch = pending.pop(future)
-
                 try:
-                    result = future.result()
+                    yield future.result()
                 except Exception as error:
-                    safe_error = str(error).encode('ascii', 'replace').decode('ascii')
-                    result = {"transactions": [], "error": safe_error}
-
-                yield {
-                    "batch_index": index + 1,
-                    "emails": batch,
-                    "transactions": result.get("transactions", []),
-                    "error": result.get("error"),
-                }
-
-                if next_index < len(batches):
-                    submit_batch(next_index)
-                    next_index += 1
+                    yield {"emails": [], "transactions": [], "label": "Extraction job", "error": _safe_error_text(error)}
 
 
 
@@ -889,7 +1007,7 @@ def perform_incremental_sync(user: User, db: Session):
             }
         else:
             # DB says running but thread is dead or timed out — reset
-            print(f"Incremental sync: user {user.id} marked running but no active thread. Resetting to failed.")
+            logger.warning("Incremental sync marked running with no active thread, resetting | user=%s", user.id)
             _mark_sync_failed(user, db)
             db.refresh(user)
 
@@ -900,12 +1018,11 @@ def perform_incremental_sync(user: User, db: Session):
             existing_gmail_message_ids = check_existing_gmail_message_id(user, db)
             
             if latest_gmail_id in existing_gmail_message_ids:
-                print(
-                    "Incremental sync: "
-                    f"user={user.id} latest_already_parsed=1 "
-                    f"known_gmail_ids={len(existing_gmail_message_ids)}"
+                logger.info(
+                    "Incremental sync up to date | user=%s known_gmail_ids=%d",
+                    user.id, len(existing_gmail_message_ids),
                 )
-                
+
                 # It fetches only latest Gmail ID. If latest ID already exists in DB, it does not run full sync. But it still calls: So if DB had rows saved but Sheets failed earlier, manual sync can repair Sheets.
                 sheet_result = _sync_transactions_to_sheet(user, db)
                 sync_metadata = _mark_sync_success(user, db)
@@ -919,8 +1036,10 @@ def perform_incremental_sync(user: User, db: Session):
             
     except Exception as e:
         # If check fails for some API/credentials reasons, fallback to background sync
-        safe_error = str(e).encode('ascii', 'replace').decode('ascii')
-        print(f"Latest email check failed, falling back to full sync: {safe_error[:300]}")
+        logger.warning(
+            "Latest email check failed, falling back to full sync | error=%s",
+            _safe_error_text(e)[:300],
+        )
 
     return start_background_sync_for_user(user, db)
 

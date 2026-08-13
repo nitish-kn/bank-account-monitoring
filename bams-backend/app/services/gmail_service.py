@@ -1,5 +1,6 @@
 import base64
 from datetime import datetime, timedelta
+import logging
 import random
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -27,6 +28,8 @@ from ..core.constants import (
 )
 from ..models.user import User
 from .credentials import build_credentials, get_token_scopes_from_tokeninfo
+
+logger = logging.getLogger(__name__)
 
 
 def _auth_headers_for_credentials(creds) -> dict[str, str] | None:
@@ -254,9 +257,12 @@ def _fetch_message_detail(headers: dict, message_id: str) -> dict | None:
         )
         if detail_response.status_code == 200:
             return detail_response.json()
-        print(f"Failed to fetch message detail {message_id}: HTTP {detail_response.status_code}")
+        logger.warning(
+            "Failed to fetch message detail | message_id=%s status=%d",
+            message_id, detail_response.status_code,
+        )
     except Exception as error:
-        print(f"Error fetching message detail for {message_id}: {error}")
+        logger.error("Error fetching message detail | message_id=%s error=%s", message_id, error)
 
     return None
 

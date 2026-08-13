@@ -592,8 +592,11 @@ def update_transaction(db: Session, user_id: int, txn_id: str, payload, ip_addre
     }
 
 
-def query_audit_logs(db: Session, user_id: int, page: int, page_size: int, search: str | None = None, changed_by: str | None = None, start_date: str | None = None, end_date: str | None = None) -> dict:
+def query_audit_logs(db: Session, user_id: int, page: int, page_size: int, search: str | None = None, changed_by: str | None = None, start_date: str | None = None, end_date: str | None = None, txn_id: str | None = None) -> dict:
     query = db.query(TransactionLog).filter(TransactionLog.user_id == user_id)
+
+    if txn_id:
+        query = query.filter(TransactionLog.txn_id == txn_id)
 
     if changed_by:
         query = query.filter(TransactionLog.changed_by.ilike(f"%{changed_by}%"))

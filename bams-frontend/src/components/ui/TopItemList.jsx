@@ -39,7 +39,7 @@ const TopItemList = ({
       <div className="overflow-x-auto">
         {(flagged ? data?.filter(txn => txn.is_flag) : data)?.map((txn) => (
           <div
-            key={txn?.gmail_message_id || txn?.id}
+            key={txn?.id || txn?.gmail_message_id}
             className="flex items-center justify-between gap-3 text-mid py-2"
           >
             <p className="flex items-center gap-2 font-normal">
