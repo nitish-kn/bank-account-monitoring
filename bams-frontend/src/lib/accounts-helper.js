@@ -32,6 +32,25 @@ const formatCompactINR = (value) => {
   return `${sign}₹${formatAmount(absValue)}`;
 };
 
+export const getAccountBalanceTotals = (accounts = []) => {
+  const safeAccounts = Array.isArray(accounts) ? accounts : [];
+  const statementBalance = safeAccounts.reduce(
+    (total, account) => total + toNumber(account?.statement_balance),
+    0,
+  );
+  const calculatedBalance = safeAccounts.reduce(
+    (total, account) => total + toNumber(account?.calculated_balance ?? account?.current_balance),
+    0,
+  );
+
+  return {
+    statementBalance,
+    calculatedBalance,
+    statementBalanceLabel: `Total ₹${formatAmount(statementBalance)}`,
+    calculatedBalanceLabel: `Total ₹${formatAmount(calculatedBalance)}`,
+  };
+};
+
 const getLastCalculatedAt = (account) => (
   account?.last_calculated_at
   || account?.calculated_updated_at

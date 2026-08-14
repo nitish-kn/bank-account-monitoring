@@ -8,6 +8,8 @@ export const getStatusColor = (status) => {
 }
 
 export const cleanText = (value = "") => {
+  if (value === null || value === undefined) return "";
+
   return String(value)
     .replace(/[\u034f\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g, "")
     .replace(/\s+/g, " ")
@@ -73,10 +75,15 @@ export const isValidEmail = (email) => {
 
 export const formatAmount = (amount) => {
   return Number(amount || 0).toLocaleString("en-IN", {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 };
+
+export const formatINR = (amount) => {
+  return `₹${formatAmount(amount)}`;
+};
+
 
 const trimDecimals = (value) => {
   return Number(value.toFixed(2)).toString();

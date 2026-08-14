@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Badge, Spinner, Table } from "@radix-ui/themes";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Filter, Plus, RotateCcw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, Filter, Plus, RotateCcw } from "lucide-react";
 
 import { accountsApi } from "../api/accounts";
 import CustomButton from "../components/ui/CustomButton";
@@ -9,8 +10,8 @@ import CustomSearchBar from "../components/ui/CustomSearchBar";
 import CustomTable from "../components/ui/CustomTable";
 import DataCard from "../components/ui/DataCard";
 import Pagination from "../components/Pagination";
-import { cleanText, formatAmount, formatDate, formatDateAndTime } from "../lib/helper";
-import { getAccountSummaryCards } from "../lib/accounts-helper";
+import { cleanText, formatAmount, formatDate, formatDateAndTime, formatINR } from "../lib/helper";
+import { getAccountBalanceTotals, getAccountSummaryCards } from "../lib/accounts-helper";
 import { getAccountFilterOptions } from "../lib/transactional-helper";
 import AddAcounts from "../components/AddAcounts";
 import { AccountCategoryBadge, AmountColor, TypeBadge } from "../utils/Badges";
@@ -32,6 +33,7 @@ const getDefaultAccountFilters = () => ({
   account: ALL_FILTER_VALUE,
   individualAccount: ALL_FILTER_VALUE,
   bank: ALL_FILTER_VALUE,
+  category: ALL_FILTER_VALUE,
   accountType: ALL_FILTER_VALUE,
   accountHolderName: ALL_FILTER_VALUE,
   date: toDateValue(new Date()),
@@ -41,6 +43,7 @@ const dropdownTriggerClassName = "h-9! w-full justify-between! text-sm";
 const dropdownContentClassName = "min-w-56 max-h-72 overflow-y-auto";
 const ACCOUNT_CACHE_FETCH_LIMIT = 1000;
 const RECENT_ACCOUNT_TXN_LIMIT = 5;
+const RECENT_ACCOUNT_TXN_TABLE_WIDTH = "820px"; // min-width floor; table stretches to fill the row
 
 const getAllOptionLabel = (options = [], fallback = "All") => (
   options?.find((option) => option?.value === ALL_FILTER_VALUE)?.label || fallback
@@ -49,6 +52,42 @@ const getAllOptionLabel = (options = [], fallback = "All") => (
 const toNumber = (value) => {
   const numberValue = Number(value || 0);
   return Number.isFinite(numberValue) ? numberValue : 0;
+};
+
+const getAccountNumberFilterLabel = (accountNumber) => {
+  const rawAccountNumber = String(accountNumber || "").trim();
+  const digits = rawAccountNumber.replace(/\D/g, "");
+
+  if (digits.length >= 4) return `XX${digits.slice(-4)}`;
+  return rawAccountNumber;
+};
+
+const getIndividualAccountFilterValue = (account) => {
+  const accountParts = [
+    account?.account_holder_name,
+    account?.bank_name,
+    getAccountNumberFilterLabel(account?.account_number),
+  ].filter(Boolean);
+
+  return accountParts.join(" - ").toLowerCase();
+};
+
+const getLatestTransactionDateRange = (transactions = []) => {
+  const latestTransactionDate = transactions.reduce((latestDate, transaction) => {
+    const parsedDate = new Date(transaction?.txn_date || transaction?.created_at || "");
+    if (Number.isNaN(parsedDate.getTime())) return latestDate;
+    return !latestDate || parsedDate > latestDate ? parsedDate : latestDate;
+  }, null);
+
+  if (!latestTransactionDate) return null;
+
+  const startDate = new Date(latestTransactionDate);
+  startDate.setMonth(startDate.getMonth() - 1);
+
+  return {
+    startDate: toDateValue(startDate),
+    endDate: toDateValue(latestTransactionDate),
+  };
 };
 
 const formatCurrency = (value) => `${"\u20b9"}${formatAmount(toNumber(value))}`;
@@ -87,7 +126,7 @@ const AccountTypeBadge = ({ type }) => {
 const BalanceCell = ({ amount, label, muted = false, warning }) => (
   <div className="min-w-0 text-right">
     <p className={`truncate text-sm font-bold ${muted ? "text-gray-400" : "text-gray-950"}`}>
-      {amount === null || amount === undefined ? "-" : formatCurrency(amount)}
+      {amount === null || amount === undefined ? "-" : formatINR(amount)}
     </p>
     <p className={`mt-1 truncate text-xs ${warning ? "font-semibold text-orange-600" : "text-slate-400"}`}>
       {warning || label || "-"}
@@ -103,7 +142,7 @@ const DeltaBadge = ({ value }) => {
     return (
       <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-3 py-1 text-sm font-bold text-green-700">
         <CheckCircle2 className="h-3.5 w-3.5" />
-        {formatCurrency(0)}
+        {formatINR(0)}
       </span>
     );
   }
@@ -116,12 +155,13 @@ const DeltaBadge = ({ value }) => {
   return (
     <span className={`inline-flex items-center gap-1 rounded-lg px-3 py-1 text-sm font-bold ${colorClass}`}>
       <AlertTriangle className="h-3.5 w-3.5" />
-      {formatCompactCurrency(delta)}
+      {formatINR(delta)}
     </span>
   );
 };
 
 const Accounts = () => {
+  const navigate = useNavigate();
   const filterOptions = useMemo(() => getAccountFilterOptions(), []);
   const [accounts, setAccounts] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -166,6 +206,28 @@ const Accounts = () => {
     }));
     setPage(1);
   };
+
+  const viewAllTransactionsForAccount = useCallback((account) => {
+    const individualAccount = getIndividualAccountFilterValue(account);
+    const transactionDateRange = getLatestTransactionDateRange(
+      recentTransactionsByAccountId[account?.id] || [],
+    );
+    const params = new URLSearchParams();
+
+    params.set("tab", "transactions");
+    if (individualAccount) {
+      params.set("individualAccount", individualAccount);
+    }
+    if (transactionDateRange?.startDate && transactionDateRange?.endDate) {
+      params.set("startDate", transactionDateRange.startDate);
+      params.set("endDate", transactionDateRange.endDate);
+    }
+
+    navigate({
+      pathname: "/transactions",
+      search: params.toString(),
+    });
+  }, [navigate, recentTransactionsByAccountId]);
 
   const toggleAccountTransactions = useCallback(async (account) => {
     const accountId = account?.id;
@@ -238,6 +300,10 @@ const Accounts = () => {
     () => getAccountSummaryCards(accounts, { asOfDate: filters.date }),
     [accounts, filters.date],
   );
+  const balanceTotals = useMemo(
+    () => getAccountBalanceTotals(accounts),
+    [accounts],
+  );
 
   const columns = useMemo(
     () => [
@@ -309,30 +375,35 @@ const Accounts = () => {
       },
       {
         key: "statement_balance",
-        header: "Bal - Statement",
+        header: "Balance - Statement",
+        headerSubtext: balanceTotals.statementBalanceLabel,
         sortable: true,
         sortKey: "statement_balance",
         columnWidth: "210px",
+        headerAlign: "right",
         headerClassName: "text-right",
-        cellClassName: "justify-end",
+        cellClassName: "text-right [&>div]:justify-end",
         render: (account) => (
           <BalanceCell
             amount={account.statement_balance}
-            label={`stmt ${formatDate(account.created_at)}`}
+            label={`${formatDate(account.statement_updated_at)}`}
           />
         ),
       },
       {
         key: "current_balance",
-        header: "Bal - Calculated",
+        header: "Balance - Calculated",
+        headerSubtext: balanceTotals.calculatedBalanceLabel,
         sortable: true,
         sortKey: "current_balance",
         columnWidth: "210px",
+        headerAlign: "right",
         headerClassName: "text-right",
+        cellClassName: "text-right [&>div]:justify-end",
         render: (account) => (
           <BalanceCell
             amount={account.calculated_balance}
-            label={`calc ${formatDate(account.created_at)}`}
+            label={`${formatDate(account.calculated_updated_at)}`}
             muted={Math.abs(toNumber(account.delta)) < 0.01}
           />
         ),
@@ -342,7 +413,10 @@ const Accounts = () => {
         header: "Delta",
         sortable: true,
         sortKey: "delta",
-        columnWidth: "130px",
+        columnWidth: "150px",
+        headerAlign: "right",
+        headerClassName: "text-right",
+        cellClassName: "text-right [&>div]:justify-end",
         render: (account) => <DeltaBadge value={account.delta} />,
       },
       {
@@ -354,7 +428,7 @@ const Accounts = () => {
         render: (account) => (
           <div className="min-w-0">
             <p className="truncate text-xs font-medium text-slate-400">
-              stmt {formatDate(account.statement_updated_at)}
+              stmt {formatDate(account.created_at)}
             </p>
             <p className="mt-1 truncate text-xs font-medium text-slate-400">
               calc {formatDate(account.calculated_updated_at)}
@@ -363,14 +437,14 @@ const Accounts = () => {
         ),
       },
     ],
-    [expandedAccountIds, recentTransactionsLoading, toggleAccountTransactions],
+    [balanceTotals, expandedAccountIds, recentTransactionsLoading, toggleAccountTransactions],
   );
 
   const recentTransactionColumns = useMemo(() => [
     {
       key: "date",
       header: "Date",
-      columnWidth: "100px",
+      columnWidth: "120px",
       render: (transaction) => {
         const { date, time } = formatDateAndTime(transaction.txn_date || transaction.created_at);
 
@@ -385,15 +459,10 @@ const Accounts = () => {
     {
       key: "counterparty",
       header: "Counterparty",
-      columnWidth: "620px",
+      columnWidth: "500px",
       render: (transaction) => {
-        const subtitleParts = [
-          transaction.mode,
-          transaction.ref_number,
-        ].filter(Boolean);
-        const subtitle = subtitleParts.length
-          ? subtitleParts.join(" / ")
-          : cleanText(transaction.narration || transaction.category || "-");
+        const subtitleParts = [ transaction.mode, transaction.ref_number, ].filter(Boolean);
+        const subtitle = subtitleParts.length ? subtitleParts.join(" / ") : cleanText(transaction.narration || transaction.category || "-");
 
         return (
           <div className="min-w-0">
@@ -410,7 +479,7 @@ const Accounts = () => {
     {
       key: "txn_type",
       header: "Type",
-      columnWidth: "120px",
+      columnWidth: "110px",
       headerClassName: "text-center",
       cellClassName: "justify-center",
       render: (transaction) => (
@@ -422,11 +491,11 @@ const Accounts = () => {
     {
       key: "amount",
       header: "Amount",
-      columnWidth: "170px",
-      headerClassName: "text-right pr-8",
-      cellClassName: "justify-end pr-6",
+      columnWidth: "130px",
+      headerClassName: "text-right pr-5",
+      cellClassName: "pr-4 text-right [&>div]:justify-end",
       render: (transaction) => (
-        <div className="w-full pr-2">
+        <div className="w-full whitespace-nowrap">
           <AmountColor type={transaction.txn_type} amount={transaction.amount} />
         </div>
       ),
@@ -445,45 +514,47 @@ const Accounts = () => {
 
     return (
       <Table.Row className="bg-slate-50">
-        <Table.Cell colSpan={columns.length} className="p-0">
-          <div className="">
-            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">
-                Last {headingCount} {headingLabel}
-              </p>
-              {!isLoadingTransactions && transactionCount > 0 ? (
-                <p className="text-xs font-semibold text-blue-600">
-                  Showing {transactionCount} of latest {RECENT_ACCOUNT_TXN_LIMIT}
-                </p>
-              ) : null}
-            </div>
+        <Table.Cell colSpan={columns.length} className="p-4">
+          <header className="mb-3 flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-600">
+              Last {headingCount} {headingLabel}
+            </p>
+            {!isLoadingTransactions && transactionCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => viewAllTransactionsForAccount(account)}
+                className="flex items-center gap-1 pr-2 text-sm font-semibold text-blue-600 hover:cursor-pointer hover:underline hover:underline-offset-4"
+              >
+                View All transactions for this account <ExternalLink className="inline h-4.5 w-4.5" />
+              </button>
+            ) : null}
+          </header>
 
-            {isLoadingTransactions ? (
-              <div className="flex items-center gap-2 rounded-lg bg-white px-4 py-4 text-sm font-medium text-slate-500">
-                <Spinner size="2" />
-                Loading recent transactions...
-              </div>
-            ) : transactionError ? (
-              <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                {transactionError}
-              </div>
-            ) : transactionCount === 0 ? (
-              <div className="rounded-lg bg-white px-4 py-4 text-sm font-medium text-slate-500">
-                No transactions found for this account.
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-lg border border-slate-100">
-                <CustomTable
-                  columns={recentTransactionColumns}
-                  data={transactions}
-                  minWidth="1050px"
-                  size="1"
-                  getRowKey={(transaction, idx) => transaction.id || transaction.gmail_message_id || transaction.ref_number || idx}
-                  emptyMessage="No transactions found for this account"
-                />
-              </div>
-            )}
-          </div>
+          {isLoadingTransactions ? (
+            <div className="flex items-center gap-2 rounded-lg bg-white px-4 py-4 text-sm font-medium text-slate-500">
+              <Spinner size="2" />
+              Loading recent transactions...
+            </div>
+          ) : transactionError ? (
+            <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {transactionError}
+            </div>
+          ) : transactionCount === 0 ? (
+            <div className="rounded-lg bg-white px-4 py-4 text-sm font-medium text-slate-500">
+              No transactions found for this account.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <CustomTable
+                columns={recentTransactionColumns}
+                data={transactions}
+                minWidth={RECENT_ACCOUNT_TXN_TABLE_WIDTH}
+                size="1"
+                getRowKey={(transaction, idx) => transaction.id || transaction.gmail_message_id || transaction.ref_number || idx}
+                emptyMessage="No transactions found for this account"
+              />
+            </div>
+          )}
         </Table.Cell>
       </Table.Row>
     );
@@ -494,6 +565,7 @@ const Accounts = () => {
     recentTransactionsError,
     recentTransactionsLoading,
     recentTransactionColumns,
+    viewAllTransactionsForAccount,
   ]);
 
   const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
@@ -551,7 +623,7 @@ const Accounts = () => {
         {/* Filter Bar */}
         {openFilter &&
           <>
-            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-8">
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-9">
               <div className="xl:col-span-2">
                 <CustomSearchBar
                   value={draftFilters.search}
@@ -610,6 +682,22 @@ const Accounts = () => {
                 multiple
                 showSearch
                 searchPlaceholder="Search banks..."
+                align="start"
+                buttonVariant="outline"
+                buttonColor="gray"
+                buttonSize="2"
+                triggerClassName={dropdownTriggerClassName}
+                contentClassName={dropdownContentClassName}
+              />
+
+              <CustomDropDown
+                value={draftFilters.category}
+                options={filterOptions.categories}
+                placeholder={getAllOptionLabel(filterOptions.categories, "All Categories")}
+                onValueChange={(value) => updateDraftFilter("category", value)}
+                multiple
+                showSearch
+                searchPlaceholder="Search categories..."
                 align="start"
                 buttonVariant="outline"
                 buttonColor="gray"
