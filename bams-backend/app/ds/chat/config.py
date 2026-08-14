@@ -12,4 +12,4 @@ MAX_TOOL_HOPS = 6
 # small deliberately: the most recent exchange should dominate what the model
 # attends to, and a shorter window means less chance of an older, unrelated
 # turn distracting it from the current question.
-MAX_HISTORY_MESSAGES = 5
+MAX_HISTORY_MESSAGES = 6

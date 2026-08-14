@@ -81,6 +81,10 @@ class BalanceDropParams(BaseModel):
     )
 
 
+class ListCreditCardsParams(BaseModel):
+    issuer: Optional[str] = Field(None, description="Filter to cards from this issuer/bank, e.g. 'HDFC'.")
+
+
 class ResolveAccountParams(BaseModel):
     query_text: str = Field(
         ..., description="The vague account/card reference from the user's message, e.g. 'my HDFC card' "

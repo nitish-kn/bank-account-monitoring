@@ -6,10 +6,11 @@ from ...llm.utils.account_lookup import find_account_in_excel, fuzzy_find_accoun
 from ...llm.utils.credit_card_lookup import (
     find_credit_card_in_excel,
     fuzzy_find_credit_cards_in_excel,
+    list_all_credit_cards_from_excel,
     load_credit_card_data,
 )
 from ..schemas.chat_dto import ToolContext
-from ..schemas.tool_params import ResolveAccountParams
+from ..schemas.tool_params import ListCreditCardsParams, ResolveAccountParams
 from .base import tool
 
 
@@ -84,3 +85,30 @@ def resolve_account_or_card(ctx: ToolContext, query_text: str) -> dict:
         return {"matches": [], "suggestions": suggestions}
 
     return {"matches": matches}
+
+
+@tool(
+    name="list_credit_cards",
+    description=(
+        "List every credit card on file from the reference sheet -- including cards with no "
+        "recent transaction activity, which get_recent_transactions(tab='credit-card') would miss "
+        "-- sorted by issuer then cardholder name. Optionally filter by issuer. Use this for 'how "
+        "many credit cards do I have' / 'list my cards' questions."
+    ),
+    params_model=ListCreditCardsParams,
+    cache_tier="medium",
+)
+def list_credit_cards(ctx: ToolContext, issuer: str | None = None) -> dict:
+    try:
+        cards_df = load_credit_card_data()
+        cards = list_all_credit_cards_from_excel(cards_df)
+    except Exception:
+        cards = []
+
+    if issuer:
+        needle = issuer.strip().lower()
+        cards = [c for c in cards if needle in str(c.get("credit_card_issuer") or "").lower()]
+
+    cards.sort(key=lambda c: (str(c.get("credit_card_issuer") or ""), str(c.get("credit_card_owner") or "")))
+
+    return {"cards": cards, "totalCount": len(cards)}

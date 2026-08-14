@@ -195,6 +195,33 @@ def find_credit_card_in_excel(
     }
 
 
+def list_all_credit_cards_from_excel(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """
+    Every row on the reference sheet, in the same dict shape find_credit_card_in_excel
+    returns. There's no DB table of "cards on file" independent of transaction activity --
+    a card with no recent spend is otherwise invisible to any DB-only listing.
+    """
+    card_col = "Credit Card No."
+    if not isinstance(df, pd.DataFrame) or df.empty or card_col not in df.columns:
+        return []
+
+    cards = []
+    for _, row in df.iterrows():
+        card_number = _digits_only(row.get(card_col))
+        if not card_number:
+            continue
+
+        cards.append({
+            "credit_card_number": card_number,
+            "credit_card_owner": _clean_cell(row.get("Credit Card Owner")),
+            "credit_card_issuer": _clean_cell(row.get("Credit Card Issuer")),
+            "card_name": _clean_cell(row.get("Card Name")),
+            "card_type": _clean_cell(row.get("Type")),
+        })
+
+    return cards
+
+
 _FUZZY_FILLER_WORDS = {
     "my", "the", "a", "an", "for", "of", "is", "are", "and", "or", "to", "in",
     "on", "at", "account", "accounts", "card", "cards", "bank", "credit", "debit",
