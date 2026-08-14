@@ -2,8 +2,9 @@
 Account lookup utility for matching and filling account details from Excel file.
 """
 
+import difflib
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -119,6 +120,94 @@ def find_account_in_excel(last_four_digits: str, df: pd.DataFrame) -> Optional[D
         "account_type": match.get("Type"),
         "account_number": str(match.get(account_col)),
     }
+
+
+_FUZZY_FILLER_WORDS = {
+    "my", "the", "a", "an", "for", "of", "is", "are", "and", "or", "to", "in",
+    "on", "at", "account", "accounts", "card", "cards", "bank", "please", "whats",
+}
+
+
+def _significant_tokens(text: str) -> List[str]:
+    return [
+        token for token in str(text or "").lower().split()
+        if len(token) >= 3 and token not in _FUZZY_FILLER_WORDS
+    ]
+
+
+def _token_substring_boost(query_tokens: List[str], *candidate_texts: str) -> float:
+    """A whole-string SequenceMatcher ratio can bury a strong single-keyword
+    hit under filler words -- e.g. "my axis account" vs "Axis Bank" scores
+    0.58 (just under a 0.6 threshold) despite "axis" being an exact match.
+    If any significant query token appears verbatim in a candidate field,
+    that's worth crossing the threshold on its own."""
+    for token in query_tokens:
+        for candidate in candidate_texts:
+            if token in candidate.lower():
+                return 0.68
+    return 0.0
+
+
+def fuzzy_find_accounts_in_excel(
+    query_text: str,
+    df: pd.DataFrame,
+    threshold: float = 0.6,
+    limit: int = 3,
+) -> List[Dict[str, Any]]:
+    """
+    Fallback for when there's no usable digit signal to match on (e.g. "my
+    HDFC savings account", "Arvind's account" -- no account number at all).
+    find_account_in_excel() only ever matches by last-4-digit suffix, so a
+    name/bank-only query gets zero grounding from this sheet no matter how
+    many rows it has; this scans every row's Name/S No (bank name -- despite
+    the header, that's what this column actually holds, same as
+    find_account_in_excel's mapping) and ranks by similarity instead.
+
+    Returns the top matches at or above `threshold`, best first. The
+    threshold is deliberately a loose floor (excludes only clearly-irrelevant
+    rows) rather than a precision cutoff -- callers are expected to handle
+    multiple close candidates (e.g. several same-surname holders) themselves,
+    same as the digit-based path already does via tie-breaking elsewhere.
+    """
+    if not query_text or not isinstance(df, pd.DataFrame) or df.empty:
+        return []
+
+    account_col = "Axis A/c No"
+    if account_col not in df.columns:
+        return []
+
+    query = str(query_text).strip().lower()
+    if not query:
+        return []
+
+    query_tokens = _significant_tokens(query)
+
+    scored: list[tuple[float, Dict[str, Any]]] = []
+    for _, row in df.iterrows():
+        name = str(row.get("Name") or "").strip()
+        bank_name = str(row.get("S No") or "").strip()
+        candidate_text = f"{name} {bank_name}".strip().lower()
+        if not candidate_text:
+            continue
+
+        score = max(
+            difflib.SequenceMatcher(None, query, name.lower()).ratio(),
+            difflib.SequenceMatcher(None, query, bank_name.lower()).ratio(),
+            difflib.SequenceMatcher(None, query, candidate_text).ratio(),
+            _token_substring_boost(query_tokens, name, bank_name),
+        )
+        if score < threshold:
+            continue
+
+        scored.append((score, {
+            "bank_name": row.get("S No"),
+            "account_holder_name": row.get("Name"),
+            "account_type": row.get("Type"),
+            "account_number": str(row.get(account_col)),
+        }))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [match for _, match in scored[:limit]]
 
 
 def fill_missing_account_details(transaction: Dict[str, Any], df: pd.DataFrame = None) -> Dict[str, Any]:

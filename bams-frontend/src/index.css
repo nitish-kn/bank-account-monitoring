@@ -93,6 +93,57 @@ body {
   animation: slide-fade-in 220ms ease-out both;
 }
 
+.chat-markdown > * + * {
+  margin-top: 0.5em;
+}
+
+.chat-markdown p {
+  line-height: 1.55;
+}
+
+.chat-markdown ul,
+.chat-markdown ol {
+  padding-left: 1.25em;
+}
+
+.chat-markdown ul {
+  list-style: disc;
+}
+
+.chat-markdown ol {
+  list-style: decimal;
+}
+
+.chat-markdown li + li {
+  margin-top: 0.2em;
+}
+
+.chat-markdown strong {
+  font-weight: 700;
+  color: #111827;
+}
+
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3 {
+  font-weight: 700;
+  color: #111827;
+  margin-top: 0.75em;
+}
+
+.chat-markdown code {
+  background: #f3f4f6;
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.chat-markdown a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
 @media (min-width: 950px) and (max-width: 1400px) {
   #pie-chart {
     width: 200px;
