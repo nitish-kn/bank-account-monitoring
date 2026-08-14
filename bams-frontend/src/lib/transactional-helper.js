@@ -53,6 +53,16 @@ const all_account_types = [
   { name: "Current", value: "current" },
 ];
 
+const all_account_categories = [
+  { name: "Personal", value: "personal" },
+  { name: "Business", value: "business" },
+  { name: "HUF", value: "huf" },
+  { name: "Family", value: "family" },
+  { name: "Joint Business", value: "jointbusiness" },
+  { name: "Firm", value: "firm" },
+  { name: "Others", value: "others" },
+];
+
 const all_account_numbers = [
   // From First Image
   { name: "XX5662", value: "xx5662" },
@@ -379,6 +389,7 @@ export const getTransactionFilterOptions = (records = []) => ({
 export const getAccountFilterOptions = () => ({
   banks: buildSelectOptions(all_banks, "All Banks"),
   accounts: buildSelectOptions(all_account_numbers, "All Accounts"),
+  categories: buildSelectOptions(all_account_categories, "All Categories"),
   individualAccounts: buildSelectOptions(
     individual_account,
     "All Individual Accounts",

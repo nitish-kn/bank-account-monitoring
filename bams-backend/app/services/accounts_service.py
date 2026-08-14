@@ -129,6 +129,33 @@ def _apply_list_filter(query, column, filter_val, filter_kind: str | None = None
     return query.filter(or_(*conditions))
 
 
+def _apply_category_filter(query, filter_val):
+    values = _active_filter_values(filter_val)
+    if not values:
+        return query
+
+    column_value = _lower_text(BankAccounts.category)
+    conditions = []
+
+    for value in values:
+        match_terms = _match_terms(value)
+        conditions.extend([
+            column_value.like(f"%{term}%")
+            for term in match_terms
+        ])
+
+        if _compact_text(value) in {"other", "others"}:
+            conditions.extend([
+                BankAccounts.category.is_(None),
+                BankAccounts.category == "",
+            ])
+
+    if not conditions:
+        return query
+
+    return query.filter(or_(*conditions))
+
+
 def _decimal_to_string(value) -> str | None:
     if value is None:
         return None
@@ -149,8 +176,8 @@ def account_to_dict(account: BankAccounts) -> dict:
     if current_balance is not None or statement_balance is not None:
         delta = (current_balance or Decimal("0")) - (statement_balance or Decimal("0"))
 
-    statement_updated_at = account.updated_at or account.created_at
-    calculated_updated_at = account.last_synced_at or account.updated_at or account.created_at
+    statement_updated_at = account.last_synced_at or 0
+    calculated_updated_at = account.created_at or 0
 
     return {
         "id": account.id,
@@ -158,6 +185,7 @@ def account_to_dict(account: BankAccounts) -> dict:
         "account_holder_name": account.account_holder_name,
         "account_type": account.account_type,
         "account_number": account.account_number,
+        "category": account.category,
         "current_balance": _decimal_to_string(current_balance),
         "calculated_balance": _decimal_to_string(current_balance),
         "statement_balance": _decimal_to_string(statement_balance),
@@ -165,6 +193,7 @@ def account_to_dict(account: BankAccounts) -> dict:
         "source": account.source,
         "statement_updated_at": _datetime_to_iso(statement_updated_at),
         "calculated_updated_at": _datetime_to_iso(calculated_updated_at),
+        "last_calculated_at": _datetime_to_iso(calculated_updated_at),
         "last_updated": _datetime_to_iso(calculated_updated_at),
         "created_at": _datetime_to_iso(account.created_at),
         "updated_at": _datetime_to_iso(account.updated_at),
@@ -231,6 +260,7 @@ def _account_sort_value(account: BankAccounts, sort_field_key: str | None):
         "account_number": account.account_number,
         "type": account.account_type,
         "account_type": account.account_type,
+        "category": account.category,
         "bank": account.bank_name,
         "bank_name": account.bank_name,
         "statement_balance": account.statement_balance,
@@ -296,6 +326,7 @@ def apply_account_filters(query, filters: dict | None):
                 _lower_text(BankAccounts.account_number).like(search_filter),
                 _lower_text(BankAccounts.bank_name).like(search_filter),
                 _lower_text(BankAccounts.account_type).like(search_filter),
+                _lower_text(BankAccounts.category).like(search_filter),
                 _lower_text(BankAccounts.source).like(search_filter),
             )
         )
@@ -325,6 +356,7 @@ def apply_account_filters(query, filters: dict | None):
         filters.get("accountType") or filters.get("account_type"),
         filter_kind="account_type",
     )
+    query = _apply_category_filter(query, filters.get("category"))
     query = _apply_list_filter(
         query,
         BankAccounts.account_holder_name,
@@ -400,6 +432,43 @@ def get_paginated_accounts(
         "accounts": [account_to_dict(account) for account in accounts],
         "totalCount": total_count,
     }
+
+
+def get_account_balance_as_of(
+    db: Session,
+    user_id: int,
+    account_identifier: str,
+    as_of_date: str | None = None,
+) -> dict | None:
+    """Single-account narrowing of get_paginated_accounts, for callers (e.g. a
+    balance-drop scan, or a chat tool fed a natural-language identifier) that
+    need one account's balance as of a date without re-running the full
+    pagination/sort machinery in a loop.
+
+    A plain "search" filter only matches the WHOLE identifier string against
+    ONE column at a time, so a multi-word reference like "Arvind Kumar Gupta
+    Axis Bank Savings ****7989" never matches anything -- no single column
+    contains that literal string. Try the most specific signal first (account
+    number / last-4 digits via the "account" filter, which already does
+    digit-suffix + compact-text matching), then bank name, then holder name,
+    and only fall back to a blanket substring "search" last.
+    """
+    base_filters: dict = {"date": as_of_date} if as_of_date else {}
+
+    candidate_filters = [
+        {**base_filters, "account": account_identifier},
+        {**base_filters, "bank": account_identifier},
+        {**base_filters, "accountHolderName": account_identifier},
+        {**base_filters, "search": account_identifier},
+    ]
+
+    for filters in candidate_filters:
+        result = get_paginated_accounts(db, user_id, filters, page=1, page_size=1)
+        accounts = result.get("accounts") or []
+        if accounts:
+            return accounts[0]
+
+    return None
 
 
 def get_recent_account_transactions(

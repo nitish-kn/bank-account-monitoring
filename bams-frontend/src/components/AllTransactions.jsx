@@ -10,11 +10,13 @@ import { transactionApi } from "../api/transactions";
 import TransactionFilters from "./TransactionFilters";
 import CustomButton from "./ui/CustomButton";
 import { useSetupStore } from "../store/setupStore";
-import { getTransactionFilterOptionsFromBackend, formatTransactionDateRangeLabel, getDefaultTransactionDateRange } from "../lib/transactional-helper";
+import { DEFAULT_TRANSACTION_FILTERS, getTransactionFilterOptionsFromBackend, formatTransactionDateRangeLabel, getDefaultTransactionDateRange } from "../lib/transactional-helper";
 import CustomDatePicker from "./ui/CustomDatePicker";
 import { ActionBadge, AmountColor, CategoryBadge, SourceBadge, TypeBadge } from "../utils/Badges";
 
 const tabTriggerClassName = "flex-1! justify-center! bg-white! hover:bg-gray-50! border border-gray-50! shadow-md! rounded-md! text-sm font-medium text-gray-900! transition-colors! data-[state=active]:border-b-2! data-[state=active]:border-blue-600! data-[state=active]:text-blue-600! data-[state=active]:hover:bg-white! [&_.rt-BaseTabListTriggerInner]:bg-transparent!";
+
+const isDateOnlyValue = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 
 export function AllTransactions({ user }) {
   const [searchParams] = useSearchParams();
@@ -23,6 +25,19 @@ export function AllTransactions({ user }) {
   const initialTab = ["transactions", "credit-card", "fastag"].includes(searchParams.get("tab"))
     ? searchParams.get("tab")
     : "transactions";
+  const initialIndividualAccount = searchParams.get("individualAccount");
+  const initialStartDate = searchParams.get("startDate");
+  const initialEndDate = searchParams.get("endDate");
+  const initialDateRange =
+    isDateOnlyValue(initialStartDate) && isDateOnlyValue(initialEndDate)
+      ? { startDate: initialStartDate, endDate: initialEndDate }
+      : getDefaultTransactionDateRange(new Date(), 30);
+  const initialAppliedFilters = initialIndividualAccount
+    ? {
+      ...DEFAULT_TRANSACTION_FILTERS,
+      individualAccount: [initialIndividualAccount],
+    }
+    : {};
 
   const [emailPage, setEmailPage] = useState(1);
   const [emailPageSize, setEmailPageSize] = useState(10);
@@ -33,13 +48,13 @@ export function AllTransactions({ user }) {
   const [error, setError] = useState(null);
 
   const [filterOptions, setFilterOptions] = useState({});
-  const [appliedFilters, setAppliedFilters] = useState({});
+  const [appliedFilters, setAppliedFilters] = useState(initialAppliedFilters);
   const [openFilter, setOpenFilter] = useState(false);
   const refreshTrigger = useSetupStore((state) => state.refreshTrigger);
   const [sort, setSort] = useState({ field: initialSortField, order: initialSortOrder });
   const [tabValue, setTabValue] = useState(initialTab);
 
-  const [dateRange, setDateRange] = useState(getDefaultTransactionDateRange(new Date(), 30));
+  const [dateRange, setDateRange] = useState(initialDateRange);
   const [openDateRangeFilter, setOpenDateRangeFilter] = useState(false);
   const dateRangePopoverRef = useRef(null);
 
@@ -140,19 +155,23 @@ export function AllTransactions({ user }) {
         columnWidth: "200px",
         sortable: true,
         sortKey: "bank",
-        render: (transaction) => (
+        render: (transaction) => {
+          const bankName = tabValue === 'credit-card' ? transaction?.optional_fields?.credit_card_issuer : cleanText(transaction?.bank_name) ;
+          const accountHolderName = tabValue === 'credit-card' ? transaction?.optional_fields?.credit_card_owner : cleanText(transaction?.account_holder_name);
+          const accountNo = tabValue === 'credit-card' ? transaction?.optional_fields?.credit_card_number : cleanText(transaction?.account_number);
+          return (
           <div className="min-w-0 ">
             <p className="truncate text-sm max-w-80 text-black" title={transaction?.bank_name} >
-              {transaction?.bank_name || "Unknown bank"}
+              {bankName || "Unknown bank"}
             </p>
             <p className="mt-0.5 truncate text-xs font-medium! text-gray-800" title={transaction?.account_holder_name}>
-              {transaction?.account_holder_name || "-"}
+              {accountHolderName || "-"}
             </p>
             <p className="mt-0.5 truncate text-xs text-gray-500" title={transaction?.account_number}>
-              {transaction?.account_number || "-"}
+              {accountNo || "-"}
             </p>
-          </div>
-        ),
+          </div>);
+      },
       },
       {
         key: "counterparty",
@@ -164,12 +183,7 @@ export function AllTransactions({ user }) {
           const counterparty = cleanText(transaction?.counterparty);
 
           return (
-            <p
-              className="max-w-72 truncate text-sm leading-6 font-medium text-gray-800"
-              title={counterparty}
-            >
-              {counterparty || "-"}
-            </p>
+            <p className="max-w-72 truncate text-sm leading-6 font-medium text-gray-800" title={counterparty} > {counterparty || "-"} </p>
           );
         },
       },

@@ -9,6 +9,7 @@ import { Transactions } from "./pages/Transactions";
 import Dashboard from "./pages/Dashboard";
 import Accounts from "./pages/Accounts";
 import AuditLog from "./pages/AuditLog";
+import ChatAssistant from "./pages/ChatAssistant";
 import { Bounce, ToastContainer } from "react-toastify";
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/all-accounts" element={<Accounts />} />
         <Route path="/audit-log" element={<AuditLog />} />
+        <Route path="/chat-assistant" element={<ChatAssistant />} />
       </Route>
       
       <Route

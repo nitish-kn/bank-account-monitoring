@@ -13,6 +13,7 @@ class BankAccounts(Base):
     account_holder_name = Column(String, nullable=False)
     account_type = Column(String)
     account_number = Column(String, nullable=False)
+    category = Column(String)
     current_balance = Column(Numeric(12, 2))
     statement_balance = Column(Numeric(12, 2))
     last_synced_at = Column(DateTime(timezone=True))
