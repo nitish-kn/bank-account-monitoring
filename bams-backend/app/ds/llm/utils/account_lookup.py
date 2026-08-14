@@ -148,6 +148,33 @@ def _token_substring_boost(query_tokens: List[str], *candidate_texts: str) -> fl
     return 0.0
 
 
+def list_all_accounts_from_excel(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """
+    Every row on the reference sheet, in the same dict shape find_account_in_excel
+    returns. A bank_accounts DB row only exists once a transaction or statement has
+    actually touched that account (see ledger_service.py) -- an account sitting on
+    this sheet with no activity yet is otherwise invisible to any DB-only listing.
+    """
+    account_col = "Axis A/c No"
+    if not isinstance(df, pd.DataFrame) or df.empty or account_col not in df.columns:
+        return []
+
+    accounts = []
+    for _, row in df.iterrows():
+        account_number = _clean_account_value(row.get(account_col))
+        if not account_number:
+            continue
+
+        accounts.append({
+            "bank_name": row.get("S No"),
+            "account_holder_name": row.get("Name"),
+            "account_type": row.get("Type"),
+            "account_number": account_number,
+        })
+
+    return accounts
+
+
 def fuzzy_find_accounts_in_excel(
     query_text: str,
     df: pd.DataFrame,

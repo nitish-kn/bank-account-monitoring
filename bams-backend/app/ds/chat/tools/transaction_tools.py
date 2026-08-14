@@ -9,7 +9,9 @@ from .base import tool
     description=(
         "Get the most recent transactions, optionally for a specific account/card (natural-language "
         "reference) and/or restricted to a tab: 'transactions' (bank transfers only), 'credit-card', "
-        "or 'fastag'."
+        "or 'fastag'. Sorted by date only, newest first, and capped at a small page -- NOT sorted by "
+        "amount. Never use this to answer 'largest/smallest/biggest' amount questions -- use "
+        "get_dashboard_summary for those instead."
     ),
     params_model=RecentTransactionsParams,
     cache_tier="short",

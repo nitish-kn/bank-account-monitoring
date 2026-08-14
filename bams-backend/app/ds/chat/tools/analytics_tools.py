@@ -25,7 +25,11 @@ def _date_range_filters(start_date: str | None, end_date: str | None, account: s
     name="get_dashboard_summary",
     description=(
         "Get an overall spending/income dashboard summary for a date range: total credit/debit, "
-        "net balance, top categories, top transactions, daily cash-flow trend, and spend by payment mode."
+        "net balance, top categories, top transactions, daily cash-flow trend, and spend by payment "
+        "mode. This is the AUTHORITATIVE source for totals and for largest/smallest/biggest/highest "
+        "transaction questions -- use maxCreditAmount, maxDebitAmount, and topTransactions (already "
+        "sorted by amount, with full transaction detail) for the correctly-scoped date range. Never "
+        "estimate an extreme value from get_recent_transactions, which is sorted by date, not amount."
     ),
     params_model=DashboardSummaryParams,
     cache_tier="medium",
