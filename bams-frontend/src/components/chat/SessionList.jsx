@@ -35,7 +35,7 @@ const SessionList = ({
   return (
     <div className="flex h-full w-64 shrink-0 flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
       <CustomButton
-        className="w-full! justify-center!"
+        className="w-full! justify-center! h-9!"
         onClick={onNew}
         disabled={creating}
       >
@@ -50,7 +50,7 @@ const SessionList = ({
         )}
       </CustomButton>
 
-      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto border-t pt-4">
         {loading && (
           <div className="flex items-center justify-center py-8">
             <Spinner size="2" />

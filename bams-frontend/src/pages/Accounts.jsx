@@ -296,6 +296,7 @@ const Accounts = () => {
     return accounts.slice(startIndex, startIndex + pageSize);
   }, [accounts, page, pageSize]);
 
+  console.log(accounts)
   const summaryCards = useMemo(
     () => getAccountSummaryCards(accounts, { asOfDate: filters.date }),
     [accounts, filters.date],
@@ -428,7 +429,7 @@ const Accounts = () => {
         render: (account) => (
           <div className="min-w-0">
             <p className="truncate text-xs font-medium text-slate-400">
-              stmt {formatDate(account.created_at)}
+              stmt {formatDate(account.statement_updated_at)}
             </p>
             <p className="mt-1 truncate text-xs font-medium text-slate-400">
               calc {formatDate(account.calculated_updated_at)}
