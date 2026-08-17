@@ -10,6 +10,7 @@ import { transactionApi } from "../api/transactions";
 import TransactionFilters from "./TransactionFilters";
 import CustomButton from "./ui/CustomButton";
 import { useSetupStore } from "../store/setupStore";
+import { useExportContextStore } from "../store/exportContextStore";
 import { DEFAULT_TRANSACTION_FILTERS, getTransactionFilterOptionsFromBackend, formatTransactionDateRangeLabel, getDefaultTransactionDateRange } from "../lib/transactional-helper";
 import CustomDatePicker from "./ui/CustomDatePicker";
 import { ActionBadge, AmountColor, CategoryBadge, SourceBadge, TypeBadge } from "../utils/Badges";
@@ -51,6 +52,7 @@ export function AllTransactions({ user }) {
   const [appliedFilters, setAppliedFilters] = useState(initialAppliedFilters);
   const [openFilter, setOpenFilter] = useState(false);
   const refreshTrigger = useSetupStore((state) => state.refreshTrigger);
+  const setExportContext = useExportContextStore((state) => state.setExportContext);
   const [sort, setSort] = useState({ field: initialSortField, order: initialSortOrder });
   const [tabValue, setTabValue] = useState(initialTab);
 
@@ -127,6 +129,14 @@ export function AllTransactions({ user }) {
     };
     fetchTransactions();
   }, [appliedFilters, emailPage, emailPageSize, refreshTrigger, sort, dateRange, tabValue]);
+
+  // Publish what's currently on screen so the global Export Data dialog can
+  // default to "export exactly what I'm filtered to right now".
+  useEffect(() => {
+    setExportContext("transactions", {
+      filters: { ...appliedFilters, dateRange, tab: tabValue },
+    });
+  }, [appliedFilters, dateRange, tabValue, setExportContext]);
 
   const totalEmailPages = Math.max(Math.ceil(totalCount / emailPageSize), 1);
 

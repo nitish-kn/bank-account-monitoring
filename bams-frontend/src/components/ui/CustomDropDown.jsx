@@ -36,6 +36,7 @@ const CustomDropDown = ({
   side = "bottom",
   triggerClassName = "",
   contentClassName = "",
+  matchTriggerWidth = false,
   itemClassName = "",
   buttonVariant = "soft",
   buttonColor = "blue",
@@ -142,6 +143,7 @@ const CustomDropDown = ({
         align={align}
         side={side}
         className={`min-w-24 ${contentClassName}`}
+        style={matchTriggerWidth ? { width: "var(--radix-dropdown-menu-trigger-width)" } : undefined}
       >
         {showSearch ? (
           <div className="sticky top-0 z-10 border-b border-gray-100 bg-white p-2">
@@ -176,7 +178,7 @@ const CustomDropDown = ({
                   disabled={option.disabled}
                   onCheckedChange={(checked) => handleMultiValueChange(option, checked === true)}
                   onSelect={(event) => event.preventDefault()}
-                  className={itemClassName}
+                  className={`${isSelected ? "bg-blue-100/60! text-gray-900!" : ""} ${itemClassName}`}
                 >
                   {option.label}
                 </DropdownMenu.CheckboxItem>
@@ -188,7 +190,7 @@ const CustomDropDown = ({
                 key={optionValue}
                 disabled={option.disabled}
                 onSelect={() => onValueChange?.(option.value, option)}
-                className={`flex items-center justify-between gap-3 ${itemClassName}`}
+                className={`flex items-center justify-between gap-3 ${isSelected ? "bg-blue-100/60! text-gray-900!" : ""} ${itemClassName}`}
               >
                 <span>{option.label}</span>
                 {isSelected ? <Check className="h-3.5 w-3.5" /> : null}

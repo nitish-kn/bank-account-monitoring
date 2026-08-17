@@ -11,6 +11,7 @@ import Accounts from "./pages/Accounts";
 import AuditLog from "./pages/AuditLog";
 import ChatAssistant from "./pages/ChatAssistant";
 import { Bounce, ToastContainer } from "react-toastify";
+import NeedsReview from "./pages/NeedsReview";
 
 function App() {
   const { isAuthenticated, accessToken } = useAuthStore();
@@ -28,6 +29,7 @@ function App() {
         <Route path="/all-accounts" element={<Accounts />} />
         <Route path="/audit-log" element={<AuditLog />} />
         <Route path="/chat-assistant" element={<ChatAssistant />} />
+        {/* <Route path="/needs-review" element={<NeedsReview />} /> */}
       </Route>
       
       <Route

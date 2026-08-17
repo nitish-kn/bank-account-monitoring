@@ -14,6 +14,7 @@ import { cleanText, formatAmount, formatDate, formatDateAndTime, formatINR } fro
 import { getAccountBalanceTotals, getAccountSummaryCards } from "../lib/accounts-helper";
 import { getAccountFilterOptions } from "../lib/transactional-helper";
 import AddAcounts from "../components/AddAcounts";
+import { useExportContextStore } from "../store/exportContextStore";
 import { AccountCategoryBadge, AmountColor, TypeBadge } from "../utils/Badges";
 
 const ALL_FILTER_VALUE = "all";
@@ -290,6 +291,14 @@ const Accounts = () => {
 
     fetchAccounts();
   }, [filters, sort]);
+
+  const setExportContext = useExportContextStore((state) => state.setExportContext);
+
+  // Publish what's currently on screen so the global Export Data dialog can
+  // default to "export exactly what I'm filtered to right now".
+  useEffect(() => {
+    setExportContext("accounts", { filters });
+  }, [filters, setExportContext]);
 
   const paginatedAccounts = useMemo(() => {
     const startIndex = (page - 1) * pageSize;
