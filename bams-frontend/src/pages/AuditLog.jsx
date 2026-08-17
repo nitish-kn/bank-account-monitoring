@@ -10,6 +10,7 @@ import { Table } from "@radix-ui/themes";
 import CustomButton from "../components/ui/CustomButton";
 import CustomDatePicker from "../components/ui/CustomDatePicker";
 import { getDefaultTransactionDateRange, formatTransactionDateRangeLabel } from "../lib/transactional-helper";
+import { useExportContextStore } from "../store/exportContextStore";
 
 const fieldLabels = {
   category: "Category",
@@ -88,6 +89,21 @@ const AuditLog = () => {
   useEffect(() => {
     fetchAuditLogs();
   }, [page, pageSize, operatorFilter, dateRange]);
+
+  const setExportContext = useExportContextStore((state) => state.setExportContext);
+
+  // Publish what's currently on screen so the global Export Data dialog can
+  // default to "export exactly what I'm filtered to right now".
+  useEffect(() => {
+    setExportContext("audit-log", {
+      filters: {
+        search: searchTerm.trim() || undefined,
+        changed_by: operatorFilter.trim() || undefined,
+        start_date: dateRange.startDate,
+        end_date: dateRange.endDate,
+      },
+    });
+  }, [searchTerm, operatorFilter, dateRange, setExportContext]);
 
   const handleSearchSubmit = (e) => {
     if (e) e.preventDefault();

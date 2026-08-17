@@ -3,8 +3,9 @@ import { useLocation } from "react-router-dom";
 import CustomButton from "./ui/CustomButton";
 import { Badge, Spinner } from "@radix-ui/themes";
 import { formatRelativeSyncTime } from "../lib/helper";
-import { ChevronDown, Menu, Upload, CloudUpload, FileText, X } from "lucide-react";
+import { ChevronDown, Menu, Upload, CloudUpload, FileText, X, Download } from "lucide-react";
 import DialogPopup from "./ui/DialogPopup";
+import ExportDataDialog from "./ui/ExportDataDialog";
 import api from "../lib/api";
 import { toast } from "react-toastify";
 import { useSetupStore } from "../store/setupStore";
@@ -29,9 +30,8 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
   const triggerRefresh = useSetupStore((state) => state.triggerRefresh);
   const pathname = useLocation().pathname.split("/")[1];
   const pageTitle = pathname[0].toUpperCase() + pathname.slice(1);
-  const [now, setNow] = useState(() => new Date());
-  const syncLabel = formatRelativeSyncTime(lastSyncAt, now);
   const [showSyncTime, setShowSyncTime] = useState(false);
+  const [openExportDialog, setOpenExportDialog] = useState(false);
   const showSyncBadgeRef = useRef(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -103,7 +103,6 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
     }
   };
 
-  const btntext = pageTitle === "Dashboard" ? "Sync your data" : "Refresh data";
 
   useEffect(() => {
     if (!showSyncTime) return undefined;
@@ -174,16 +173,6 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
   }, [statementJobId, triggerRefresh]);
 
 
-  // useEffect(() => {
-  //   if (!lastSyncAt) return undefined;
-
-  //   setNow(new Date());
-  //   const intervalId = window.setInterval(() => {
-  //     setNow(new Date());
-  //   }, 30000);
-
-  //   return () => window.clearInterval(intervalId);
-  // }, [lastSyncAt]);
 
   return (
     <>
@@ -215,15 +204,6 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
             )}
           </CustomButton>
 
-          {/* {syncLabel && (
-            <Badge
-              radius="large"
-              variant="outline"
-              className="hidden! md:flex! whitespace-nowrap text-xs! p-2! font-medium!"
-            >
-              {syncLabel}
-            </Badge>
-          )} */}
 
           <CustomButton
             variant="soft"
@@ -237,9 +217,18 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
                 Syncing...
               </span>
             ) : (
-              btntext
+              "Sync your data"
             )}
           </CustomButton>
+
+          <CustomButton
+            variant="soft"
+            onClick={() => setOpenExportDialog(prev => !prev)}
+            className="cursor-pointer text-center"
+          >
+            <Download className="h-4 w-4" /> Export Data
+          </CustomButton>
+
 
           {/* <CustomButton color="gray" variant="ghost" className="ml-1! flex! md:hidden!" onClick={() => setShowSyncTime(prev => !prev)}>
             <ChevronDown className="h-4 w-4" />
@@ -337,6 +326,8 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
           </div>
         </div>
       </DialogPopup>
+
+      <ExportDataDialog open={openExportDialog} setOpen={setOpenExportDialog} />
     </>
   );
 };
