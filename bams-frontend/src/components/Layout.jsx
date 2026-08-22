@@ -9,45 +9,45 @@ import api from "../lib/api";
 import { SetupFlowOverlay } from "./SetupFlowOverlay";
 
 const Layout = () => {
-  const { user, accessToken, setUser } = useAuthStore();
-  const { 
+  const { org, accessToken, setOrg } = useAuthStore();
+  const {
     isSyncing, lastSyncAt, syncDashboard, startSyncStatusPolling,
-    initializeSetup, isLoading, error: setupError, message, stepHistory, 
-    isSetupComplete, hasDismissedSetup, dismissSetupSuccess, retrySetup 
+    initializeSetup, isLoading, error: setupError, message, stepHistory,
+    isSetupComplete, hasDismissedSetup, dismissSetupSuccess, retrySetup
   } = useSetupStore();
-  
+
   const [showMenu, setShowMenu] = useState(false);
-  const effectiveLastSyncAt = lastSyncAt || user?.last_synced_at;
-  const hasCompletedSetup = user?.is_setup_completed === true || user?.is_setup_completed === "true";
-  const userSyncStatus = user?.sync_status || "not_started";
+  const effectiveLastSyncAt = lastSyncAt || org?.last_synced_at;
+  const hasCompletedSetup = org?.is_setup_completed === true || org?.is_setup_completed === "true";
+  const orgSyncStatus = org?.sync_status || "not_started";
   const showMenuRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   // Determine which permissions are missing
-  const hasEmailPermissions = user?.has_email_permissions === true || user?.has_email_permissions === "true";
-  const hasSheetsPermissions = user?.has_sheets_permissions === true || user?.has_sheets_permissions === "true";
+  const hasEmailPermissions = org?.has_email_permissions === true || org?.has_email_permissions === "true";
+  const hasSheetsPermissions = org?.has_sheets_permissions === true || org?.has_sheets_permissions === "true";
   const needsEmail = !hasEmailPermissions;
   const needsSheets = !hasSheetsPermissions;
   const permissionsMissing = needsEmail || needsSheets;
 
-  // For the first time login - Auto-start setup when permissions are granted and the user has not completed setup yet
+  // For the first time login - Auto-start setup when permissions are granted and the org has not completed setup yet
   useEffect(() => {
-    if ( user && !hasCompletedSetup && !permissionsMissing && !isSetupComplete && !isLoading && !setupError ) {
+    if ( org && !hasCompletedSetup && !permissionsMissing && !isSetupComplete && !isLoading && !setupError ) {
       initializeSetup();
     }
-  }, [ user, hasCompletedSetup, permissionsMissing, isSetupComplete, isLoading, setupError, initializeSetup, ]);
+  }, [ org, hasCompletedSetup, permissionsMissing, isSetupComplete, isLoading, setupError, initializeSetup, ]);
 
   // Keep progress polling alive for setup/manual syncs that are already running.
   // Returning users should sync only when they click the refresh button.
   useEffect(() => {
-    if (!hasCompletedSetup || !accessToken || userSyncStatus !== "running") {
+    if (!hasCompletedSetup || !accessToken || orgSyncStatus !== "running") {
       return;
     }
 
     startSyncStatusPolling();
-  }, [accessToken, hasCompletedSetup, startSyncStatusPolling, userSyncStatus]);
+  }, [accessToken, hasCompletedSetup, startSyncStatusPolling, orgSyncStatus]);
 
   // For users who haven't given permissions on login, Handle permission grant with both email and sheets scopes
   const handlePermissionGrant = async (code) => {
@@ -56,8 +56,8 @@ const Layout = () => {
 
     try {
       const response = await api.post("/auth/permission", { code });
-      const updatedUser = response?.data?.user;
-      setUser(updatedUser);
+      const updatedOrg = response?.data?.org;
+      setOrg(updatedOrg);
     } catch (err) {
       console.error("Permission grant failed:", err);
       setError("Unable to update permissions. Please try again.");
@@ -77,9 +77,9 @@ const Layout = () => {
       "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets",
   });
 
-  // Check if user is new or hasn't completed setup yet
+  // Check if org is new or hasn't completed setup yet
   const showSetupOverlay = Boolean(
-    user && (!hasCompletedSetup || (isSetupComplete && !hasDismissedSetup)),
+    org && (!hasCompletedSetup || (isSetupComplete && !hasDismissedSetup)),
   );
 
   // For sidebar to close in small screens, when user touches out of sidebar
@@ -106,7 +106,7 @@ const Layout = () => {
       
       <div className="flex w-full">
         <div className="hidden lg:flex">
-          <Sidebar picture={user?.picture} name={user?.name} lastSyncAt={effectiveLastSyncAt}/>
+          <Sidebar picture={org?.picture} name={org?.name} lastSyncAt={effectiveLastSyncAt}/>
         </div>
 
         {showMenu && (
@@ -116,7 +116,7 @@ const Layout = () => {
             
             {/* Sidebar from the left */}
             <div ref={showMenuRef} className="fixed inset-y-0 left-0 bg-white shadow-xl z-50 lg:hidden animate-in slide-in-from-left-full duration-300">
-              <Sidebar picture={user?.picture} name={user?.name} onClose={() => setShowMenu(false)} />
+              <Sidebar picture={org?.picture} name={org?.name} onClose={() => setShowMenu(false)} />
             </div>
           </>
         )}
@@ -137,7 +137,7 @@ const Layout = () => {
       
       {showSetupOverlay && (
         <SetupFlowOverlay
-          user={user}
+          org={org}
           permissionsMissing={permissionsMissing}
           needsEmail={needsEmail}
           needsSheets={needsSheets}

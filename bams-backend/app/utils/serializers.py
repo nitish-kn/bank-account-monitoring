@@ -1,40 +1,40 @@
 from ..models.family import Family
 from ..models.invites import Invite, InviteType
-from ..models.user import User
+from ..models.organization import Organization
 from .date_utils import datetime_to_iso
 
 
-def serialize_basic_user(user: User | None, include_family_id: bool = False) -> dict | None:
-    if not user:
+def serialize_basic_org(org: Organization | None, include_family_id: bool = False) -> dict | None:
+    if not org:
         return None
 
     serialized = {
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "picture": user.picture,
+        "id": org.id,
+        "email": org.email,
+        "name": org.name,
+        "picture": org.picture,
     }
 
     if include_family_id:
-        serialized["family_id"] = user.family_id
+        serialized["family_id"] = org.family_id
 
     return serialized
 
 
-def serialize_auth_user(user: User) -> dict:
+def serialize_auth_org(org: Organization) -> dict:
     return {
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "picture": user.picture,
-        "has_email_permissions": user.has_email_permissions,
-        "has_sheets_permissions": user.has_sheets_permissions,
-        "is_setup_completed": user.is_setup_completed,
-        "spreadsheet_id": user.spreadsheet_id,
-        "last_synced_at": datetime_to_iso(user.last_synced_at),
-        "last_synced_status": user.last_synced_status,
-        "last_synced_email_date": datetime_to_iso(user.last_synced_email_date),
-        "sync_status": user.sync_status,
+        "id": org.id,
+        "email": org.email,
+        "name": org.name,
+        "picture": org.picture,
+        "has_email_permissions": org.has_email_permissions,
+        "has_sheets_permissions": org.has_sheets_permissions,
+        "is_setup_completed": org.is_setup_completed,
+        "spreadsheet_id": org.spreadsheet_id,
+        "last_synced_at": datetime_to_iso(org.last_synced_at),
+        "last_synced_status": org.last_synced_status,
+        "last_synced_email_date": datetime_to_iso(org.last_synced_email_date),
+        "sync_status": org.sync_status,
     }
 
 
@@ -45,32 +45,32 @@ def serialize_family(family: Family | None) -> dict | None:
     return {
         "id": family.id,
         "name": family.name,
-        "owner_user_id": family.owner_user_id,
+        "owner_org_id": family.owner_org_id,
     }
 
 
-def serialize_family_member(user: User) -> dict:
+def serialize_family_member(org: Organization) -> dict:
     return {
-        "id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "picture": user.picture,
-        "spreadsheet_id": user.spreadsheet_id,
-        "is_owner": user.family and user.family.owner_user_id == user.id,
+        "id": org.id,
+        "email": org.email,
+        "name": org.name,
+        "picture": org.picture,
+        "spreadsheet_id": org.spreadsheet_id,
+        "is_owner": org.family and org.family.owner_org_id == org.id,
     }
 
 
 def serialize_invite(invite: Invite) -> dict:
     invite_type = invite.invite_type or InviteType.FAMILY_INVITE.value
-    impacted_user = (
-        invite.invited_user
+    impacted_org = (
+        invite.invited_org
         if invite_type == InviteType.FAMILY_INVITE.value
         else invite.invited_by
     )
     requires_family_change = bool(
-        impacted_user
-        and impacted_user.family_id
-        and impacted_user.family_id != invite.family_id
+        impacted_org
+        and impacted_org.family_id
+        and impacted_org.family_id != invite.family_id
     )
 
     return {
@@ -85,6 +85,6 @@ def serialize_invite(invite: Invite) -> dict:
         "accepted_at": datetime_to_iso(invite.accepted_at),
         "declined_at": datetime_to_iso(invite.declined_at),
         "family": serialize_family(invite.family),
-        "invited_by": serialize_basic_user(invite.invited_by, include_family_id=True),
-        "invited_user": serialize_basic_user(invite.invited_user, include_family_id=True),
+        "invited_by": serialize_basic_org(invite.invited_by, include_family_id=True),
+        "invited_org": serialize_basic_org(invite.invited_org, include_family_id=True),
     }

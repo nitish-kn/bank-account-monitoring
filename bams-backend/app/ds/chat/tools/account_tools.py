@@ -31,7 +31,7 @@ def _to_decimal(value):
     cache_tier="short",
 )
 def get_account_balance(ctx: ToolContext, account_identifier: str, as_of_date: str | None = None) -> dict:
-    account = get_account_balance_as_of(ctx.db, ctx.user_id, account_identifier, as_of_date)
+    account = get_account_balance_as_of(ctx.db, ctx.org_id, account_identifier, as_of_date)
     if not account:
         raise ToolError(f"No account found matching '{account_identifier}'.")
     return account
@@ -58,7 +58,7 @@ def list_accounts(ctx: ToolContext, bank: str | None = None, account_type: str |
     if account_type:
         filters["accountType"] = account_type
 
-    db_result = get_paginated_accounts(ctx.db, ctx.user_id, filters, page=1, page_size=500)
+    db_result = get_paginated_accounts(ctx.db, ctx.org_id, filters, page=1, page_size=500)
     db_accounts = db_result.get("accounts", [])
     known_last4 = {
         digits[-4:]
@@ -136,7 +136,7 @@ def list_accounts(ctx: ToolContext, bank: str | None = None, account_type: str |
     cache_tier="short",
 )
 def get_account_delta(ctx: ToolContext, account_identifier: str) -> dict:
-    account = get_account_balance_as_of(ctx.db, ctx.user_id, account_identifier)
+    account = get_account_balance_as_of(ctx.db, ctx.org_id, account_identifier)
     if not account:
         raise ToolError(f"No account found matching '{account_identifier}'.")
     return {

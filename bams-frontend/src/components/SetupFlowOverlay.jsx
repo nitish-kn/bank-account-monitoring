@@ -6,7 +6,7 @@ import { SetupError } from "./setup/SetupError";
 import { SetupSuccess } from "./setup/SetupSuccess";
 
 export function SetupFlowOverlay({
-  user,
+  org,
   permissionsMissing,
   needsEmail,
   needsSheets,
@@ -40,7 +40,7 @@ export function SetupFlowOverlay({
 
     return (
       <PermissionRequest
-        user={user}
+        org={org}
         permissionsMissing={permissionsMissing}
         needsEmail={needsEmail}
         needsSheets={needsSheets}

@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Spinner, Table } from "@radix-ui/themes";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, Filter, Plus, RotateCcw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, Filter, Plus, RotateCcw, Search } from "lucide-react";
 
 import { accountsApi } from "../api/accounts";
 import CustomButton from "../components/ui/CustomButton";
 import CustomDropDown from "../components/ui/CustomDropDown";
-import CustomSearchBar from "../components/ui/CustomSearchBar";
+import CustomInput from "../components/ui/CustomInput";
 import CustomTable from "../components/ui/CustomTable";
 import DataCard from "../components/ui/DataCard";
 import Pagination from "../components/Pagination";
@@ -635,12 +635,13 @@ const Accounts = () => {
           <>
             <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-9">
               <div className="xl:col-span-2">
-                <CustomSearchBar
+                <CustomInput
                   value={draftFilters.search}
                   onChange={(value) => updateDraftFilter("search", value)}
                   placeholder="Search account / bank / holder"
+                  icon={Search}
                   iconPosition="right"
-                  inputClassName="rounded-md border-gray-200 pl-3 pr-10"
+                  inputClassName="rounded-md border-gray-200"
                 />
               </div>
 

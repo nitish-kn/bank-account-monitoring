@@ -19,7 +19,7 @@ const tabTriggerClassName = "flex-1! justify-center! bg-white! hover:bg-gray-50!
 
 const isDateOnlyValue = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 
-export function AllTransactions({ user }) {
+export function AllTransactions({ org }) {
   const [searchParams] = useSearchParams();
   const initialSortField = searchParams.get("sortField") || "date";
   const initialSortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
@@ -393,7 +393,7 @@ export function AllTransactions({ user }) {
               <span className="hidden sm:flex">Filter</span>
             </CustomButton>
 
-            {user?.spreadsheet_id && (
+            {org?.spreadsheet_id && (
               <Button
                 size="2"
                 color="green"
@@ -402,7 +402,7 @@ export function AllTransactions({ user }) {
                 className="w-full md:w-auto"
                 onClick={() => {
                   window.open(
-                    `https://docs.google.com/spreadsheets/d/${user?.spreadsheet_id}`,
+                    `https://docs.google.com/spreadsheets/d/${org?.spreadsheet_id}`,
                     "_blank",
                     "noopener,noreferrer",
                   );

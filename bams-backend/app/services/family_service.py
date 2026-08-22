@@ -2,25 +2,25 @@ from googleapiclient.discovery import build
 from sqlalchemy.orm import Session
 
 from ..models.family import Family
-from ..models.user import User
+from ..models.organization import Organization
 from ..utils.email_utils import email_timestamp, parse_sheet_email_row
 from ..utils.serializers import serialize_family, serialize_family_member
 from .credentials import build_credentials
 from ..utils.sheets_utils import _get_sheet_title
 
 
-def get_family_members_for_user(current_user: User, db: Session) -> dict:
-    if not current_user.family_id:
+def get_family_members_for_org(current_org: Organization, db: Session) -> dict:
+    if not current_org.family_id:
         return {
             "family": None,
             "members": [],
         }
 
-    family = db.query(Family).filter(Family.id == current_user.family_id).first()
+    family = db.query(Family).filter(Family.id == current_org.family_id).first()
     members = (
-        db.query(User)
-        .filter(User.family_id == current_user.family_id)
-        .order_by(User.name.asc(), User.email.asc())
+        db.query(Organization)
+        .filter(Organization.family_id == current_org.family_id)
+        .order_by(Organization.name.asc(), Organization.email.asc())
         .all()
     )
 
@@ -30,7 +30,7 @@ def get_family_members_for_user(current_user: User, db: Session) -> dict:
     }
 
 
-def _parse_sheet_row_to_email(row: list[str], member: User) -> dict | None:
+def _parse_sheet_row_to_email(row: list[str], member: Organization) -> dict | None:
     """Parse a sheet row into email format and tag with member info."""
     return parse_sheet_email_row(row, {
         "member_id": member.id,
@@ -40,7 +40,7 @@ def _parse_sheet_row_to_email(row: list[str], member: User) -> dict | None:
     })
 
 
-def _read_member_sheet_data(member: User) -> list[dict]:
+def _read_member_sheet_data(member: Organization) -> list[dict]:
     """Read email data from a family member's Google Sheet."""
     if not member.is_setup_completed or not member.spreadsheet_id:
         return []
@@ -67,18 +67,18 @@ def _read_member_sheet_data(member: User) -> list[dict]:
         return emails
     except Exception as e:
         # Log error but don't crash - skip this member gracefully
-        print(f"Failed to read sheet data for user {member.email}: {str(e)}")
+        print(f"Failed to read sheet data for org {member.email}: {str(e)}")
         return []
 
 
-def get_family_emails_for_user(current_user: User, db: Session) -> dict:
+def get_family_emails_for_org(current_org: Organization, db: Session) -> dict:
     """Fetch combined email data from all family members' Google Sheets.
     
     Returns:
         dict with 'emails' key containing merged, sorted email list with member attribution,
         and 'failed_members' key containing members whose data couldn't be fetched.
     """
-    if not current_user.family_id:
+    if not current_org.family_id:
         return {
             "emails": [],
             "failed_members": [],
@@ -86,13 +86,13 @@ def get_family_emails_for_user(current_user: User, db: Session) -> dict:
     
     # Get all family members who have completed setup
     family_members = (
-        db.query(User)
+        db.query(Organization)
         .filter(
-            User.family_id == current_user.family_id,
-            User.is_setup_completed == True,
-            User.spreadsheet_id.isnot(None)
+            Organization.family_id == current_org.family_id,
+            Organization.is_setup_completed == True,
+            Organization.spreadsheet_id.isnot(None)
         )
-        .order_by(User.name.asc(), User.email.asc())
+        .order_by(Organization.name.asc(), Organization.email.asc())
         .all()
     )
     
@@ -107,7 +107,7 @@ def get_family_emails_for_user(current_user: User, db: Session) -> dict:
         elif member.spreadsheet_id:
             # Only mark as failed if they have a spreadsheet_id but we couldn't read it
             failed_members.append({
-                "user_id": member.id,
+                "org_id": member.id,
                 "email": member.email,
                 "name": member.name or member.email,
             })

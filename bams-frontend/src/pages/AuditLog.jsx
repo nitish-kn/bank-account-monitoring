@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import CustomTable from "../components/ui/CustomTable";
-import CustomSearchBar from "../components/ui/CustomSearchBar";
+import CustomInput from "../components/ui/CustomInput";
 import Pagination from "../components/Pagination";
 import DialogPopup from "../components/ui/DialogPopup";
 import { transactionApi } from "../api/transactions";
 import { formatDateAndTime } from "../lib/helper";
-import { History, ShieldAlert, User, Globe, Calendar, ChevronDown, ChevronUp, Eye, Code, Maximize2 } from "lucide-react";
+import { History, ShieldAlert, User, Globe, Calendar, ChevronDown, ChevronUp, Eye, Code, Maximize2, Search } from "lucide-react";
 import { Table } from "@radix-ui/themes";
 import CustomButton from "../components/ui/CustomButton";
 import CustomDatePicker from "../components/ui/CustomDatePicker";
@@ -276,17 +276,19 @@ const AuditLog = () => {
         {/* Filters Section */}
         <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-3 items-end">
           <div className="flex-1 w-full">
-            <CustomSearchBar
+            <CustomInput
               value={searchTerm}
               onChange={(val) => setSearchTerm(val)}
               placeholder="Search reason or IP address..."
+              icon={Search}
             />
           </div>
           <div className="w-full sm:w-60">
-            <CustomSearchBar
+            <CustomInput
               value={operatorFilter}
               onChange={(val) => setOperatorFilter(val)}
               placeholder="Filter by operator name..."
+              icon={Search}
             />
           </div>
 

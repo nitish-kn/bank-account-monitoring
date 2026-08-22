@@ -3,7 +3,7 @@ Manual, throwaway test script for the agentic chat layer backend milestone.
 Not wired into CI -- run by hand against a live `uvicorn app.main:app` instance.
 
 Exercises: session lifecycle, a spread of basic/medium/complex queries across
-one session (including follow-ups that depend on prior turns), cross-user
+one session (including follow-ups that depend on prior turns), cross-org
 session isolation, and the chat_tool_calls debug/cache log.
 
 Usage (from bams-backend/, with the server already running):
@@ -18,13 +18,13 @@ import requests
 from ..core.auth import create_access_token
 from ..database import SessionLocal
 from ..models.chat_tool_call import ChatToolCall
-from ..models.user import User
+from ..models.organization import Organization
 
 BASE_URL = "http://127.0.0.1:8000"
 
 
-def _token_for(user_id: int) -> str:
-    return create_access_token({"sub": str(user_id)})
+def _token_for(org_id: int) -> str:
+    return create_access_token({"sub": str(org_id)})
 
 
 def _headers(token: str) -> dict:
@@ -54,13 +54,13 @@ def _ask(session_id: str, token: str, message: str) -> dict:
 
 def main() -> None:
     db = SessionLocal()
-    primary_user = db.query(User).order_by(User.id.asc()).first()
-    if not primary_user:
-        print("No users in the database -- nothing to test against.")
+    primary_org = db.query(Organization).order_by(Organization.id.asc()).first()
+    if not primary_org:
+        print("No orgs in the database -- nothing to test against.")
         sys.exit(1)
 
-    print(f"Testing as user_id={primary_user.id} ({primary_user.email})")
-    token = _token_for(primary_user.id)
+    print(f"Testing as org_id={primary_org.id} ({primary_org.email})")
+    token = _token_for(primary_org.id)
 
     # --- Session lifecycle -------------------------------------------------
     _print_step("Session lifecycle")
@@ -105,21 +105,21 @@ def main() -> None:
     _print_step("Ambiguous question handling")
     _ask(session_id, token, "What's my card balance?")
 
-    # --- Cross-user isolation -----------------------------------------------
-    _print_step("Cross-user isolation")
-    other_user = User(
+    # --- Cross-org isolation -----------------------------------------------
+    _print_step("Cross-org isolation")
+    other_org = Organization(
         google_id=f"chat-test-{uuid.uuid4()}",
         email=f"chat-test-{uuid.uuid4()}@example.invalid",
-        name="Chat Test Isolation User",
+        name="Chat Test Isolation Organization",
     )
-    db.add(other_user)
+    db.add(other_org)
     db.commit()
-    db.refresh(other_user)
-    other_token = _token_for(other_user.id)
+    db.refresh(other_org)
+    other_token = _token_for(other_org.id)
 
     try:
         resp = requests.get(f"{BASE_URL}/api/chat/sessions/{session_id}", headers=_headers(other_token))
-        assert resp.status_code == 404, f"expected 404 leaking session across users, got {resp.status_code}"
+        assert resp.status_code == 404, f"expected 404 leaking session across orgs, got {resp.status_code}"
         print("Foreign GET session -> 404: OK")
 
         resp = requests.post(
@@ -127,10 +127,10 @@ def main() -> None:
             json={"message": "leak test"},
             headers=_headers(other_token),
         )
-        assert resp.status_code == 404, f"expected 404 posting into another user's session, got {resp.status_code}"
+        assert resp.status_code == 404, f"expected 404 posting into another org's session, got {resp.status_code}"
         print("Foreign POST message -> 404: OK")
     finally:
-        db.delete(other_user)
+        db.delete(other_org)
         db.commit()
 
     # --- Debug/replay + cache check -----------------------------------------

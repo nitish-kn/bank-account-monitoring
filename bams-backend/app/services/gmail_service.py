@@ -26,7 +26,7 @@ from ..core.constants import (
     RETRYABLE_STATUS_CODES,
     TRACKED_EMAIL_DOMAINS,
 )
-from ..models.user import User
+from ..models.organization import Organization
 from .credentials import build_credentials, get_token_scopes_from_tokeninfo
 
 logger = logging.getLogger(__name__)
@@ -295,9 +295,9 @@ def _parse_message_detail(detail: dict) -> dict | None:
 
 
 # ------------------ Main functions ----------------
-def verify_gmail_access(user: User, db=None) -> dict:
-    """Verify if the user's access token has Gmail read permissions and return the scopes and access status."""
-    creds = build_credentials(user)
+def verify_gmail_access(org: Organization, db=None) -> dict:
+    """Verify if the org's access token has Gmail read permissions and return the scopes and access status."""
+    creds = build_credentials(org)
     headers = _auth_headers_for_credentials(creds)
     if not headers:
         return {"gmail_read_access": False, "scopes": []}
@@ -306,11 +306,11 @@ def verify_gmail_access(user: User, db=None) -> dict:
     has_access = GMAIL_READ_SCOPE in scopes
     return {"gmail_read_access": has_access, "scopes": scopes}
 
-# Function to fetch emails for returning users
-def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) -> dict:
-    """Fetch the user's most recent Gmail emails from tracked sender domains."""
+# Function to fetch emails for returning orgs
+def fetch_org_emails(org: Organization, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) -> dict:
+    """Fetch the org's most recent Gmail emails from tracked sender domains."""
     
-    creds = build_credentials(user)
+    creds = build_credentials(org)
     headers = _auth_headers_for_credentials(creds)
     if not headers:
         return {"emails": [], "message": "No access token available."}
@@ -330,12 +330,12 @@ def fetch_user_emails(user: User, max_results: int = DEFAULT_EMAIL_FETCH_LIMIT) 
     if not messages:
         return {"emails": [], "message": "No tracked emails found in this account."}
 
-    parsed_emails = hydrate_user_message_page(user, messages)
+    parsed_emails = hydrate_org_message_page(org, messages)
 
     return {"emails": parsed_emails}
 
-def iter_user_message_pages(
-    user: User,
+def iter_org_message_pages(
+    org: Organization,
     days: int = GMAIL_BACKFILL_DAYS,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
@@ -344,7 +344,7 @@ def iter_user_message_pages(
     """Yield sparse Gmail message pages before hydrating full bodies.
     It only fetches message IDs not whole body or whole object, So we can check DB, what msg id's are new and only hydrate for those ids only"""
 
-    creds = build_credentials(user)
+    creds = build_credentials(org)
     if not _tracked_domains():
         return
 
@@ -390,8 +390,8 @@ def iter_user_message_pages(
         time.sleep(PAGE_THROTTLE_SECONDS)
 
 
-def hydrate_user_message_page(
-    user: User,
+def hydrate_org_message_page(
+    org: Organization,
     messages: list[dict],
     detail_workers: int = GMAIL_DETAIL_WORKERS,
 ) -> list[dict]:
@@ -400,7 +400,7 @@ def hydrate_user_message_page(
     if not messages:
         return []
 
-    creds = build_credentials(user)
+    creds = build_credentials(org)
     headers = _auth_headers_for_credentials(creds)
     if not headers:
         return []
@@ -424,9 +424,9 @@ def hydrate_user_message_page(
     return parsed_emails
 
 
-def get_latest_gmail_message_id(user: User) -> str | None:
+def get_latest_gmail_message_id(org: Organization) -> str | None:
     """Fetch only the single most recent message ID from Gmail for tracked domains."""
-    creds = build_credentials(user)
+    creds = build_credentials(org)
     headers = _auth_headers_for_credentials(creds)
     if not headers:
         return None
@@ -446,9 +446,9 @@ def get_latest_gmail_message_id(user: User) -> str | None:
     return messages[0].get("id")
 
 
-def fetch_gmail_attachment_bytes(user: User, message_id: str, attachment_id: str) -> bytes:
+def fetch_gmail_attachment_bytes(org: Organization, message_id: str, attachment_id: str) -> bytes:
     """Fetch the raw binary bytes of a specific email attachment on-demand from the Gmail API."""
-    creds = build_credentials(user)
+    creds = build_credentials(org)
     headers = _auth_headers_for_credentials(creds)
     if not headers:
         raise RuntimeError("No access token available.")

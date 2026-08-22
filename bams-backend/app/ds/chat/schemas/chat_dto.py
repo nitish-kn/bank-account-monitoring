@@ -6,12 +6,12 @@ from sqlalchemy.orm import Session
 @dataclass
 class ToolContext:
     """Server-constructed, never model-suppliable. Built exactly once per
-    turn from the authenticated user -- no tool's JSON schema exposes a
-    user_id field, so there's no argument path for a tool call to target
-    another user's data."""
+    turn from the authenticated org -- no tool's JSON schema exposes a
+    org_id field, so there's no argument path for a tool call to target
+    another org's data."""
 
     db: Session
-    user_id: int
+    org_id: int
 
 
 @dataclass

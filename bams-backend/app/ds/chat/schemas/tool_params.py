@@ -77,7 +77,7 @@ class BalanceDropParams(BaseModel):
     end_date: str = Field(..., description="End date (YYYY-MM-DD) of the window.")
     scope: Optional[list[str]] = Field(
         None, description="Optional list of natural-language account identifiers to restrict the scan to. "
-        "Omit to scan all of the user's accounts."
+        "Omit to scan all of the org's accounts."
     )
 
 
@@ -87,6 +87,6 @@ class ListCreditCardsParams(BaseModel):
 
 class ResolveAccountParams(BaseModel):
     query_text: str = Field(
-        ..., description="The vague account/card reference from the user's message, e.g. 'my HDFC card' "
+        ..., description="The vague account/card reference from the org's message, e.g. 'my HDFC card' "
         "or 'axis salary account'."
     )

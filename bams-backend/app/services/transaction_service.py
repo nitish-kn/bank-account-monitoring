@@ -10,7 +10,7 @@ from ..utils.transaction_utils import normalize_txn_via
 from fastapi import HTTPException
 from ..models.transaction_logs import TransactionLog
 
-from ..models.user import User
+from ..models.organization import Organization
 from ..utils.db_utils import build_transaction_dedupe_key
 
 def _lower_text(column):
@@ -122,7 +122,7 @@ def apply_transaction_filters(query, filters: dict):
     elif tab_val == "transactions":
         query = query.filter(~_txn_via_is("Credit Card", "FASTag"))
 
-    # Ensure user_id is already applied by the caller
+    # Ensure org_id is already applied by the caller
     
     # Text Search (search)
     search_term = filters.get("search")
@@ -253,11 +253,11 @@ def apply_transaction_filters(query, filters: dict):
 
 def build_base_query(
     db: Session,
-    user_id: int,
+    org_id: int,
     include_review: bool = False,
     only_review: bool = False,
 ):
-    query = db.query(Transactions).filter(Transactions.user_id == user_id)
+    query = db.query(Transactions).filter(Transactions.org_id == org_id)
 
     if only_review:
         return query.filter(False)
@@ -280,8 +280,8 @@ SORTABLE_FIELDS = {
     "source": Transactions.source,
 }
 
-def get_paginated_transactions(db: Session, user_id: int, filters: dict, page: int, page_size: int, sort: dict = None):
-    query = build_base_query(db, user_id)
+def get_paginated_transactions(db: Session, org_id: int, filters: dict, page: int, page_size: int, sort: dict = None):
+    query = build_base_query(db, org_id)
     query = apply_transaction_filters(query, filters)
     
     total_count = query.count()
@@ -305,8 +305,8 @@ def get_paginated_transactions(db: Session, user_id: int, filters: dict, page: i
         "totalCount": total_count
     }
 
-def get_dashboard_summary(db: Session, user_id: int, filters: dict):
-    query = apply_transaction_filters(build_base_query(db, user_id), filters)
+def get_dashboard_summary(db: Session, org_id: int, filters: dict):
+    query = apply_transaction_filters(build_base_query(db, org_id), filters)
     
     # 1. Basic Stats
     stats = query.with_entities(
@@ -470,11 +470,11 @@ def get_dashboard_summary(db: Session, user_id: int, filters: dict):
         "transactionsByMode": modes_data
     }
 
-def get_category_breakdown(db: Session, user_id: int, filters: dict, txn_type: str | None = None) -> list[dict]:
+def get_category_breakdown(db: Session, org_id: int, filters: dict, txn_type: str | None = None) -> list[dict]:
     """Full (non-top-5) category breakdown -- get_dashboard_summary only returns
     the top 5 categories per txn_type, which undercounts accounts with more
     categories than that."""
-    query = apply_transaction_filters(build_base_query(db, user_id), filters)
+    query = apply_transaction_filters(build_base_query(db, org_id), filters)
     if txn_type:
         query = query.filter(func.lower(Transactions.txn_type) == txn_type.lower())
 
@@ -496,10 +496,10 @@ def get_category_breakdown(db: Session, user_id: int, filters: dict, txn_type: s
     ]
 
 
-def get_via_breakdown(db: Session, user_id: int, filters: dict) -> list[dict]:
+def get_via_breakdown(db: Session, org_id: int, filters: dict) -> list[dict]:
     """Bank-transfer vs credit-card vs FASTag totals, reusing the same
     txn_via normalization used for tab filtering elsewhere in this module."""
-    query = apply_transaction_filters(build_base_query(db, user_id), filters)
+    query = apply_transaction_filters(build_base_query(db, org_id), filters)
     via_expr = _normalized_txn_via_expr()
 
     rows = query.with_entities(
@@ -520,8 +520,8 @@ def get_via_breakdown(db: Session, user_id: int, filters: dict) -> list[dict]:
     ]
 
 
-def get_filter_options(db: Session, user_id: int):
-    query = build_base_query(db, user_id)
+def get_filter_options(db: Session, org_id: int):
+    query = build_base_query(db, org_id)
 
     def _distinct_values(column):
         values = {
@@ -541,10 +541,10 @@ def get_filter_options(db: Session, user_id: int):
 
 
 
-def update_transaction(db: Session, user_id: int, txn_id: str, payload, ip_address: str) -> dict:
+def update_transaction(db: Session, org_id: int, txn_id: str, payload, ip_address: str) -> dict:
     transaction = db.query(Transactions).filter(
         Transactions.id == txn_id,
-        Transactions.user_id == user_id
+        Transactions.org_id == org_id
     ).first()
 
     if not transaction:
@@ -607,12 +607,12 @@ def update_transaction(db: Session, user_id: int, txn_id: str, payload, ip_addre
     try:
         # Recalculate dedupe key
         updated_txn_dict = transaction_to_schema_dict(transaction)
-        new_dedupe_key = build_transaction_dedupe_key(updated_txn_dict, user_id)
+        new_dedupe_key = build_transaction_dedupe_key(updated_txn_dict, org_id)
         transaction.dedupe_key = new_dedupe_key
 
         # Create log entry
         log_entry = TransactionLog(
-            user_id=user_id,
+            org_id=org_id,
             txn_id=txn_id,
             changes=changes,
             reason=payload.reason,
@@ -631,9 +631,9 @@ def update_transaction(db: Session, user_id: int, txn_id: str, payload, ip_addre
         raise HTTPException(status_code=500, detail=f"Failed to update transaction: {str(e)}")
 
     # Propagate changes to Google Sheets
-    user = db.query(User).filter(User.id == user_id).first()
-    if user and user.spreadsheet_id:
-        _update_sheets_for_transaction(user, old_dedupe_key, transaction)
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if org and org.spreadsheet_id:
+        _update_sheets_for_transaction(org, old_dedupe_key, transaction)
 
     return {
         "status": "success",
@@ -642,8 +642,8 @@ def update_transaction(db: Session, user_id: int, txn_id: str, payload, ip_addre
     }
 
 
-def query_audit_logs(db: Session, user_id: int, page: int, page_size: int, search: str | None = None, changed_by: str | None = None, start_date: str | None = None, end_date: str | None = None, txn_id: str | None = None) -> dict:
-    query = db.query(TransactionLog).filter(TransactionLog.user_id == user_id)
+def query_audit_logs(db: Session, org_id: int, page: int, page_size: int, search: str | None = None, changed_by: str | None = None, start_date: str | None = None, end_date: str | None = None, txn_id: str | None = None) -> dict:
+    query = db.query(TransactionLog).filter(TransactionLog.org_id == org_id)
 
     if txn_id:
         query = query.filter(TransactionLog.txn_id == txn_id)
@@ -710,12 +710,12 @@ def query_audit_logs(db: Session, user_id: int, page: int, page_size: int, searc
     }
 
 
-def _update_sheets_for_transaction(user: User, old_dedupe_key: str, updated_transaction: Transactions):
+def _update_sheets_for_transaction(org: Organization, old_dedupe_key: str, updated_transaction: Transactions):
     """
-    Finds the row corresponding to old_dedupe_key in the user's Google Sheet
+    Finds the row corresponding to old_dedupe_key in the org's Google Sheet
     and updates it with the new fields of updated_transaction.
     """
-    if not user.spreadsheet_id:
+    if not org.spreadsheet_id:
         return
 
     try:
@@ -728,14 +728,14 @@ def _update_sheets_for_transaction(user: User, old_dedupe_key: str, updated_tran
             TRANSACTION_SHEET_END_COLUMN
         )
 
-        creds = build_credentials(user)
+        creds = build_credentials(org)
         sheets_service = build("sheets", "v4", credentials=creds)
-        sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
+        sheet_title = _get_sheet_title(sheets_service, org.spreadsheet_id)
 
         # Read the dedupe_key column values as list to locate the correct row
         dedupe_col = transaction_column_for_field("dedupe_key")
         result = sheets_service.spreadsheets().values().get(
-            spreadsheetId=user.spreadsheet_id,
+            spreadsheetId=org.spreadsheet_id,
             range=f"'{sheet_title}'!{dedupe_col}2:{dedupe_col}",
         ).execute()
 
@@ -752,7 +752,7 @@ def _update_sheets_for_transaction(user: User, old_dedupe_key: str, updated_tran
             if rows:
                 range_to_update = f"'{sheet_title}'!A{row_num}:{TRANSACTION_SHEET_END_COLUMN}{row_num}"
                 sheets_service.spreadsheets().values().update(
-                    spreadsheetId=user.spreadsheet_id,
+                    spreadsheetId=org.spreadsheet_id,
                     range=range_to_update,
                     valueInputOption="RAW",
                     body={"values": rows}

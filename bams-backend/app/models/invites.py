@@ -23,8 +23,8 @@ class Invite(Base):
 
     id = Column(ID_TYPE, primary_key=True)
     family_id = Column(ID_TYPE, ForeignKey("families.id"), nullable=False, index=True)
-    invited_by_user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
-    invited_user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=True, index=True)
+    invited_by_org_id = Column(ID_TYPE, ForeignKey("organizations.id"), nullable=False, index=True)
+    invited_org_id = Column(ID_TYPE, ForeignKey("organizations.id"), nullable=True, index=True)
     invited_email = Column(String, nullable=False, index=True)
     invite_type = Column(
         String,
@@ -41,5 +41,5 @@ class Invite(Base):
     declined_at = Column(DateTime(timezone=True), nullable=True)
 
     family = relationship("Family", back_populates="invites")
-    invited_by = relationship("User", foreign_keys=[invited_by_user_id])
-    invited_user = relationship("User", foreign_keys=[invited_user_id])
+    invited_by = relationship("Organization", foreign_keys=[invited_by_org_id])
+    invited_org = relationship("Organization", foreign_keys=[invited_org_id])

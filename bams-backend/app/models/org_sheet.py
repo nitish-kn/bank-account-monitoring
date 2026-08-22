@@ -3,12 +3,12 @@ from sqlalchemy.orm import relationship
 from ..database import Base
 from .types import ID_TYPE
 
-class UserSheet(Base):
-    __tablename__ = "user_sheets"
+class OrgSheet(Base):
+    __tablename__ = "org_sheets"
 
     id = Column(ID_TYPE, primary_key=True)
-    user_id = Column(ID_TYPE, ForeignKey("users.id"))
+    org_id = Column(ID_TYPE, ForeignKey("organizations.id"))
     sheet_id = Column(String, unique=True, index=True)
     title = Column(String)
 
-    user = relationship("User")
+    org = relationship("Organization")

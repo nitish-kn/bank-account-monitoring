@@ -18,7 +18,7 @@ const ConsolidatedView = () => {
 
   const { fetchFamilyMembers, fetchFamilyEmails, familyEmails, loadingFamilyEmails, familyEmailsError, failedMembers, hasLoadedFamilyData, markFamilyDataLoaded, } = useFamilyStore();
 
-  const { user } = useAuthStore();
+  const { org } = useAuthStore();
 
   const refreshPendingInviteCount = useCallback(async () => {
     try {
@@ -31,7 +31,7 @@ const ConsolidatedView = () => {
 
   // Initial load on first visit to Family View in the current session
   useEffect(() => {
-    if (!hasLoadedFamilyData && user) {
+    if (!hasLoadedFamilyData && org) {
       const loadFamilyViewData = async () => {
         try {
           await Promise.all([
@@ -46,7 +46,7 @@ const ConsolidatedView = () => {
 
       loadFamilyViewData();
     }
-  }, [user, hasLoadedFamilyData, fetchFamilyMembers, fetchFamilyEmails, refreshPendingInviteCount, markFamilyDataLoaded]);
+  }, [org, hasLoadedFamilyData, fetchFamilyMembers, fetchFamilyEmails, refreshPendingInviteCount, markFamilyDataLoaded]);
 
   // Poll for pending invite count every 30 seconds
   useEffect(() => {

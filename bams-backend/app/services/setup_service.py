@@ -33,12 +33,12 @@ from ..core.constants import (
     UPLOAD_DIR,
 )
 from ..database import SessionLocal
-from ..models.user import User
+from ..models.organization import Organization
 from ..utils.date_utils import datetime_to_iso, utc_now
 from ..utils.email_utils import latest_email_datetime
 from ..utils.db_utils import (
     check_existing_gmail_message_id,
-    get_unsynced_transactions_for_user,
+    get_unsynced_transactions_for_org,
     mark_transactions_sheet_synced,
     save_valid_transaction_to_db,
     transaction_to_schema_dict,
@@ -48,8 +48,8 @@ from .credentials import build_credentials
 from .gmail_service import (
     fetch_gmail_attachment_bytes,
     get_latest_gmail_message_id,
-    hydrate_user_message_page,
-    iter_user_message_pages,
+    hydrate_org_message_page,
+    iter_org_message_pages,
 )
 from .ledger_service import recalculate_ledgers_for_transactions
 
@@ -65,7 +65,7 @@ from ..ds.llm.main import process_emails
 logger = logging.getLogger(__name__)
 
 # Thread tracking for stuck-sync detection
-# Maps user_id -> {"thread": Thread, "started_at": float (time.time())}
+# Maps org_id -> {"thread": Thread, "started_at": float (time.time())}
 _active_sync_threads: dict[int, dict] = {}
 
 
@@ -77,67 +77,67 @@ class SyncUserSnapshot:
     token_expiry: object | None
 
 
-def _snapshot_sync_user(user: User) -> SyncUserSnapshot:
+def _snapshot_sync_org(org: Organization) -> SyncUserSnapshot:
     return SyncUserSnapshot(
-        id=user.id,
-        access_token=user.access_token,
-        refresh_token=user.refresh_token,
-        token_expiry=user.token_expiry,
+        id=org.id,
+        access_token=org.access_token,
+        refresh_token=org.refresh_token,
+        token_expiry=org.token_expiry,
     )
 
 
 # --------------------- Helper functions
-def _sync_metadata_payload(user: User) -> dict:
-    """ Formats a User model's data into a clean dictionary payload for API/frontend consumption. """
+def _sync_metadata_payload(org: Organization) -> dict:
+    """ Formats an Organization model's data into a clean dictionary payload for API/frontend consumption. """
     return {
-        "last_synced_at": datetime_to_iso(user.last_synced_at),
-        "last_synced_status": user.last_synced_status,
-        "last_synced_email_date": datetime_to_iso(user.last_synced_email_date),
-        "sync_status": user.sync_status,
+        "last_synced_at": datetime_to_iso(org.last_synced_at),
+        "last_synced_status": org.last_synced_status,
+        "last_synced_email_date": datetime_to_iso(org.last_synced_email_date),
+        "sync_status": org.sync_status,
     }
 
-def _update_latest_synced_email_date(user: User, emails: list[dict] | None = None) -> None:
-    """ Inspects a batch of emails, finds the most recent timestamp, and updates the user's tracking state if it's newer than what is currently saved. """
+def _update_latest_synced_email_date(org: Organization, emails: list[dict] | None = None) -> None:
+    """ Inspects a batch of emails, finds the most recent timestamp, and updates the org's tracking state if it's newer than what is currently saved. """
     latest_email_date = latest_email_datetime(emails or [])
     if latest_email_date and (
-        not user.last_synced_email_date     # If the user is new, or its their first sync
-        or latest_email_date > user.last_synced_email_date
+        not org.last_synced_email_date     # If the org is new, or its their first sync
+        or latest_email_date > org.last_synced_email_date
     ):
-        user.last_synced_email_date = latest_email_date
+        org.last_synced_email_date = latest_email_date
 
 
 
 
 # --------------------- Functions to update db fields based on the operation
-def _mark_sync_success(user: User, db: Session, emails: list[dict] | None = None) -> dict:
+def _mark_sync_success(org: Organization, db: Session, emails: list[dict] | None = None) -> dict:
     """ Mark the variable as success in db, on completion of transaction"""
-    _update_latest_synced_email_date(user, emails)
-    user.last_synced_at = utc_now()
-    user.last_synced_status = "success"
-    user.sync_status = SYNC_STATUS_COMPLETED
+    _update_latest_synced_email_date(org, emails)
+    org.last_synced_at = utc_now()
+    org.last_synced_status = "success"
+    org.sync_status = SYNC_STATUS_COMPLETED
 
-    db.add(user)
+    db.add(org)
     db.commit()
-    db.refresh(user)
-    return _sync_metadata_payload(user)
+    db.refresh(org)
+    return _sync_metadata_payload(org)
 
-def _mark_sync_failed(user: User, db: Session) -> None:
+def _mark_sync_failed(org: Organization, db: Session) -> None:
     """ Mark the variable as failed in db, on failure of transaction """
     try:
         db.rollback()
-        user.last_synced_at = utc_now()
-        user.last_synced_status = "failed"
-        user.sync_status = SYNC_STATUS_FAILED
-        db.add(user)
+        org.last_synced_at = utc_now()
+        org.last_synced_status = "failed"
+        org.sync_status = SYNC_STATUS_FAILED
+        db.add(org)
         db.commit()
-        db.refresh(user)
+        db.refresh(org)
     except Exception as error:
         db.rollback()
         logger.error("Failed to update sync failure metadata | error=%s", _safe_error_text(error))
 
 
 def _sync_transactions_to_sheet(
-    user: User,
+    org: Organization,
     db: Session,
     sheets_service=None,
     sheet_title: str | None = None,
@@ -150,11 +150,11 @@ def _sync_transactions_to_sheet(
         -> append rows to Google Sheets
         -> mark transactions as synced """
     
-    if not user.spreadsheet_id:
+    if not org.spreadsheet_id:
         return {"updated": False, "rows_written": 0}
 
-    pending_transactions = get_unsynced_transactions_for_user(
-        user.id,
+    pending_transactions = get_unsynced_transactions_for_org(
+        org.id,
         db,
         transaction_ids=transaction_ids,
     )
@@ -162,15 +162,15 @@ def _sync_transactions_to_sheet(
         return {"updated": False, "rows_written": 0}
 
     if sheets_service is None:
-        credentials = build_credentials(user)
+        credentials = build_credentials(org)
         sheets_service = build("sheets", "v4", credentials=credentials)
 
     if sheet_title is None:
-        sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
+        sheet_title = _get_sheet_title(sheets_service, org.spreadsheet_id)
         
     dedupe_col = transaction_column_for_field("dedupe_key")
     existing_dedupe_keys = _read_existing_column_values(
-        sheets_service, user.spreadsheet_id, sheet_title, dedupe_col
+        sheets_service, org.spreadsheet_id, sheet_title, dedupe_col
     )
 
     already_synced = []
@@ -196,13 +196,13 @@ def _sync_transactions_to_sheet(
         db.commit()
         return {"updated": False, "rows_written": 0}
 
-    result = _append_sheet_rows(sheets_service, user.spreadsheet_id, sheet_title, rows)
+    result = _append_sheet_rows(sheets_service, org.spreadsheet_id, sheet_title, rows)
     mark_transactions_sheet_synced(unique_pending, db)
     db.commit()
     return result
 
 
-def _is_sync_genuinely_running(user_id: int) -> bool:
+def _is_sync_genuinely_running(org_id: int) -> bool:
     """Check if a sync thread is genuinely alive and within the timeout window.
     Returns True only if the thread exists, is alive, AND hasn't exceeded the soft timeout.
     Handles three cases:
@@ -210,7 +210,7 @@ def _is_sync_genuinely_running(user_id: int) -> bool:
       2. Thread crashed   -> is_alive() is False -> False
       3. Thread hung/deadlocked -> is_alive() True but exceeded timeout -> False
     """
-    entry = _active_sync_threads.get(user_id)
+    entry = _active_sync_threads.get(org_id)
     if not entry:
         return False
 
@@ -219,17 +219,17 @@ def _is_sync_genuinely_running(user_id: int) -> bool:
 
     if not thread or not thread.is_alive():
         # Thread is dead, clean up
-        _active_sync_threads.pop(user_id, None)
+        _active_sync_threads.pop(org_id, None)
         return False
 
     # Thread is alive — check soft timeout
     elapsed = time.time() - started_at
     if elapsed > SYNC_TIMEOUT_SECONDS:
         logger.warning(
-            "Sync thread stuck | user=%s elapsed_s=%.0f timeout_s=%s",
-            user_id, elapsed, SYNC_TIMEOUT_SECONDS,
+            "Sync thread stuck | org=%s elapsed_s=%.0f timeout_s=%s",
+            org_id, elapsed, SYNC_TIMEOUT_SECONDS,
         )
-        _active_sync_threads.pop(user_id, None)
+        _active_sync_threads.pop(org_id, None)
         return False
 
     return True
@@ -329,7 +329,7 @@ def _attachment_email_metadata(email: dict, attachment: dict) -> dict:
     }
 
 
-def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[list[dict], list[str]]:
+def _parse_statement_attachments_from_email(org: Organization, email: dict) -> tuple[list[dict], list[str]]:
     transactions = []
     errors = []
     message_id = email.get("id")
@@ -337,8 +337,8 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
 
     if pdf_attachments:
         logger.info(
-            "Statement attachments found | user=%s gmail_message_id=%s count=%d filenames=%s",
-            user.id, message_id, len(pdf_attachments),
+            "Statement attachments found | org=%s gmail_message_id=%s count=%d filenames=%s",
+            org.id, message_id, len(pdf_attachments),
             [a.get("filename") for a in pdf_attachments],
         )
 
@@ -350,30 +350,30 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
         if not message_id or not attachment_id:
             errors.append("Missing Gmail message ID or attachment ID.")
             logger.warning(
-                "Statement attachment skipped, no message or attachment id | user=%s file=%s",
-                user.id, filename,
+                "Statement attachment skipped, no message or attachment id | org=%s file=%s",
+                org.id, filename,
             )
             continue
 
         try:
             logger.info(
-                "Statement attachment downloading | user=%s gmail_message_id=%s file=%s reported_size_bytes=%s",
-                user.id, message_id, filename, attachment.get("size"),
+                "Statement attachment downloading | org=%s gmail_message_id=%s file=%s reported_size_bytes=%s",
+                org.id, message_id, filename, attachment.get("size"),
             )
-            file_bytes = fetch_gmail_attachment_bytes(user, message_id, attachment_id)
+            file_bytes = fetch_gmail_attachment_bytes(org, message_id, attachment_id)
             if not file_bytes:
                 raise RuntimeError("Gmail attachment was empty.")
 
             saved_path = _attachment_temp_path(email, attachment, index)
             saved_path.write_bytes(file_bytes)
             logger.info(
-                "Statement attachment saved | user=%s gmail_message_id=%s file=%s bytes=%d temp_path=%s",
-                user.id, message_id, filename, len(file_bytes), saved_path,
+                "Statement attachment saved | org=%s gmail_message_id=%s file=%s bytes=%d temp_path=%s",
+                org.id, message_id, filename, len(file_bytes), saved_path,
             )
 
             extracted_txns = parse_statement_pdf_sync(
                 saved_path,
-                user.id,
+                org.id,
                 original_filename=str(filename),
             )
             normalized_txns = [
@@ -387,8 +387,8 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
             ]
             transactions.extend(normalized_txns)
             logger.info(
-                "Statement attachment parsed | user=%s gmail_message_id=%s file=%s rows=%d",
-                user.id, message_id, filename, len(normalized_txns),
+                "Statement attachment parsed | org=%s gmail_message_id=%s file=%s rows=%d",
+                org.id, message_id, filename, len(normalized_txns),
             )
         except HTTPException as error:
             # process_statement raises 422 specifically when the PDF is
@@ -400,9 +400,9 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
             safe_error = str(error.detail).encode("ascii", "replace").decode("ascii")
             errors.append(safe_error)
             logger.warning(
-                "Statement attachment %s | user=%s gmail_message_id=%s file=%s error=%s",
+                "Statement attachment %s | org=%s gmail_message_id=%s file=%s error=%s",
                 "needs password" if needs_password else "failed",
-                user.id, message_id, filename, safe_error[:200],
+                org.id, message_id, filename, safe_error[:200],
             )
         except Exception as error:
             # Unexpected (not a known password/parsing failure) — error level
@@ -410,8 +410,8 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
             safe_error = _safe_error_text(error)
             errors.append(safe_error)
             logger.error(
-                "Statement attachment failed unexpectedly | user=%s gmail_message_id=%s file=%s error=%s",
-                user.id, message_id, filename, safe_error[:200],
+                "Statement attachment failed unexpectedly | org=%s gmail_message_id=%s file=%s error=%s",
+                org.id, message_id, filename, safe_error[:200],
             )
         finally:
             if saved_path:
@@ -427,7 +427,7 @@ def _parse_statement_attachments_from_email(user: User, email: dict) -> tuple[li
 
 
 def _persist_extracted_transactions(
-    user: User,
+    org: Organization,
     db: Session,
     sheets_service,
     sheet_title: str,
@@ -447,12 +447,12 @@ def _persist_extracted_transactions(
         parsed_result_count = _parsed_transaction_count(transactions)
         saved_transactions = save_valid_transaction_to_db(
             transactions,
-            user.id,
+            org.id,
             db,
         )
 
         update_parsed_status_to_db(
-            user.id,
+            org.id,
             transactions,
             db,
             emails=emails,
@@ -463,14 +463,14 @@ def _persist_extracted_transactions(
         ledger_result = recalculate_ledgers_for_transactions(
             db,
             saved_transactions,
-            user.id,
+            org.id,
         )
 
-        db.add(user)
+        db.add(org)
         db.commit()
         logger.info(
-            "%s saved | user=%s emails=%d llm_rows=%d parsed=%d transactions_saved=%d ledger_rows=%d forced_status=%s",
-            log_label, user.id, len(emails), len(transactions), parsed_result_count,
+            "%s saved | org=%s emails=%d llm_rows=%d parsed=%d transactions_saved=%d ledger_rows=%d forced_status=%s",
+            log_label, org.id, len(emails), len(transactions), parsed_result_count,
             len(saved_transactions), ledger_result.get("accounts_recalculated", 0), force_status,
         )
     except Exception as error:
@@ -478,19 +478,19 @@ def _persist_extracted_transactions(
         safe_error = _safe_error_text(error)
         logger.error("Failed to persist %s | error=%s", log_label.lower(), safe_error[:300])
         update_parsed_status_to_db(
-            user.id,
+            org.id,
             [],
             db,
             emails=emails,
             error=safe_error,
         )
-        db.add(user)
+        db.add(org)
         db.commit()
         return []
 
     if saved_transactions:
         _sync_transactions_to_sheet(
-            user,
+            org,
             db,
             sheets_service=sheets_service,
             sheet_title=sheet_title,
@@ -503,11 +503,11 @@ def _persist_extracted_transactions(
 # -------------------------- Setup Functions ---------------------------
 
 # Initial Setup Workflow - 1.1
-def create_sheets_and_fill_schema(user: User) -> dict:
+def create_sheets_and_fill_schema(org: Organization) -> dict:
     """Create or validate the required sheet and ensure the header row matches REQUIRED_SCHEMA."""
 
-    # Check correct user and schema permissions before proceeding with sheet setup
-    credentials = build_credentials(user)
+    # Check correct org and schema permissions before proceeding with sheet setup
+    credentials = build_credentials(org)
 
     # Use the credentials to build the Drive and Sheets service clients
     drive_service = build("drive", "v3", credentials=credentials)
@@ -582,32 +582,32 @@ def create_sheets_and_fill_schema(user: User) -> dict:
         raise HTTPException(status_code=500, detail=f"Unexpected setup error: {error}")
 
 # Initial Setup Workflow - 1.2.1.1
-def _run_backfill_sync_for_user(user_id: int) -> None:
+def _run_backfill_sync_for_org(org_id: int) -> None:
     """ This is main backgound sync """
 
     db = SessionLocal()
     try:
-        # 1. Load user from DB
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user or not user.is_setup_completed or not user.spreadsheet_id:
+        # 1. Load org from DB
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        if not org or not org.is_setup_completed or not org.spreadsheet_id:
             return
 
         # 2. Build Sheets client
-        credentials = build_credentials(user)
+        credentials = build_credentials(org)
         sheets_service = build("sheets", "v4", credentials=credentials)
-        sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
+        sheet_title = _get_sheet_title(sheets_service, org.spreadsheet_id)
 
         # 3. Get existing Gmail IDs from parsed table
-        existing_gmail_message_ids = check_existing_gmail_message_id(user, db)
+        existing_gmail_message_ids = check_existing_gmail_message_id(org, db)
 
-        # Dynamic start date for fetching emails. If the user has a last_synced_email_date, 
+        # Dynamic start date for fetching emails. If the org has a last_synced_email_date, 
         # we start from one day before that to ensure we don't miss any emails.
         start_date = None
-        if user.last_synced_email_date:
-            start_date = user.last_synced_email_date - timedelta(days=1)
+        if org.last_synced_email_date:
+            start_date = org.last_synced_email_date - timedelta(days=1)
 
         # 4. Ask Gmail for message ID pages
-        for message_page, page_idx, total_pages in iter_user_message_pages(user, start_date=start_date):
+        for message_page, page_idx, total_pages in iter_org_message_pages(org, start_date=start_date):
             
             # 5. Remove IDs already in DB
             new_messages = [
@@ -617,18 +617,18 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
             ]
             already_parsed_count = len(message_page) - len(new_messages)
             logger.info(
-                "Sync page | user=%s page=%d/%d gmail_ids=%d already_parsed=%d new=%d",
-                user_id, page_idx, total_pages, len(message_page), already_parsed_count, len(new_messages),
+                "Sync page | org=%s page=%d/%d gmail_ids=%d already_parsed=%d new=%d",
+                org_id, page_idx, total_pages, len(message_page), already_parsed_count, len(new_messages),
             )
 
             if not new_messages:
-                db.add(user)
+                db.add(org)
                 db.commit()
                 continue
 
             # 6. Hydrate only new IDs
-            new_emails = hydrate_user_message_page(user, new_messages)
-            _update_latest_synced_email_date(user, new_emails)
+            new_emails = hydrate_org_message_page(org, new_messages)
+            _update_latest_synced_email_date(org, new_emails)
             hydrated_email_ids = {
                 email.get("id")
                 for email in new_emails
@@ -640,18 +640,18 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                 if message.get("id") and message.get("id") not in hydrated_email_ids
             ]
             logger.info(
-                "Sync hydrate | user=%s requested=%d hydrated=%d failed=%d",
-                user_id, len(new_messages), len(new_emails), len(missing_hydrated_messages),
+                "Sync hydrate | org=%s requested=%d hydrated=%d failed=%d",
+                org_id, len(new_messages), len(new_emails), len(missing_hydrated_messages),
             )
             if missing_hydrated_messages:
                 update_parsed_status_to_db(
-                    user_id,
+                    org_id,
                     [],
                     db,
                     emails=[{"id": message.get("id")} for message in missing_hydrated_messages],
                     error="Gmail message detail could not be parsed after hydration.",
                 )
-                db.add(user)
+                db.add(org)
                 db.commit()
                 existing_gmail_message_ids.update(
                     message.get("id")
@@ -663,14 +663,14 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
                 continue
 
             logger.info(
-                "Sync page emails ready | user=%s page=%d/%d count=%d",
-                user_id, page_idx, total_pages, len(new_emails),
+                "Sync page emails ready | org=%s page=%d/%d count=%d",
+                org_id, page_idx, total_pages, len(new_emails),
             )
 
             statement_emails, email_parser_emails = _split_statement_attachment_emails(new_emails)
             logger.info(
-                "Email route | user=%s page=%d/%d statement_pdf_emails=%d normal_email_parser=%d",
-                user_id, page_idx, total_pages, len(statement_emails), len(email_parser_emails),
+                "Email route | org=%s page=%d/%d statement_pdf_emails=%d normal_email_parser=%d",
+                org_id, page_idx, total_pages, len(statement_emails), len(email_parser_emails),
             )
 
             # 7. Extract transactions from statement PDFs and normal emails
@@ -680,7 +680,7 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
             # job below only does the extraction call (Gmail fetch / LLM);
             # this loop is the single place that writes to `db`/`sheets_service`,
             # so persistence always happens through one session.
-            jobs = _build_extraction_jobs(_snapshot_sync_user(user), statement_emails, email_parser_emails)
+            jobs = _build_extraction_jobs(_snapshot_sync_org(org), statement_emails, email_parser_emails)
             job_counts: dict[str, int] = {}
 
             for result in _run_extraction_jobs(jobs, max_workers=SYNC_MAX_PARALLEL_JOBS):
@@ -690,23 +690,23 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
 
                 if job_error:
                     logger.warning(
-                        "%s failed | user=%s emails=%d error=%s",
-                        result["label"], user_id, len(job_emails), job_error[:300],
+                        "%s failed | org=%s emails=%d error=%s",
+                        result["label"], org_id, len(job_emails), job_error[:300],
                     )
-                    update_parsed_status_to_db(user_id, [], db, emails=job_emails, error=job_error)
-                    db.add(user)
+                    update_parsed_status_to_db(org_id, [], db, emails=job_emails, error=job_error)
+                    db.add(org)
                     db.commit()
                 else:
                     forced_status = result.get("forced_status")
                     if forced_status:
                         logger.warning(
-                            "%s flagged failed | user=%s gmail_message_id=%s reason=%s",
-                            result["label"], user_id,
+                            "%s flagged failed | org=%s gmail_message_id=%s reason=%s",
+                            result["label"], org_id,
                             job_emails[0].get("id") if job_emails else None,
                             result.get("forced_status_reason"),
                         )
                     _persist_extracted_transactions(
-                        user, db, sheets_service, sheet_title,
+                        org, db, sheets_service, sheet_title,
                         job_emails, result["transactions"], result["label"],
                         force_status=forced_status,
                         force_status_reason=result.get("forced_status_reason"),
@@ -718,30 +718,30 @@ def _run_backfill_sync_for_user(user_id: int) -> None:
 
             if job_counts:
                 logger.info(
-                    "Extraction summary | user=%s page=%d/%d %s",
-                    user_id, page_idx, total_pages,
+                    "Extraction summary | org=%s page=%d/%d %s",
+                    org_id, page_idx, total_pages,
                     " ".join(f"{label}={count}" for label, count in job_counts.items()),
                 )
 
-        _mark_sync_success(user, db)
+        _mark_sync_success(org, db)
     except Exception as error:
-        logger.error("Background sync failed | user=%s error=%s", user_id, _safe_error_text(error)[:300])
-        user = db.query(User).filter(User.id == user_id).first()
-        if user:
-            _mark_sync_failed(user, db)
+        logger.error("Background sync failed | org=%s error=%s", org_id, _safe_error_text(error)[:300])
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        if org:
+            _mark_sync_failed(org, db)
     finally:
-        _active_sync_threads.pop(user_id, None)
+        _active_sync_threads.pop(org_id, None)
         db.close()
 
 # Function to use threading for fetching mails in parellel
 # Initial Setup Workflow - 1.2.1
-def _start_background_sync_thread(user_id: int) -> None:
+def _start_background_sync_thread(org_id: int) -> None:
     thread = Thread(
-        target=_run_backfill_sync_for_user,
-        args=(user_id,),
+        target=_run_backfill_sync_for_org,
+        args=(org_id,),
         daemon=True,
     )
-    _active_sync_threads[user_id] = {
+    _active_sync_threads[org_id] = {
         "thread": thread,
         "started_at": time.time(),
     }
@@ -749,38 +749,38 @@ def _start_background_sync_thread(user_id: int) -> None:
 
 # Main function to start background job for fetching email for 30 days at initial login
 # Initial Setup Workflow - 1.2
-def start_background_sync_for_user(user: User, db: Session) -> dict:
-    if not user.is_setup_completed or not user.spreadsheet_id:
+def start_background_sync_for_org(org: Organization, db: Session) -> dict:
+    if not org.is_setup_completed or not org.spreadsheet_id:
         raise HTTPException(status_code=400, detail="Setup must be completed before sync.")
 
-    # If the user stops the setup in between but return later, this check this prevent to start the setup again for them
-    if user.sync_status == SYNC_STATUS_RUNNING:
-        if _is_sync_genuinely_running(user.id):
+    # If the org stops the setup in between but return later, this check this prevent to start the setup again for them
+    if org.sync_status == SYNC_STATUS_RUNNING:
+        if _is_sync_genuinely_running(org.id):
             return {
                 "status": "running",
                 "sync_status": SYNC_STATUS_RUNNING,
                 "message": "Sync is already running in the background.",
-                **_sync_metadata_payload(user),
+                **_sync_metadata_payload(org),
             }
         else:
             # DB says running but thread is dead or timed out — reset
-            logger.warning("Sync marked running with no active thread, resetting | user=%s", user.id)
-            _mark_sync_failed(user, db)
-            db.refresh(user)
+            logger.warning("Sync marked running with no active thread, resetting | org=%s", org.id)
+            _mark_sync_failed(org, db)
+            db.refresh(org)
 
-    user.sync_status = SYNC_STATUS_RUNNING
-    user.last_synced_status = SYNC_STATUS_RUNNING
-    db.add(user)
+    org.sync_status = SYNC_STATUS_RUNNING
+    org.last_synced_status = SYNC_STATUS_RUNNING
+    db.add(org)
     db.commit()
-    db.refresh(user)
+    db.refresh(org)
 
-    _start_background_sync_thread(user.id)
+    _start_background_sync_thread(org.id)
 
     return {
         "status": "running",
-        "sync_status": user.sync_status,
+        "sync_status": org.sync_status,
         "message": "Sync started in the background.",
-        **_sync_metadata_payload(user),
+        **_sync_metadata_payload(org),
     }
 
 
@@ -801,7 +801,7 @@ def _statement_job_result(
     }
 
 
-def _extract_transactions_for_statement_email(user: SyncUserSnapshot, email: dict) -> dict:
+def _extract_transactions_for_statement_email(org: SyncUserSnapshot, email: dict) -> dict:
     """Extraction job for one statement email: parse its PDF attachment(s).
 
     - All attachments parse cleanly -> normal "Statement attachment" result.
@@ -816,7 +816,7 @@ def _extract_transactions_for_statement_email(user: SyncUserSnapshot, email: dic
       doesn't get buried under a coincidental "not_transaction" verdict
       from that fallback scan.
     """
-    transactions, attachment_errors = _parse_statement_attachments_from_email(user, email)
+    transactions, attachment_errors = _parse_statement_attachments_from_email(org, email)
 
     if transactions and not attachment_errors:
         return _statement_job_result(email, transactions, "Statement attachment")
@@ -836,7 +836,7 @@ def _extract_transactions_for_statement_email(user: SyncUserSnapshot, email: dic
         email.get("id"), len(attachment_errors), attachment_errors[:3],
     )
     try:
-        fallback_transactions = asyncio.run(process_emails([email], user_id=user.id)) or []
+        fallback_transactions = asyncio.run(process_emails([email], org_id=org.id)) or []
     except Exception as error:
         fallback_transactions = []
         reason = _safe_error_text(error)
@@ -844,11 +844,11 @@ def _extract_transactions_for_statement_email(user: SyncUserSnapshot, email: dic
     return _statement_job_result(email, fallback_transactions, "Statement fallback", FAILED_STATUS, reason)
 
 
-def _extract_transactions_for_email_batch(batch: list[dict], user_id: int | None) -> dict:
+def _extract_transactions_for_email_batch(batch: list[dict], org_id: int | None) -> dict:
     """Extraction job for one batch of normal (non-statement) emails: a
     single LLM call covering all of them."""
     try:
-        result = asyncio.run(process_emails(batch, user_id=user_id))
+        result = asyncio.run(process_emails(batch, org_id=org_id))
 
         if result is None:
             return {"emails": batch, "transactions": [], "label": "Email batch", "error": "LLM extractor returned no response."}
@@ -867,7 +867,7 @@ def _extract_transactions_for_email_batch(batch: list[dict], user_id: int | None
 
 
 def _build_extraction_jobs(
-    user: SyncUserSnapshot,
+    org: SyncUserSnapshot,
     statement_emails: list[dict],
     normal_emails: list[dict],
     batch_size: int = EMAIL_EXTRACTION_BATCH_SIZE,
@@ -876,16 +876,16 @@ def _build_extraction_jobs(
     normal emails, so both kinds can be submitted to the same worker pool
     and run side by side instead of one phase blocking the other."""
     statement_jobs = [
-        (lambda statement_email=statement_email: _extract_transactions_for_statement_email(user, statement_email))
+        (lambda statement_email=statement_email: _extract_transactions_for_statement_email(org, statement_email))
         for statement_email in statement_emails
     ]
     email_batches = [
         normal_emails[i:i + batch_size]
         for i in range(0, len(normal_emails), batch_size)
     ]
-    user_id = user.id
+    org_id = org.id
     batch_jobs = [
-        (lambda batch=batch: _extract_transactions_for_email_batch(batch, user_id))
+        (lambda batch=batch: _extract_transactions_for_email_batch(batch, org_id))
         for batch in email_batches
     ]
 
@@ -926,7 +926,7 @@ def _run_extraction_jobs(jobs: list[Callable[[], dict]], max_workers: int):
 # ------------- Main function that orchestrates the entire setup process with progress updates for the frontend to consume via SSE.
 
 # Initial Setup Workflow - 1
-async def setup_process_with_progress(user: User, db: Session):
+async def setup_process_with_progress(org: Organization, db: Session):
     """Generator that yields progress messages as each setup step completes.
     This allows the frontend to track real-time progress via Server-Sent Events.
     """
@@ -936,7 +936,7 @@ async def setup_process_with_progress(user: User, db: Session):
         yield {"step": "sheets_checking", "message": "Checking for existing sheet..."}
         await asyncio.sleep(0.05)
         
-        setup_result = create_sheets_and_fill_schema(user)
+        setup_result = create_sheets_and_fill_schema(org)
         spreadsheet_id = setup_result["spreadsheet_id"]
         sheet_title = setup_result["sheet_title"]
         
@@ -952,13 +952,13 @@ async def setup_process_with_progress(user: User, db: Session):
         }
         await asyncio.sleep(0.05)
 
-        user.is_setup_completed = True
-        user.spreadsheet_id = spreadsheet_id
-        db.add(user)
+        org.is_setup_completed = True
+        org.spreadsheet_id = spreadsheet_id
+        db.add(org)
         db.commit()
-        db.refresh(user)
+        db.refresh(org)
 
-        sync_result = start_background_sync_for_user(user, db)
+        sync_result = start_background_sync_for_org(org, db)
 
         yield {
             "step": "complete",
@@ -974,14 +974,14 @@ async def setup_process_with_progress(user: User, db: Session):
         }
         
     except HttpError as error:
-        _mark_sync_failed(user, db)
+        _mark_sync_failed(org, db)
         yield {
             "step": "error",
             "message": f"Google API error: {str(error)}",
             "status": "failed"
         }
     except Exception as error:
-        _mark_sync_failed(user, db)
+        _mark_sync_failed(org, db)
         yield {
             "step": "error",
             "message": f"Setup error: {str(error)}",
@@ -990,42 +990,42 @@ async def setup_process_with_progress(user: User, db: Session):
 
 
 # Incremental Sync Workflow - 2
-def perform_incremental_sync(user: User, db: Session):
+def perform_incremental_sync(org: Organization, db: Session):
     """Fetch only the newest Gmail messages after the last synced email date."""
     
-    if not user.is_setup_completed or not user.spreadsheet_id:
+    if not org.is_setup_completed or not org.spreadsheet_id:
         raise HTTPException(status_code=400, detail="Setup must be completed before sync.")
 
-    if user.sync_status == SYNC_STATUS_RUNNING:
-        if _is_sync_genuinely_running(user.id):
+    if org.sync_status == SYNC_STATUS_RUNNING:
+        if _is_sync_genuinely_running(org.id):
             return {
                 "status": "running",
                 "sync_status": SYNC_STATUS_RUNNING,
                 "new_rows": 0,
                 "message": "Background sync is already running.",
-                **_sync_metadata_payload(user),
+                **_sync_metadata_payload(org),
             }
         else:
             # DB says running but thread is dead or timed out — reset
-            logger.warning("Incremental sync marked running with no active thread, resetting | user=%s", user.id)
-            _mark_sync_failed(user, db)
-            db.refresh(user)
+            logger.warning("Incremental sync marked running with no active thread, resetting | org=%s", org.id)
+            _mark_sync_failed(org, db)
+            db.refresh(org)
 
     # Fetch the single latest email ID from Gmail and check if it already exists in DB.
     try:
-        latest_gmail_id = get_latest_gmail_message_id(user)
+        latest_gmail_id = get_latest_gmail_message_id(org)
         if latest_gmail_id:
-            existing_gmail_message_ids = check_existing_gmail_message_id(user, db)
+            existing_gmail_message_ids = check_existing_gmail_message_id(org, db)
             
             if latest_gmail_id in existing_gmail_message_ids:
                 logger.info(
-                    "Incremental sync up to date | user=%s known_gmail_ids=%d",
-                    user.id, len(existing_gmail_message_ids),
+                    "Incremental sync up to date | org=%s known_gmail_ids=%d",
+                    org.id, len(existing_gmail_message_ids),
                 )
 
                 # It fetches only latest Gmail ID. If latest ID already exists in DB, it does not run full sync. But it still calls: So if DB had rows saved but Sheets failed earlier, manual sync can repair Sheets.
-                sheet_result = _sync_transactions_to_sheet(user, db)
-                sync_metadata = _mark_sync_success(user, db)
+                sheet_result = _sync_transactions_to_sheet(org, db)
+                sync_metadata = _mark_sync_success(org, db)
                 return {
                     "status": "success",
                     "sync_status": SYNC_STATUS_COMPLETED,
@@ -1041,5 +1041,5 @@ def perform_incremental_sync(user: User, db: Session):
             _safe_error_text(e)[:300],
         )
 
-    return start_background_sync_for_user(user, db)
+    return start_background_sync_for_org(org, db)
 

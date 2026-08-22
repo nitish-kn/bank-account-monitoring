@@ -128,8 +128,8 @@ export const useSetupStore = create((set, get) => ({
                 const refreshResponse = await api.post("/auth/refresh", {
                   token: expiredToken,
                 });
-                const { access_token, user } = refreshResponse?.data;
-                useAuthStore.getState().login(user, access_token);
+                const { access_token, org } = refreshResponse?.data;
+                useAuthStore.getState().login(org, access_token);
 
                 // Re-initialize setup asynchronously with the new token
                 setTimeout(() => {
@@ -179,17 +179,17 @@ export const useSetupStore = create((set, get) => ({
 
             // Handle completion
             if (step === "complete" && status === "success") {
-              // Update local user state in authStore to instantly unlock dashboard
-              const currentUser = useAuthStore.getState().user;
-              if (currentUser) {
-                useAuthStore.getState().setUser({
-                  ...currentUser,
+              // Update local org state in authStore to instantly unlock dashboard
+              const currentOrg = useAuthStore.getState().org;
+              if (currentOrg) {
+                useAuthStore.getState().setOrg({
+                  ...currentOrg,
                   is_setup_completed: true,
-                  spreadsheet_id: data?.data?.spreadsheet_id || currentUser.spreadsheet_id,
-                  last_synced_at: data?.data?.last_synced_at || currentUser.last_synced_at,
-                  last_synced_status: data?.data?.last_synced_status || currentUser.last_synced_status,
-                  last_synced_email_date: data?.data?.last_synced_email_date || currentUser.last_synced_email_date,
-                  sync_status: data?.data?.sync_status || currentUser.sync_status,
+                  spreadsheet_id: data?.data?.spreadsheet_id || currentOrg.spreadsheet_id,
+                  last_synced_at: data?.data?.last_synced_at || currentOrg.last_synced_at,
+                  last_synced_status: data?.data?.last_synced_status || currentOrg.last_synced_status,
+                  last_synced_email_date: data?.data?.last_synced_email_date || currentOrg.last_synced_email_date,
+                  sync_status: data?.data?.sync_status || currentOrg.sync_status,
                 });
               }
 
@@ -312,12 +312,12 @@ export const useSetupStore = create((set, get) => ({
       const isRunning = syncStatus === SYNC_STATUS_RUNNING;
       const isCompleted = syncStatus === SYNC_STATUS_COMPLETED;
       const isFailed = syncStatus === SYNC_STATUS_FAILED;
-      const currentUserSyncStatus = useAuthStore.getState().user?.sync_status;
+      const currentOrgSyncStatus = useAuthStore.getState().org?.sync_status;
       const wasSyncing = get().isSyncing;
       const wasKnownRunning =
         wasSyncing ||
         get().syncStatus === SYNC_STATUS_RUNNING ||
-        currentUserSyncStatus === SYNC_STATUS_RUNNING;
+        currentOrgSyncStatus === SYNC_STATUS_RUNNING;
 
       if (isRunning && !wasSyncing) {
         showSyncStartedToast();
@@ -346,14 +346,14 @@ export const useSetupStore = create((set, get) => ({
         lastSyncedEmailDate: data.last_synced_email_date || get().lastSyncedEmailDate,
       });
 
-      const currentUser = useAuthStore.getState().user;
-      if (currentUser) {
-        useAuthStore.getState().setUser({
-          ...currentUser,
+      const currentOrg = useAuthStore.getState().org;
+      if (currentOrg) {
+        useAuthStore.getState().setOrg({
+          ...currentOrg,
           sync_status: syncStatus,
-          last_synced_at: data.last_synced_at || currentUser.last_synced_at,
-          last_synced_status: data.last_synced_status || currentUser.last_synced_status,
-          last_synced_email_date: data.last_synced_email_date || currentUser.last_synced_email_date,
+          last_synced_at: data.last_synced_at || currentOrg.last_synced_at,
+          last_synced_status: data.last_synced_status || currentOrg.last_synced_status,
+          last_synced_email_date: data.last_synced_email_date || currentOrg.last_synced_email_date,
         });
       }
 
@@ -430,14 +430,14 @@ export const useSetupStore = create((set, get) => ({
         lastSyncedEmailDate: response.data.last_synced_email_date || null,
       });
 
-      const currentUser = useAuthStore.getState().user;
-      if (currentUser) {
-        useAuthStore.getState().setUser({
-          ...currentUser,
-          last_synced_at: response.data.last_synced_at || currentUser.last_synced_at,
-          last_synced_status: response.data.last_synced_status || currentUser.last_synced_status,
-          last_synced_email_date: response.data.last_synced_email_date || currentUser.last_synced_email_date,
-          sync_status: syncStatus || currentUser.sync_status,
+      const currentOrg = useAuthStore.getState().org;
+      if (currentOrg) {
+        useAuthStore.getState().setOrg({
+          ...currentOrg,
+          last_synced_at: response.data.last_synced_at || currentOrg.last_synced_at,
+          last_synced_status: response.data.last_synced_status || currentOrg.last_synced_status,
+          last_synced_email_date: response.data.last_synced_email_date || currentOrg.last_synced_email_date,
+          sync_status: syncStatus || currentOrg.sync_status,
         });
       }
 

@@ -10,7 +10,7 @@ const formatToolName = (name = "") =>
     .join(" ");
 
 const MessageBubble = ({ message, onRetry }) => {
-  const user = useAuthStore((state) => state.user);
+  const org = useAuthStore((state) => state.org);
   const isUser = message.role === "user";
   const isFailed = message.status === "failed";
   const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
@@ -37,7 +37,7 @@ const MessageBubble = ({ message, onRetry }) => {
           )}
         </div>
         <img
-          src={user?.picture}
+          src={org?.picture}
           alt=""
           className="mt-0.5 h-7 w-7 shrink-0 rounded-full object-cover"
         />

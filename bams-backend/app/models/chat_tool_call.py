@@ -12,7 +12,7 @@ class ChatToolCall(Base):
     id = Column(String, primary_key=True)
     message_id = Column(String, ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False, index=True)
     session_id = Column(String, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
+    org_id = Column(ID_TYPE, ForeignKey("organizations.id"), nullable=False, index=True)
 
     tool_name = Column(String, nullable=False)
     arguments = Column(JSONB, nullable=True)

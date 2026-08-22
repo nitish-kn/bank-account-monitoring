@@ -13,22 +13,22 @@ export const useAuthStore = create(
     (set) => {
       const initialToken = Cookies.get("access_token") || null;
       return {
-        user: null,
+        org: null,
         accessToken: initialToken,
         isAuthenticated: Boolean(initialToken),
 
-        login: (userData, token) => {
+        login: (orgData, token) => {
           if (token) {
             Cookies.set("access_token", token, getCookieOptions());
           }
           set({
-            user: userData,
+            org: orgData,
             isAuthenticated: Boolean(token),
             accessToken: token,
           });
         },
 
-        setUser: (userData) => set({ user: userData }),
+        setOrg: (orgData) => set({ org: orgData }),
 
         setToken: (token) => {
           if (token) {
@@ -42,7 +42,7 @@ export const useAuthStore = create(
         logout: () => {
           Cookies.remove("access_token");
           set({
-            user: null,
+            org: null,
             isAuthenticated: false,
             accessToken: null,
           });
@@ -53,7 +53,7 @@ export const useAuthStore = create(
       name: "auth-storage",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        user: state.user,
+        org: state.org,
         isAuthenticated: state.isAuthenticated,
       }),
     },

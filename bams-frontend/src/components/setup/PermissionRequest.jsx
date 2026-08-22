@@ -7,7 +7,7 @@ import { SetupHeader } from "./SetupHeader";
 import { PermissionItem } from "./PermissionItem";
 
 export function PermissionRequest({
-  user,
+  org,
   permissionsMissing,
   needsEmail,
   needsSheets,
@@ -24,7 +24,7 @@ export function PermissionRequest({
         title={
           <>
             Welcome to FloData,{" "}
-            <span className="text-blue-600">{user?.name || "User"}</span>
+            <span className="text-blue-600">{org?.name || "User"}</span>
           </>
         }
         subtitle="Connect your Google workspace to start syncing alerts, creating sheets, and powering your dashboard automation."

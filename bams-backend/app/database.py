@@ -22,32 +22,32 @@ def get_db():
         db.close()
 
 def run_migrations():
-    """Dynamically add missing columns to users table for SQLite development database."""
+    """Dynamically add missing columns to organizations table for SQLite development database."""
     if engine.dialect.name != "sqlite":
         return
 
     from sqlalchemy import inspect, text
     inspector = inspect(engine)
     try:
-        if inspector.has_table("users"):
-            columns = [col["name"] for col in inspector.get_columns("users")]
+        if inspector.has_table("organizations"):
+            columns = [col["name"] for col in inspector.get_columns("organizations")]
             with engine.begin() as conn:
                 if "is_setup_completed" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN is_setup_completed BOOLEAN DEFAULT 0 NOT NULL"))
+                    conn.execute(text("ALTER TABLE organizations ADD COLUMN is_setup_completed BOOLEAN DEFAULT 0 NOT NULL"))
                 if "spreadsheet_id" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN spreadsheet_id VARCHAR"))
+                    conn.execute(text("ALTER TABLE organizations ADD COLUMN spreadsheet_id VARCHAR"))
                 if "family_id" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN family_id INTEGER"))
-                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_family_id ON users (family_id)"))
+                    conn.execute(text("ALTER TABLE organizations ADD COLUMN family_id INTEGER"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organizations_family_id ON organizations (family_id)"))
                 if "last_synced_at" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN last_synced_at DATETIME"))
+                    conn.execute(text("ALTER TABLE organizations ADD COLUMN last_synced_at DATETIME"))
                 if "last_synced_status" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN last_synced_status VARCHAR DEFAULT 'not_started' NOT NULL"))
+                    conn.execute(text("ALTER TABLE organizations ADD COLUMN last_synced_status VARCHAR DEFAULT 'not_started' NOT NULL"))
                 if "last_synced_email_date" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN last_synced_email_date DATETIME"))
+                    conn.execute(text("ALTER TABLE organizations ADD COLUMN last_synced_email_date DATETIME"))
                 if "sync_status" not in columns:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN sync_status VARCHAR DEFAULT 'not_started' NOT NULL"))
-                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_sync_status ON users (sync_status)"))
+                    conn.execute(text("ALTER TABLE organizations ADD COLUMN sync_status VARCHAR DEFAULT 'not_started' NOT NULL"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_organizations_sync_status ON organizations (sync_status)"))
         if inspector.has_table("invites"):
             invite_columns = [col["name"] for col in inspector.get_columns("invites")]
             with engine.begin() as conn:

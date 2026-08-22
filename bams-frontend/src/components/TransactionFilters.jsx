@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import CustomButton from "./ui/CustomButton";
-import CustomSearchBar from "./ui/CustomSearchBar";
+import CustomInput from "./ui/CustomInput";
 import CustomDropDown from "./ui/CustomDropDown";
 import FilterField from "./ui/FilterField";
-import { Funnel, RotateCcw, X } from "lucide-react";
+import { Funnel, RotateCcw, Search, X } from "lucide-react";
 import { DEFAULT_TRANSACTION_FILTERS } from "../lib/transactional-helper";
 
 const dropdownTriggerClassName = "h-9! w-full justify-between! text-sm";
@@ -60,12 +60,13 @@ const TransactionFilters = ({
       {/* Filter Fields */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <FilterField label="Search" className="sm:col-span-2 xl:col-span-2">
-          <CustomSearchBar
+          <CustomInput
             value={draftFilters.search}
             onChange={(value) => updateFilter("search", value)}
             placeholder="Search transaction / ref no / counterparty"
+            icon={Search}
             iconPosition="right"
-            inputClassName="rounded-md border-gray-200 pl-3 pr-10"
+            inputClassName="rounded-md border-gray-200"
           />
         </FilterField>
 

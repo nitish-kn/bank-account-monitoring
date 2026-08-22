@@ -1,22 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
-from ..core.dependencies import get_current_user
+from ..core.dependencies import get_current_org
 from ..database import get_db
-from ..models.user import User
-from ..services.gmail_service import fetch_user_emails, verify_gmail_access, fetch_gmail_attachment_bytes
+from ..models.organization import Organization
+from ..services.gmail_service import fetch_org_emails, verify_gmail_access, fetch_gmail_attachment_bytes
 
 router = APIRouter(prefix="/api/gmail", tags=["gmail"])
 
 @router.get("/access")
-def get_gmail_access(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    access_info = verify_gmail_access(current_user, db=db)
+def get_gmail_access(current_org: Organization = Depends(get_current_org), db: Session = Depends(get_db)):
+    access_info = verify_gmail_access(current_org, db=db)
     return access_info
 
 
 @router.post("/fetch")
-def fetch_gmail_data(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Fetch the user's recent emails from Gmail."""
-    email_payload = fetch_user_emails(current_user)
+def fetch_gmail_data(current_org: Organization = Depends(get_current_org), db: Session = Depends(get_db)):
+    """Fetch the org's recent emails from Gmail."""
+    email_payload = fetch_org_emails(current_org)
     if "emails" not in email_payload:
         raise HTTPException(status_code=500, detail="Failed to retrieve emails")
     return email_payload
@@ -26,11 +26,11 @@ def fetch_gmail_data(current_user: User = Depends(get_current_user), db: Session
 def get_gmail_attachment(
     message_id: str,
     attachment_id: str,
-    current_user: User = Depends(get_current_user)
+    current_org: Organization = Depends(get_current_org)
 ):
     """Fetch the raw binary file of a specific Gmail PDF attachment."""
     try:
-        file_bytes = fetch_gmail_attachment_bytes(current_user, message_id, attachment_id)
+        file_bytes = fetch_gmail_attachment_bytes(current_org, message_id, attachment_id)
         return Response(
             content=file_bytes,
             media_type="application/pdf",

@@ -32,12 +32,12 @@ def normalize_parsed_status(status: str | None) -> str:
     return STATUS_ALIASES.get(normalized, FAILED_STATUS)
 
 
-def check_existing_gmail_message_id(user, db: Session) -> set[str]:
+def check_existing_gmail_message_id(org, db: Session) -> set[str]:
     """Return all Gmail message IDs already recorded in the parse-status table."""
     return {
         row.gmail_message_id
         for row in db.query(Parsed.gmail_message_id)
-        .filter(Parsed.user_id == user.id)
+        .filter(Parsed.org_id == org.id)
         .all()
         if row.gmail_message_id
     }
@@ -195,7 +195,7 @@ def _preferred_ref_number(existing_ref, incoming_ref) -> str:
     return existing_text
 
 
-def build_transaction_dedupe_key(transaction: dict, user_id: int) -> str:
+def build_transaction_dedupe_key(transaction: dict, org_id: int) -> str:
     """It makes the dedupe key hashing them using some fields with sha256"""
 
     bank_name = _normal_key(transaction.get("bank_name"))
@@ -206,10 +206,10 @@ def build_transaction_dedupe_key(transaction: dict, user_id: int) -> str:
     txn_date = normalize_transaction_date(transaction.get("txn_date"))
 
     if ref_number:
-        # If ref_number exists, it creates a strong key using - user_id + bank + account + txn_type + amount + ref_number
+        # If ref_number exists, it creates a strong key using - org_id + bank + account + txn_type + amount + ref_number
         raw_key = "|".join([
             "strong",
-            str(user_id),
+            str(org_id),
             bank_name,
             account_number,
             txn_type,
@@ -218,7 +218,7 @@ def build_transaction_dedupe_key(transaction: dict, user_id: int) -> str:
         ])
 
     else:
-        # If ref is missing, it uses fallback fields - user_id + bank + account + txn_type + amount + date + counterparty + txn_via
+        # If ref is missing, it uses fallback fields - org_id + bank + account + txn_type + amount + date + counterparty + txn_via
         counterparty = _normal_key(transaction.get("counterparty"))
         txn_via = _normal_key(
             transaction.get("txn_via")
@@ -227,7 +227,7 @@ def build_transaction_dedupe_key(transaction: dict, user_id: int) -> str:
         )
         raw_key = "|".join([
             "weak",
-            str(user_id),
+            str(org_id),
             bank_name,
             account_number,
             txn_type,
@@ -312,7 +312,7 @@ def _candidate_ref_match_score(
 
 
 def _find_ref_number_match(
-    transaction: dict, user_id: int, db: Session
+    transaction: dict, org_id: int, db: Session
 ) -> tuple[Transactions | None, str | None]:
     """Find an existing row by exact/subset ref before building a new dedupe key.
 
@@ -328,7 +328,7 @@ def _find_ref_number_match(
         return None, None
 
     query = db.query(Transactions).filter(
-        Transactions.user_id == user_id,
+        Transactions.org_id == org_id,
         Transactions.ref_number.isnot(None),
     )
 
@@ -354,7 +354,7 @@ def _find_ref_number_match(
 
 
 def _find_fallback_amount_date_match(
-    transaction: dict, user_id: int, db: Session
+    transaction: dict, org_id: int, db: Session
 ) -> Transactions | None:
     """Used only when the incoming transaction has no ref_number at all.
 
@@ -374,7 +374,7 @@ def _find_fallback_amount_date_match(
     candidates = (
         db.query(Transactions)
         .filter(
-            Transactions.user_id == user_id,
+            Transactions.org_id == org_id,
             Transactions.amount == amount,
             Transactions.txn_date.isnot(None),
         )
@@ -466,7 +466,7 @@ def _has_missing_important_field(model: Transactions) -> bool:
 def _apply_transaction_fields(
     model: Transactions,
     transaction: dict,
-    user_id: int,
+    org_id: int,
     fill_missing_only: bool = False,
 ) -> bool:
     """Applies `transaction`'s fields onto `model` and returns True iff
@@ -477,7 +477,7 @@ def _apply_transaction_fields(
     changed = False
     amount = _decimal_or_none(transaction.get("amount"))
 
-    model.user_id = user_id
+    model.org_id = org_id
     field_values = {
         "gmail_message_id": _clean_text(transaction.get("gmail_message_id")) or None,
         "bank_name": _clean_text(transaction.get("bank_name")),
@@ -513,10 +513,10 @@ def _apply_transaction_fields(
         if model.ref_number != incoming_ref_number:
             changed = True
         model.ref_number = incoming_ref_number
-        model.dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
+        model.dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, org_id)
 
     if not fill_missing_only and not getattr(model, "dedupe_key", None):
-        model.dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
+        model.dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, org_id)
 
     incoming_email_metadata = transaction.get("email_metadata") or {}
     incoming_parser_metadata = transaction.get("parser_metadata") or {}
@@ -547,7 +547,7 @@ def _apply_transaction_fields(
     return changed
 
 
-def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Session) -> list[Transactions]:
+def save_valid_transaction_to_db(transactions: list[dict], org_id: int, db: Session) -> list[Transactions]:
     """Insert or update valid parsed transactions. Caller owns commit/rollback.
     It only saves transaction with parsed_status == "parsed".
 
@@ -596,7 +596,7 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
         is_flag = False
 
         if _compact_key(transaction.get("ref_number")):
-            ref_match, match_kind = _find_ref_number_match(transaction, user_id, db)
+            ref_match, match_kind = _find_ref_number_match(transaction, org_id, db)
             if ref_match:
                 transaction = {
                     **transaction,
@@ -610,7 +610,7 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
                 is_insert = False
                 is_flag = match_kind == "subset"
         else:
-            fallback_match = _find_fallback_amount_date_match(transaction, user_id, db)
+            fallback_match = _find_fallback_amount_date_match(transaction, org_id, db)
             if fallback_match:
                 transaction = {**transaction, "dedupe_key": fallback_match.dedupe_key}
                 model = fallback_match
@@ -621,11 +621,11 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
             # Safety-net exact lookup by the stable dedupe key, so a literal
             # re-submission of the same transaction dict never creates a
             # second row even if the paths above didn't already catch it.
-            dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, user_id)
+            dedupe_key = transaction.get("dedupe_key") or build_transaction_dedupe_key(transaction, org_id)
             existing = (
                 db.query(Transactions)
                 .filter(
-                    Transactions.user_id == user_id,
+                    Transactions.org_id == org_id,
                     Transactions.dedupe_key == dedupe_key,
                 )
                 .first()
@@ -637,7 +637,7 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
         changed = _apply_transaction_fields(
             model,
             transaction,
-            user_id,
+            org_id,
             fill_missing_only=not is_insert,
         )
 
@@ -660,8 +660,8 @@ def save_valid_transaction_to_db(transactions: list[dict], user_id: int, db: Ses
 
     if transactions:
         logger.info(
-            "Transactions DB | user=%s parsed_valid=%d inserted=%d updated=%d flagged_duplicates=%d skipped_non_parsed=%d",
-            user_id, parsed_input_count, inserted_count, updated_count, flagged_count, skipped_count,
+            "Transactions DB | org=%s parsed_valid=%d inserted=%d updated=%d flagged_duplicates=%d skipped_non_parsed=%d",
+            org_id, parsed_input_count, inserted_count, updated_count, flagged_count, skipped_count,
         )
 
     return saved_transactions
@@ -678,7 +678,7 @@ def _choose_status(current_status: str | None, incoming_status: str) -> str:
 
 
 def _upsert_parsed_status(
-    user_id: int,
+    org_id: int,
     gmail_message_id: str,
     status: str,
     db: Session,
@@ -688,7 +688,7 @@ def _upsert_parsed_status(
     parsed = (
         db.query(Parsed)
         .filter(
-            Parsed.user_id == user_id,
+            Parsed.org_id == org_id,
             Parsed.gmail_message_id == gmail_message_id,
         )
         .first()
@@ -704,7 +704,7 @@ def _upsert_parsed_status(
     else:
         parsed = Parsed(
             id=str(uuid4()),
-            user_id=user_id,
+            org_id=org_id,
             gmail_message_id=gmail_message_id,
             status=status,
             optional=optional,
@@ -715,7 +715,7 @@ def _upsert_parsed_status(
 
 
 def update_parsed_status_to_db(
-    user_id: int,
+    org_id: int,
     transactions: list[dict],
     db: Session,
     emails: list[dict] | None = None,
@@ -782,7 +782,7 @@ def update_parsed_status_to_db(
             row.gmail_message_id
             for row in db.query(Parsed.gmail_message_id)
             .filter(
-                Parsed.user_id == user_id,
+                Parsed.org_id == org_id,
                 Parsed.gmail_message_id.in_(message_ids),
             )
             .all()
@@ -801,7 +801,7 @@ def update_parsed_status_to_db(
         status_counts[status] += 1
         parsed_rows.append(
             _upsert_parsed_status(
-                user_id=user_id,
+                org_id=org_id,
                 gmail_message_id=gmail_message_id,
                 status=status,
                 db=db,
@@ -816,8 +816,8 @@ def update_parsed_status_to_db(
             for status, count in sorted(status_counts.items())
         )
         logger.info(
-            "Parsed status DB | user=%s inserted=%d updated=%d %s",
-            user_id, inserted_count, updated_count, status_summary,
+            "Parsed status DB | org=%s inserted=%d updated=%d %s",
+            org_id, inserted_count, updated_count, status_summary,
         )
 
     return parsed_rows
@@ -873,8 +873,8 @@ def transaction_to_schema_dict(transaction: Transactions) -> dict:
     return result
 
 
-def get_unsynced_transactions_for_user(
-    user_id: int,
+def get_unsynced_transactions_for_org(
+    org_id: int,
     db: Session,
     transaction_ids: list[str] | None = None,
 ) -> list[Transactions]:
@@ -882,7 +882,7 @@ def get_unsynced_transactions_for_user(
         These are rows saved in DB but not yet written to Google Sheets"""
     
     query = db.query(Transactions).filter(
-        Transactions.user_id == user_id,
+        Transactions.org_id == org_id,
         Transactions.sheets_synced_at.is_(None),
     )
 
@@ -905,4 +905,4 @@ def mark_transactions_sheet_synced(
         db.add(transaction)
 
 
-# def transaction_summary(user_id:int, db:Session):
+# def transaction_summary(org_id:int, db:Session):

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import DialogPopup from "./DialogPopup";
-import CustomSearchBar from "./CustomSearchBar";
+import CustomInput from "./CustomInput";
 import { transactionApi } from "../../api/transactions";
 import { useSetupStore } from "../../store/setupStore";
 import { Info, TriangleAlert, ArrowLeftRight } from "lucide-react";
@@ -215,25 +215,21 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
 
         {/* Audit Meta fields */}
         <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-xl space-y-3">
-          <CustomSearchBar
+          <CustomInput
             name="changed_by"
             type="text"
             labelText="Who is editing? (Mandatory) *"
             placeholder="Enter your name"
             value={formState.changed_by}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
-          <CustomSearchBar
+          <CustomInput
             name="reason"
             type="text"
             labelText="Reason for edit (Optional)"
             placeholder="e.g. Corrected category mapping error"
             value={formState.reason}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
         </div>
 
@@ -255,70 +251,58 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
 
         {/* Editable fields */}
         <div className="grid grid-cols-2 gap-3">
-          <CustomSearchBar
+          <CustomInput
             name="counterparty"
             type="text"
             labelText="Counterparty"
             placeholder="Counterparty"
             value={formState.counterparty}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="mode"
             type="text"
             labelText="Mode"
             placeholder="UPI / Net Banking / Card"
             value={formState.mode}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="category"
             type="text"
             labelText="Category"
             placeholder="Food / Travel / Investment"
             value={formState.category}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="ref_number"
             type="text"
             labelText="Reference ID"
             placeholder="Reference number"
             value={formState.ref_number}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="account_number"
             type="text"
             labelText="Account Number"
             placeholder="Account number"
             value={formState.account_number}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="account_holder_name"
             type="text"
             labelText="Account Holder Name"
             placeholder="Holder name"
             value={formState.account_holder_name}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
         </div>
 
@@ -334,15 +318,13 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
           />
         </div>
 
-        <CustomSearchBar
+        <CustomInput
           name="narration"
           type="text"
           labelText="Narration"
           placeholder="Detailed transaction narration"
           value={formState.narration}
           onChange={handleChange}
-          iconClassName="hidden"
-          iconPosition="right"
         />
       </div>
     </DialogPopup>

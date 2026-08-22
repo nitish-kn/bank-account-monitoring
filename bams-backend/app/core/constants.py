@@ -115,7 +115,7 @@ STATUS_ALIASES = {
 }
 TRANSACTION_DB_FIELDS = {
     "id",
-    "user_id",
+    "org_id",
     "gmail_message_id",
     "bank_name",
     "account_holder_name",

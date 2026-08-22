@@ -8,7 +8,7 @@ class BankAccounts(Base):
     __tablename__ = "bank_accounts"
 
     id = Column(String, primary_key=True)
-    user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
+    org_id = Column(ID_TYPE, ForeignKey("organizations.id"), nullable=False, index=True)
     bank_name = Column(String, nullable=False)
     account_holder_name = Column(String, nullable=False)
     account_type = Column(String)
@@ -21,4 +21,4 @@ class BankAccounts(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    user = relationship("User", back_populates="bank_accounts")
+    org = relationship("Organization", back_populates="bank_accounts")

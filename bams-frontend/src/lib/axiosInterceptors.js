@@ -45,7 +45,7 @@ const performTokenRefresh = async (axiosInstance) => {
       { _skipInterceptor: true } // Skip interceptors to avoid infinite loops
     );
 
-    const { access_token, user } = response.data;
+    const { access_token, org } = response.data;
 
     // Safety check: if the user manually logged out while refresh was in-flight, do not log back in
     if (!useAuthStore.getState().accessToken) {
@@ -53,7 +53,7 @@ const performTokenRefresh = async (axiosInstance) => {
     }
 
     // Save new token and update timestamp
-    useAuthStore.getState().login(user, access_token);
+    useAuthStore.getState().login(org, access_token);
     lastRefreshTime = Date.now();
     return access_token;
   } catch (error) {
@@ -170,7 +170,7 @@ const createResponseInterceptor = (axiosInstance) => async (error) => {
         { _skipInterceptor: true }
       );
 
-      const { access_token, user } = response.data;
+      const { access_token, org } = response.data;
 
       // Safety check: if the user manually logged out while refresh was in-flight, do not log back in
       if (!useAuthStore.getState().accessToken) {
@@ -180,7 +180,7 @@ const createResponseInterceptor = (axiosInstance) => async (error) => {
       }
 
       // Save new token in the store and update cookie and refresh time
-      useAuthStore.getState().login(user, access_token);
+      useAuthStore.getState().login(org, access_token);
       lastRefreshTime = Date.now();
 
       // Resume all queued up calls with the new access token

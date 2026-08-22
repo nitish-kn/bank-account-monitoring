@@ -11,7 +11,7 @@ class TransactionLog(Base):
     __tablename__ = "transaction_logs"
 
     id = Column(ID_TYPE, primary_key=True, autoincrement=True)
-    user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
+    org_id = Column(ID_TYPE, ForeignKey("organizations.id"), nullable=False, index=True)
 
     txn_id = Column(String, ForeignKey("transactions.id"), nullable=False, index=True)
 
@@ -25,5 +25,5 @@ class TransactionLog(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    user = relationship("User", back_populates="transaction_logs")
+    org = relationship("Organization", back_populates="transaction_logs")
     transactions = relationship("Transactions", back_populates="transaction_logs")

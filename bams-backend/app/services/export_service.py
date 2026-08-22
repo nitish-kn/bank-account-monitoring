@@ -16,7 +16,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from sqlalchemy.orm import Session
 
-from ..models.user import User
+from ..models.organization import Organization
 from .accounts_service import get_paginated_accounts
 from .transaction_service import get_paginated_transactions, query_audit_logs
 
@@ -41,7 +41,7 @@ CHANGE_FIELD_LABELS = {
 
 # Column tuples are (key, label, default) - "default" marks the columns
 # that are already visible on that page's own table, so the export dialog
-# can preselect exactly what the user is already looking at. Columns with
+# can preselect exactly what the org is already looking at. Columns with
 # default=False are still exportable, just opt-in (e.g. "Mode" isn't a
 # column on the Transactions table itself).
 #
@@ -230,7 +230,7 @@ def _default_date_bounds(days: int = DEFAULT_DATE_RANGE_DAYS) -> tuple[str, str]
 
 def _with_default_date_range(source: str, filters: dict | None) -> dict:
     """Transactions/Audit Log pages always show a trailing date window by
-    default (even before the user explicitly filters anything) - the export
+    default (even before the org explicitly filters anything) - the export
     should match that instead of silently dumping the entire unbounded
     history just because no filter context happened to be published."""
     filters = dict(filters or {})
@@ -255,21 +255,21 @@ def _with_default_date_range(source: str, filters: dict | None) -> dict:
     return filters
 
 
-def _fetch_rows(db: Session, user_id: int, source: str, filters: dict | None) -> list[dict]:
+def _fetch_rows(db: Session, org_id: int, source: str, filters: dict | None) -> list[dict]:
     filters = filters or {}
 
     if source == "transactions":
-        result = get_paginated_transactions(db, user_id, filters, page=1, page_size=EXPORT_ROW_LIMIT)
+        result = get_paginated_transactions(db, org_id, filters, page=1, page_size=EXPORT_ROW_LIMIT)
         return result["data"]
 
     if source == "accounts":
-        result = get_paginated_accounts(db, user_id, filters, page=1, page_size=1000)
+        result = get_paginated_accounts(db, org_id, filters, page=1, page_size=1000)
         return result["accounts"]
 
     if source == "audit-log":
         result = query_audit_logs(
             db,
-            user_id,
+            org_id,
             page=1,
             page_size=EXPORT_ROW_LIMIT,
             search=filters.get("search") or None,
@@ -384,7 +384,7 @@ def _cell_value(row: dict, key: str, formatters: dict | None = None, multiline: 
 
 def build_export(
     db: Session,
-    user: User,
+    org: Organization,
     source: str,
     export_format: str,
     columns: list[str] | None = None,
@@ -396,7 +396,7 @@ def build_export(
 
     meta = EXPORT_SOURCES[source]
     effective_filters = _with_default_date_range(source, filters)
-    rows = _fetch_rows(db, user.id, source, effective_filters)
+    rows = _fetch_rows(db, org.id, source, effective_filters)
     resolved_columns = _resolve_columns(source, columns)
     timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
     base_filename = f"{meta['filename']}-{timestamp}"
@@ -411,7 +411,7 @@ def build_export(
     if export_format == "pdf":
         date_line, filter_lines = _describe_filters(source, effective_filters)
         date_label = "As Of" if source == "accounts" else "Date Range"
-        pdf_bytes = _build_pdf(source, rows, resolved_columns, meta["label"], user, date_label, date_line, filter_lines)
+        pdf_bytes = _build_pdf(source, rows, resolved_columns, meta["label"], org, date_label, date_line, filter_lines)
         return pdf_bytes, f"{base_filename}.pdf", "application/pdf"
 
     raise ValueError(f"Unsupported export format: {export_format}")
@@ -492,11 +492,11 @@ class _PdfReport:
     (who the report is for, its date range/as-of, and any active filters);
     later pages just repeat the title and row count."""
 
-    def __init__(self, doc, title: str, row_count: int, user: User, date_label: str, date_line: str | None, filter_lines: list[str]):
+    def __init__(self, doc, title: str, row_count: int, org: Organization, date_label: str, date_line: str | None, filter_lines: list[str]):
         self.doc = doc
         self.title = title
         self.row_count = row_count
-        self.user = user
+        self.org = org
         self.date_label = date_label
         self.date_line = date_line
         self.filter_lines = filter_lines
@@ -514,9 +514,9 @@ class _PdfReport:
 
         if self._is_first_page:
             kv_rows = []
-            if self.user:
-                kv_rows.append(("Name", self.user.name or "-"))
-                kv_rows.append(("Email", self.user.email or "-"))
+            if self.org:
+                kv_rows.append(("Name", self.org.name or "-"))
+                kv_rows.append(("Email", self.org.email or "-"))
             if self.date_line:
                 kv_rows.append((self.date_label, self.date_line))
             if self.filter_lines:
@@ -692,13 +692,13 @@ def _build_pdf(
     rows: list[dict],
     columns: list[tuple[str, str]],
     title: str,
-    user: User,
+    org: Organization,
     date_label: str,
     date_line: str | None,
     filter_lines: list[str],
 ) -> bytes:
     doc = fitz.open()
-    report_args = (doc, rows, title, user, date_label, date_line, filter_lines)
+    report_args = (doc, rows, title, org, date_label, date_line, filter_lines)
 
     if source == "accounts":
         return _draw_accounts_pdf(*report_args, columns)
@@ -707,14 +707,14 @@ def _build_pdf(
     return _draw_generic_pdf(*report_args, columns)
 
 
-def _draw_generic_pdf(doc, rows, title, user, date_label, date_line, filter_lines, columns: list[tuple[str, str]]) -> bytes:
+def _draw_generic_pdf(doc, rows, title, org, date_label, date_line, filter_lines, columns: list[tuple[str, str]]) -> bytes:
     usable_width = _PDF_PAGE_WIDTH - 2 * _PDF_MARGIN
     col_widths = _weighted_col_widths(columns, usable_width)
 
     def redraw_header(page, y):
         return _draw_table_header(page, y, columns, col_widths)
 
-    report = _PdfReport(doc, title, len(rows), user, date_label, date_line, filter_lines)
+    report = _PdfReport(doc, title, len(rows), org, date_label, date_line, filter_lines)
     report.y = redraw_header(report.page, report.y)
 
     for row_idx, row in enumerate(rows):
@@ -758,7 +758,7 @@ _ACCOUNTS_BALANCE_DATE_KEYS = {
 }
 
 
-def _draw_accounts_pdf(doc, rows, title, user, date_label, date_line, filter_lines, selected_columns: list[tuple[str, str]]) -> bytes:
+def _draw_accounts_pdf(doc, rows, title, org, date_label, date_line, filter_lines, selected_columns: list[tuple[str, str]]) -> bytes:
     # Balance columns always carry their "as of" date stacked underneath,
     # mirroring the Accounts page's own BalanceCell - that pairing isn't a
     # separately toggleable column in the PDF the way it is in CSV/Excel.
@@ -771,7 +771,7 @@ def _draw_accounts_pdf(doc, rows, title, user, date_label, date_line, filter_lin
     def redraw_header(page, y):
         return _draw_table_header(page, y, columns, col_widths)
 
-    report = _PdfReport(doc, title, len(rows), user, date_label, date_line, filter_lines)
+    report = _PdfReport(doc, title, len(rows), org, date_label, date_line, filter_lines)
     report.y = redraw_header(report.page, report.y)
 
     for row_idx, row in enumerate(rows):
@@ -823,7 +823,7 @@ _AUDIT_CHANGE_LINE_HEIGHT = 11
 _AUDIT_CHANGE_BLOCK_PADDING = 8
 
 
-def _draw_audit_log_pdf(doc, rows, title, user, date_label, date_line, filter_lines, selected_columns: list[tuple[str, str]]) -> bytes:
+def _draw_audit_log_pdf(doc, rows, title, org, date_label, date_line, filter_lines, selected_columns: list[tuple[str, str]]) -> bytes:
     # "Changes" is always rendered as the expanded block below its row - it
     # isn't a toggleable column in the PDF the way it is in CSV/Excel, since
     # the diff needs room a table cell can't give it.
@@ -835,7 +835,7 @@ def _draw_audit_log_pdf(doc, rows, title, user, date_label, date_line, filter_li
     def redraw_header(page, y):
         return _draw_table_header(page, y, columns, col_widths)
 
-    report = _PdfReport(doc, title, len(rows), user, date_label, date_line, filter_lines)
+    report = _PdfReport(doc, title, len(rows), org, date_label, date_line, filter_lines)
     report.y = redraw_header(report.page, report.y)
 
     for row_idx, row in enumerate(rows):

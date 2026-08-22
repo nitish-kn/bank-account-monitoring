@@ -5,15 +5,15 @@ from ..config import settings
 from ..core.constants import GOOGLE_TOKEN_URI, TOKENINFO_URL
 
 
-def build_credentials(user) -> Credentials:
-    """Build Google Credentials object from user's stored tokens and refresh if necessary."""
+def build_credentials(org) -> Credentials:
+    """Build Google Credentials object from org's stored tokens and refresh if necessary."""
     creds = Credentials(
-        token=user.access_token,
-        refresh_token=user.refresh_token,
+        token=org.access_token,
+        refresh_token=org.refresh_token,
         token_uri=GOOGLE_TOKEN_URI,
         client_id=settings.google_client_id,
         client_secret=settings.google_client_secret,
-        expiry=user.token_expiry,
+        expiry=org.token_expiry,
     )
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())

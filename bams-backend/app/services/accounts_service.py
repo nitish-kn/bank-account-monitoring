@@ -404,7 +404,7 @@ def apply_account_filters(query, filters: dict | None):
 
 def get_paginated_accounts(
     db: Session,
-    user_id: int,
+    org_id: int,
     filters: dict | None,
     page: int,
     page_size: int,
@@ -417,7 +417,7 @@ def get_paginated_accounts(
     _, day_end = _day_bounds(selected_date)
 
     query = db.query(BankAccounts).filter(
-        BankAccounts.user_id == user_id,
+        BankAccounts.org_id == org_id,
         BankAccounts.created_at < day_end,
     )
     query = apply_account_filters(query, filters)
@@ -436,7 +436,7 @@ def get_paginated_accounts(
 
 def get_account_balance_as_of(
     db: Session,
-    user_id: int,
+    org_id: int,
     account_identifier: str,
     as_of_date: str | None = None,
 ) -> dict | None:
@@ -463,7 +463,7 @@ def get_account_balance_as_of(
     ]
 
     for filters in candidate_filters:
-        result = get_paginated_accounts(db, user_id, filters, page=1, page_size=1)
+        result = get_paginated_accounts(db, org_id, filters, page=1, page_size=1)
         accounts = result.get("accounts") or []
         if accounts:
             return accounts[0]
@@ -473,7 +473,7 @@ def get_account_balance_as_of(
 
 def get_recent_account_transactions(
     db: Session,
-    user_id: int,
+    org_id: int,
     account_id: str,
     limit: int = 5,
 ) -> dict:
@@ -482,7 +482,7 @@ def get_recent_account_transactions(
     account = (
         db.query(BankAccounts)
         .filter(
-            BankAccounts.user_id == user_id,
+            BankAccounts.org_id == org_id,
             BankAccounts.id == account_id,
         )
         .first()
@@ -500,7 +500,7 @@ def get_recent_account_transactions(
         )
 
     query = db.query(Transactions).filter(
-        Transactions.user_id == user_id,
+        Transactions.org_id == org_id,
         or_(*account_filters),
     )
 
@@ -537,8 +537,8 @@ def get_recent_account_transactions(
     }
 
 
-def create_new_account(db: Session, request: dict, user_id: int) -> None:
-    """Create a new bank account for a user"""
+def create_new_account(db: Session, request: dict, org_id: int) -> None:
+    """Create a new bank account for an org"""
 
     bank_name = request.bank
     account_no = request.accountno
@@ -555,7 +555,7 @@ def create_new_account(db: Session, request: dict, user_id: int) -> None:
     existing_account = (db.query(BankAccounts)
     .filter(
         BankAccounts.account_number == account_no,
-        BankAccounts.user_id == user_id
+        BankAccounts.org_id == org_id
     ).first())
     
     if existing_account:
@@ -569,7 +569,7 @@ def create_new_account(db: Session, request: dict, user_id: int) -> None:
             account_type = account_type,
             account_holder_name = account_holder_name,
             source = "manual",
-            user_id = user_id
+            org_id = org_id
         )
 
         db.add(new_account)

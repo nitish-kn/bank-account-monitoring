@@ -6,11 +6,24 @@ from .routes import accounts, auth, chat, export, family, gmail, invites, sheets
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi import status
 from .core.constants import FRONTEND_DIST_DIR, FRONTEND_INDEX_FILE, PROJECT_ROOT
+from contextlib import asynccontextmanager
+from .scheduler import scheduler, start_scheduler
 
 check_connection()
 init_database()
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    start_scheduler()
+
+    yield
+    # Shutdown
+    scheduler.shutdown()
+
+
+app = FastAPI(lifespan=lifespan, title="BAMS Backend API")
 
 # CORS
 app.add_middleware(
