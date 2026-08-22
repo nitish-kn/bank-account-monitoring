@@ -38,3 +38,5 @@ class Organization(Base):
     parsed = relationship("Parsed", back_populates="org")
     transaction_logs = relationship("TransactionLog", back_populates="org")
     chat_sessions = relationship("ChatSession", back_populates="org")
+    users = relationship("User", foreign_keys="User.org_id", back_populates="organization")
+    roles = relationship("Role", back_populates="organization")
