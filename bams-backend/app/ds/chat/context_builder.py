@@ -3,7 +3,7 @@ from .config import MAX_HISTORY_MESSAGES
 
 
 def build_input_messages(history: list[ChatMessage]) -> list[dict]:
-    """Converts persisted chat history (including the just-saved latest user
+    """Converts persisted chat history (including the just-saved latest org
     message) into Responses API input items.
 
     v1 truncation: keep the most recent MAX_HISTORY_MESSAGES verbatim, no

@@ -9,7 +9,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id = Column(String, primary_key=True)
-    user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
+    org_id = Column(ID_TYPE, ForeignKey("organizations.id"), nullable=False, index=True)
 
     title = Column(String, nullable=True)
     last_message_at = Column(DateTime(timezone=True), nullable=True)
@@ -17,5 +17,5 @@ class ChatSession(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    user = relationship("User", back_populates="chat_sessions")
+    org = relationship("Organization", back_populates="chat_sessions")
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")

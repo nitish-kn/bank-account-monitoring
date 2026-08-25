@@ -31,7 +31,7 @@ def get_recent_transactions(
     safe_limit = min(max(int(limit or 10), 1), 50)
     return get_paginated_transactions(
         ctx.db,
-        ctx.user_id,
+        ctx.org_id,
         filters,
         page=1,
         page_size=safe_limit,
@@ -54,4 +54,4 @@ def multi_account_aggregate(
     filters: dict = {"account": account_identifiers}
     if start_date or end_date:
         filters["dateRange"] = {"startDate": start_date, "endDate": end_date}
-    return get_dashboard_summary(ctx.db, ctx.user_id, filters)
+    return get_dashboard_summary(ctx.db, ctx.org_id, filters)

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import CustomSearchBar from "./ui/CustomSearchBar";
+import CustomInput from "./ui/CustomInput";
 import DialogPopup from "./ui/DialogPopup";
 import axios from "axios";
 import { accountsApi } from "../api/accounts";
@@ -62,49 +62,40 @@ const AddAcounts = ({open, setOpen}) => {
           </p>
         )}
 
-        <CustomSearchBar
+        <CustomInput
           name="bank"
           type="text"
           labelText="Enter Bank Name *"
           placeholder="Axis Bank"
           value={account.bank}
           onChange={handleChange}
-          iconClassName="hidden"
-          iconPosition="right"
-          className="flex flex-col gap-0.5"
         />
 
-        <CustomSearchBar
+        <CustomInput
           name="accountno"
           type="number"
           labelText="Enter Account Number *"
           placeholder="Enter number only (123456789)"
           value={account.accountno}
           onChange={handleChange}
-          iconClassName="hidden"
-          iconPosition="right"
         />
 
-        <CustomSearchBar
+        <CustomInput
           name="type"
           type="text"
           labelText="Enter Account Type *"
           placeholder="Savings / Current / Demat"
           value={account.type}
           onChange={handleChange}
-          iconClassName="hidden"
-          iconPosition="right"
         />
 
-        <CustomSearchBar
+        <CustomInput
           name="name"
           type="text"
           labelText="Enter Account Holder Name *"
           placeholder="John Doe"
           value={account.name}
           onChange={handleChange}
-          iconClassName="hidden"
-          iconPosition="right"
         />
       </div>
     </DialogPopup>

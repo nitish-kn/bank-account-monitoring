@@ -11,10 +11,10 @@ class Family(Base):
 
     id = Column(ID_TYPE, primary_key=True)
     name = Column(String, nullable=True)
-    owner_user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
+    owner_org_id = Column(ID_TYPE, ForeignKey("organizations.id"), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    owner = relationship("User", foreign_keys=[owner_user_id])
-    members = relationship("User", foreign_keys="User.family_id", back_populates="family")
+    owner = relationship("Organization", foreign_keys=[owner_org_id])
+    members = relationship("Organization", foreign_keys="Organization.family_id", back_populates="family")
     invites = relationship("Invite", back_populates="family")

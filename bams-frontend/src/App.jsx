@@ -12,6 +12,9 @@ import AuditLog from "./pages/AuditLog";
 import ChatAssistant from "./pages/ChatAssistant";
 import { Bounce, ToastContainer } from "react-toastify";
 import NeedsReview from "./pages/NeedsReview";
+import Users from "./pages/Users";
+import RolePermissions from "./pages/RolePermissions";
+import { PERMISSIONS } from "./lib/permissions";
 
 function App() {
   const { isAuthenticated, accessToken } = useAuthStore();
@@ -26,9 +29,11 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/consolidated-view" element={<ConsolidatedView />} />
         <Route path="/transactions" element={<Transactions />} />
-        <Route path="/all-accounts" element={<Accounts />} />
-        <Route path="/audit-log" element={<AuditLog />} />
-        <Route path="/chat-assistant" element={<ChatAssistant />} />
+        <Route path="/all-accounts" element={<ProtectedRoute permission={PERMISSIONS.ACCOUNTS_VIEW}><Accounts /></ProtectedRoute>} />
+        <Route path="/audit-log" element={<ProtectedRoute permission={PERMISSIONS.AUDIT_LOG_VIEW}><AuditLog /></ProtectedRoute>} />
+        <Route path="/chat-assistant" element={<ProtectedRoute permission={PERMISSIONS.CHAT_ASSISTANT_VIEW}><ChatAssistant /></ProtectedRoute>} />
+        <Route path="/users" element={<ProtectedRoute permission={PERMISSIONS.USERS_VIEW}><Users /></ProtectedRoute>} />
+        <Route path="/roles-permissions" element={<ProtectedRoute permission={PERMISSIONS.ROLES_VIEW}><RolePermissions /></ProtectedRoute>} />
         {/* <Route path="/needs-review" element={<NeedsReview />} /> */}
       </Route>
       

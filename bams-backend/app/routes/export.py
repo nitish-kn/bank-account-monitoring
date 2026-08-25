@@ -5,9 +5,9 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..core.dependencies import get_current_user
+from ..core.dependencies import get_current_org, require_permission
 from ..database import get_db
-from ..models.user import User
+from ..models.organization import Organization
 from ..services.export_service import EXPORT_SOURCES, build_export, get_export_sources
 
 router = APIRouter(prefix="/api/export", tags=["export"])
@@ -31,10 +31,10 @@ def list_export_sources():
     return {"sources": get_export_sources()}
 
 
-@router.post("/download")
+@router.post("/download", dependencies=[Depends(require_permission("export_data", "trigger"))])
 def export_data(
     req: ExportRequest,
-    current_user: User = Depends(get_current_user),
+    current_org: Organization = Depends(get_current_org),
     db: Session = Depends(get_db),
 ):
     if req.source not in EXPORT_SOURCES:
@@ -44,7 +44,7 @@ def export_data(
 
     try:
         file_bytes, filename, content_type = build_export(
-            db, current_user, req.source, req.format, columns=req.columns, filters=req.filters
+            db, current_org, req.source, req.format, columns=req.columns, filters=req.filters
         )
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))

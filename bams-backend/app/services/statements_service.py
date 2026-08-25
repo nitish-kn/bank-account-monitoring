@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..core.constants import UPLOAD_DIR
 from ..database import SessionLocal
-from ..models.user import User
+from ..models.organization import Organization
 from ..services.credentials import build_credentials
 from ..utils.db_utils import (
     save_valid_transaction_to_db,
@@ -50,10 +50,10 @@ def _set_statement_job(job_key: str, **updates) -> None:
         }
 
 
-def get_statement_upload_job(user_id: int, job_id: str) -> dict:
+def get_statement_upload_job(org_id: int, job_id: str) -> dict:
     with _statement_jobs_lock:
         job = _statement_jobs.get(job_id)
-        if not job or job.get("user_id") != user_id:
+        if not job or job.get("org_id") != org_id:
             raise HTTPException(status_code=404, detail="Statement upload job not found.")
         return dict(job)
 
@@ -127,9 +127,9 @@ def _statement_error_message(error: Exception) -> str:
     return str(error) or "Statement parsing failed."
 
 
-def _run_statement_upload_job(job_id: str, user_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
+def _run_statement_upload_job(job_id: str, org_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
     try:
-        result = _process_saved_statements_sync(user_id, saved_files)
+        result = _process_saved_statements_sync(org_id, saved_files)
 
         _set_statement_job(
             job_id,
@@ -149,10 +149,10 @@ def _run_statement_upload_job(job_id: str, user_id: int, saved_files: list[tuple
         )
 
 
-def _start_statement_job_thread(job_id: str, user_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
+def _start_statement_job_thread(job_id: str, org_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
     thread = threading.Thread(
         target=_run_statement_upload_job,
-        args=(job_id, user_id, saved_files),
+        args=(job_id, org_id, saved_files),
         daemon=True,
         name=f"statement-upload-{job_id}",
     )
@@ -165,7 +165,7 @@ def _start_statement_job_thread(job_id: str, user_id: int, saved_files: list[tup
 
 
 
-def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Path, str | None]]) -> dict:
+def _process_saved_statements_sync(org_id: int, saved_files: list[tuple[str, Path, str | None]]) -> dict:
     """
     Blocking statement pipeline. It runs in a worker thread so PDF rendering,
     LLM calls, Google Sheets calls, and DB commits do not block FastAPI's event loop. """
@@ -173,17 +173,17 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
     db = SessionLocal()
 
     try:
-        user = db.get(User, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found.")
+        org = db.get(Organization, org_id)
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found.")
 
-        if not user.spreadsheet_id:
+        if not org.spreadsheet_id:
             raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
 
-        # 2. Connect to Google Sheets client using user's OAuth credentials
-        credentials = build_credentials(user)
+        # 2. Connect to Google Sheets client using org's OAuth credentials
+        credentials = build_credentials(org)
         sheets_service = build("sheets", "v4", credentials=credentials)
-        sheet_title = _get_sheet_title(sheets_service, user.spreadsheet_id)
+        sheet_title = _get_sheet_title(sheets_service, org.spreadsheet_id)
     except Exception as e:
         for _, saved_path, _password in saved_files:
             _delete_saved_statement(saved_path)
@@ -217,13 +217,13 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
             # 5. Parse statement PDF using app.ds.llm.app.run(Path)
             extracted_txns = parse_statement_pdf_sync(
                 saved_path,
-                user.id,
+                org.id,
                 original_filename=original_filename,
                 password=password,
             )
             logger.info(
-                "Statement parsed | user=%s file=%s rows=%d",
-                user.id, original_filename, len(extracted_txns or []),
+                "Statement parsed | org=%s file=%s rows=%d",
+                org.id, original_filename, len(extracted_txns or []),
             )
             if not extracted_txns:
                 file_result["status"] = "no_transactions_found"
@@ -239,7 +239,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
             file_result["transactions_found"] = len(extracted_txns)
 
             if not statement_txns:
-                logger.info("Statement DB | user=%s file=%s transactions_saved=0", user.id, original_filename)
+                logger.info("Statement DB | org=%s file=%s transactions_saved=0", org.id, original_filename)
                 file_result["status"] = "no_transactions_found"
                 processed_files.append(file_result)
                 continue
@@ -249,8 +249,8 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
 
             try:
                 # 8. Add/update parsed transactions in DB.
-                saved_transactions = save_valid_transaction_to_db(statement_txns, user.id, db)
-                update_parsed_status_to_db(user.id, statement_txns, db)
+                saved_transactions = save_valid_transaction_to_db(statement_txns, org.id, db)
+                update_parsed_status_to_db(org.id, statement_txns, db)
                 db.commit()
 
                 # Only rows that are actually new information -- a brand-new row, 
@@ -264,8 +264,8 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
                 flagged_for_review = sum(1 for txn in saved_transactions if txn.is_flag)
 
                 logger.info(
-                    "Statement DB | user=%s file=%s parsed_valid=%d transactions_saved=%d duplicates_skipped=%d flagged_for_review=%d",
-                    user.id, original_filename, len(statement_txns), len(new_transactions),
+                    "Statement DB | org=%s file=%s parsed_valid=%d transactions_saved=%d duplicates_skipped=%d flagged_for_review=%d",
+                    org.id, original_filename, len(statement_txns), len(new_transactions),
                     duplicates_skipped, flagged_for_review,
                 )
             except Exception as e:
@@ -280,7 +280,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
 
             # 9. Add newly saved unsynced transactions to the sheets.
             sync_result = _sync_transactions_to_sheet(
-                user,
+                org,
                 db,
                 sheets_service=sheets_service,
                 sheet_title=sheet_title,
@@ -289,8 +289,8 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
             rows_written = sync_result.get("rows_written", 0)
             total_rows_written += rows_written
             logger.info(
-                "Statement sheet sync | user=%s file=%s rows_written=%d",
-                user.id, original_filename, rows_written,
+                "Statement sheet sync | org=%s file=%s rows_written=%d",
+                org.id, original_filename, rows_written,
             )
 
             file_result.update({
@@ -308,17 +308,17 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
             file_result["error"] = str(e.detail)
             processed_files.append(file_result)
             logger.warning(
-                "Statement %s | user=%s file=%s error=%s",
+                "Statement %s | org=%s file=%s error=%s",
                 "needs password" if needs_password else "parse failed",
-                user.id, original_filename, e.detail,
+                org.id, original_filename, e.detail,
             )
         except Exception as e:
             file_result["status"] = "failed"
             file_result["error"] = str(e)
             processed_files.append(file_result)
             logger.error(
-                "Statement parse failed unexpectedly | user=%s file=%s error=%s",
-                user.id, original_filename, e,
+                "Statement parse failed unexpectedly | org=%s file=%s error=%s",
+                org.id, original_filename, e,
             )
         finally:
             _delete_saved_statement(saved_path)
@@ -349,7 +349,7 @@ def _process_saved_statements_sync(user_id: int, saved_files: list[tuple[str, Pa
 
 # --------------------------- Main orchestrator function -----------------
 async def process_and_upload_statements(
-    user: User,
+    org: Organization,
     files: List[UploadFile],
     db: Session,
     password: str | None = None,
@@ -371,7 +371,7 @@ async def process_and_upload_statements(
             detail="A password can only be supplied when uploading a single statement.",
         )
 
-    if not user.spreadsheet_id:
+    if not org.spreadsheet_id:
         raise HTTPException(status_code=400, detail="Google spreadsheet setup not completed.")
 
     saved_files = await _save_uploaded_statements(files, password=password)
@@ -381,7 +381,7 @@ async def process_and_upload_statements(
     _set_statement_job(
         job_id,
         job_id=job_id,
-        user_id=user.id,
+        org_id=org.id,
         status=STATEMENT_JOB_RUNNING,
         message="Statement parsing is running.",
         filenames=filenames,
@@ -389,7 +389,7 @@ async def process_and_upload_statements(
     )
 
     try:
-        _start_statement_job_thread(job_id, user.id, saved_files)
+        _start_statement_job_thread(job_id, org.id, saved_files)
     except Exception:
         _delete_saved_statements(saved_files)
         _set_statement_job(

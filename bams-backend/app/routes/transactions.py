@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, Any, Literal
 
-from ..core.dependencies import get_current_user
+from ..core.dependencies import get_current_org, require_permission
 from ..database import get_db
-from ..models.user import User
+from ..models.organization import Organization
 from ..services.transaction_service import get_paginated_transactions, get_dashboard_summary, get_filter_options
 from fastapi import Request
 from ..services.transaction_service import update_transaction, query_audit_logs
@@ -31,20 +31,20 @@ class TransactionQueryRequest(BaseModel):
     include: IncludeQuery = IncludeQuery()
 
 @router.get("/filter-options")
-def get_options(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return get_filter_options(db, current_user.id)
+def get_options(current_org: Organization = Depends(get_current_org), db: Session = Depends(get_db)):
+    return get_filter_options(db, current_org.id)
 
 @router.post("/query")
-def query_transactions(req: TransactionQueryRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def query_transactions(req: TransactionQueryRequest, current_org: Organization = Depends(get_current_org), db: Session = Depends(get_db)):
     result = {}
     if req.include.transactions:
         sort_dict = req.sort.dict() if req.sort else None
-        paginated = get_paginated_transactions(db, current_user.id, req.filters, req.pagination.page, req.pagination.pageSize, sort_dict)
+        paginated = get_paginated_transactions(db, current_org.id, req.filters, req.pagination.page, req.pagination.pageSize, sort_dict)
         result["transactions"] = paginated["data"]
         result["totalCount"] = paginated["totalCount"]
         
     if req.include.summary:
-        result["summary"] = get_dashboard_summary(db, current_user.id, req.filters)
+        result["summary"] = get_dashboard_summary(db, current_org.id, req.filters)
         
     return result
 
@@ -62,24 +62,24 @@ class EditTransactionRequest(BaseModel):
     reason: Optional[str] = None
 
 
-@router.put("/{id}")
+@router.put("/{id}", dependencies=[Depends(require_permission("transactions", "update"))])
 def edit_transaction(
     id: str,
     payload: EditTransactionRequest,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_org: Organization = Depends(get_current_org),
     db: Session = Depends(get_db)
 ):
     ip_address = request.client.host if request.client else "unknown"
     return update_transaction(
         db=db,
-        user_id=current_user.id,
+        org_id=current_org.id,
         txn_id=id,
         payload=payload,
         ip_address=ip_address
     )
 
-@router.get("/audit-log")
+@router.get("/audit-log", dependencies=[Depends(require_permission("audit_log", "view"))])
 def get_audit_log(
     page: int = 1,
     pageSize: int = 50,
@@ -88,12 +88,12 @@ def get_audit_log(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     txn_id: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_org: Organization = Depends(get_current_org),
     db: Session = Depends(get_db)
 ):
     return query_audit_logs(
         db=db,
-        user_id=current_user.id,
+        org_id=current_org.id,
         page=page,
         page_size=pageSize,
         search=search,

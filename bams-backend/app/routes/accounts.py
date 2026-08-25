@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..core.dependencies import get_current_user
+from ..core.dependencies import get_current_org, require_permission
 from ..database import get_db
-from ..models.user import User
+from ..models.organization import Organization
 from ..services.accounts_service import get_paginated_accounts, create_new_account, get_recent_account_transactions
 
 
@@ -34,16 +34,16 @@ class CreateAccountRequest(BaseModel):
     type: str
     name: str
 
-@router.post("/query")
+@router.post("/query", dependencies=[Depends(require_permission("accounts", "view"))])
 def query_accounts(
     req: AccountsQueryRequest,
-    current_user: User = Depends(get_current_user),
+    current_org: Organization = Depends(get_current_org),
     db: Session = Depends(get_db),
 ):
     sort_dict = req.sort.dict() if req.sort else None
     return get_paginated_accounts(
         db=db,
-        user_id=current_user.id,
+        org_id=current_org.id,
         filters=req.filters,
         page=req.pagination.page,
         page_size=req.pagination.pageSize,
@@ -51,24 +51,24 @@ def query_accounts(
     )
 
 
-@router.get("/{account_id}/transactions")
+@router.get("/{account_id}/transactions", dependencies=[Depends(require_permission("accounts", "view"))])
 def get_account_transactions(
     account_id: str,
     limit: int = 5,
-    current_user: User = Depends(get_current_user),
+    current_org: Organization = Depends(get_current_org),
     db: Session = Depends(get_db),
 ):
     return get_recent_account_transactions(
         db=db,
-        user_id=current_user.id,
+        org_id=current_org.id,
         account_id=account_id,
         limit=limit,
     )
 
 
-@router.post("/")
-def create_account(request: CreateAccountRequest, current_user: User = Depends(get_current_user), db: Session= Depends(get_db)):
+@router.post("/", dependencies=[Depends(require_permission("accounts", "create"))])
+def create_account(request: CreateAccountRequest, current_org: Organization = Depends(get_current_org), db: Session= Depends(get_db)):
 
-    return create_new_account(db, request, current_user.id)
+    return create_new_account(db, request, current_org.id)
 
     

@@ -4,8 +4,8 @@ from sqlalchemy.sql import func
 from ..database import Base
 from .types import ID_TYPE
 
-class User(Base):
-    __tablename__ = "users"
+class Organization(Base):
+    __tablename__ = "organizations"
 
     id = Column(ID_TYPE, primary_key=True)
     google_id = Column(String, unique=True, index=True)
@@ -21,7 +21,7 @@ class User(Base):
     spreadsheet_id = Column(String, nullable=True)
     family_id = Column(
         ID_TYPE,
-        ForeignKey("families.id", name="users_family_id_fkey", use_alter=True),
+        ForeignKey("families.id", name="organizations_family_id_fkey", use_alter=True),
         nullable=True,
         index=True,
     )
@@ -33,8 +33,10 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     family = relationship("Family", foreign_keys=[family_id], back_populates="members")
-    transactions = relationship("Transactions", back_populates="user")
-    bank_accounts = relationship("BankAccounts", back_populates="user")
-    parsed = relationship("Parsed", back_populates="user")
-    transaction_logs = relationship("TransactionLog", back_populates="user")
-    chat_sessions = relationship("ChatSession", back_populates="user")
+    transactions = relationship("Transactions", back_populates="org")
+    bank_accounts = relationship("BankAccounts", back_populates="org")
+    parsed = relationship("Parsed", back_populates="org")
+    transaction_logs = relationship("TransactionLog", back_populates="org")
+    chat_sessions = relationship("ChatSession", back_populates="org")
+    users = relationship("User", foreign_keys="User.org_id", back_populates="organization")
+    roles = relationship("Role", back_populates="organization")

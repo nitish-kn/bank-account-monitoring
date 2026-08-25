@@ -3,12 +3,12 @@ import { useAuthStore } from "../store/authStore";
 import { AllTransactions } from "../components/AllTransactions";
 
 export function Transactions() {
-  const { user } = useAuthStore();
+  const { org } = useAuthStore();
 
   return (
     <>
       <AllTransactions
-        user={user}
+        org={org}
       />
     </>
   );

@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from "react";
 import DialogPopup from "./DialogPopup";
-import CustomSearchBar from "./CustomSearchBar";
+import CustomInput from "./CustomInput";
 import { transactionApi } from "../../api/transactions";
 import { useSetupStore } from "../../store/setupStore";
+import { useAuthStore } from "../../store/authStore";
 import { Info, TriangleAlert, ArrowLeftRight } from "lucide-react";
 import { formatAmount } from "../../lib/helper";
 
 const EditTransactionDialog = ({ open, setOpen, data }) => {
+  // RBAC identifies who's actually signed in, so the operator name is no
+  // longer free text someone could misattribute -- it's fixed to them.
+  const { user } = useAuthStore();
   const [formState, setFormState] = useState({
     counterparty: "",
     mode: "",
@@ -44,13 +48,13 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
         txn_date: formattedDate,
         account_number: data.account_number || "",
         account_holder_name: data.account_holder_name || "",
-        changed_by: "",
+        changed_by: user?.name || "",
         reason: "",
       });
       setError("");
       setShowConfirm(false);
     }
-  }, [data, open]);
+  }, [data, open, user?.name]);
 
   const handleChange = (value, event) => {
     const name = event?.target?.name;
@@ -99,11 +103,6 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
 
   const handleUpdateClick = () => {
     setError("");
-    if (!formState.changed_by.trim()) {
-      setError("Name of person changing is mandatory.");
-      return;
-    }
-
     const changes = detectChanges();
     if (changes.length === 0) {
       setError("No fields have been modified.");
@@ -215,25 +214,21 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
 
         {/* Audit Meta fields */}
         <div className="p-3 bg-blue-50/40 border border-blue-100 rounded-xl space-y-3">
-          <CustomSearchBar
+          <CustomInput
             name="changed_by"
             type="text"
-            labelText="Who is editing? (Mandatory) *"
-            placeholder="Enter your name"
+            labelText="Editing as"
             value={formState.changed_by}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
+            disabled
           />
-          <CustomSearchBar
+          <CustomInput
             name="reason"
             type="text"
             labelText="Reason for edit (Optional)"
             placeholder="e.g. Corrected category mapping error"
             value={formState.reason}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
         </div>
 
@@ -255,70 +250,58 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
 
         {/* Editable fields */}
         <div className="grid grid-cols-2 gap-3">
-          <CustomSearchBar
+          <CustomInput
             name="counterparty"
             type="text"
             labelText="Counterparty"
             placeholder="Counterparty"
             value={formState.counterparty}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="mode"
             type="text"
             labelText="Mode"
             placeholder="UPI / Net Banking / Card"
             value={formState.mode}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="category"
             type="text"
             labelText="Category"
             placeholder="Food / Travel / Investment"
             value={formState.category}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="ref_number"
             type="text"
             labelText="Reference ID"
             placeholder="Reference number"
             value={formState.ref_number}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="account_number"
             type="text"
             labelText="Account Number"
             placeholder="Account number"
             value={formState.account_number}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
 
-          <CustomSearchBar
+          <CustomInput
             name="account_holder_name"
             type="text"
             labelText="Account Holder Name"
             placeholder="Holder name"
             value={formState.account_holder_name}
             onChange={handleChange}
-            iconClassName="hidden"
-            iconPosition="right"
           />
         </div>
 
@@ -334,15 +317,13 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
           />
         </div>
 
-        <CustomSearchBar
+        <CustomInput
           name="narration"
           type="text"
           labelText="Narration"
           placeholder="Detailed transaction narration"
           value={formState.narration}
           onChange={handleChange}
-          iconClassName="hidden"
-          iconPosition="right"
         />
       </div>
     </DialogPopup>

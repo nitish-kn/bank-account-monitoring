@@ -9,8 +9,8 @@ export const useEmailStore = create((set, get) => ({
   error: null,
 
   fetchEmailData: async () => {
-    const { accessToken, isAuthenticated, user } = useAuthStore.getState();
-    const hasEmailPermission = user?.has_email_permissions;
+    const { accessToken, isAuthenticated, org } = useAuthStore.getState();
+    const hasEmailPermission = org?.has_email_permissions;
 
     if (!isAuthenticated || !accessToken || !hasEmailPermission) {
       set({ error: "User is not authenticated or does not have email permissions" });

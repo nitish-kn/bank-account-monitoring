@@ -18,12 +18,12 @@ _ledger_locks: dict[int, threading.Lock] = {}
 _ledger_locks_guard = threading.Lock()
 
 
-def _ledger_lock_for_user(user_id: int) -> threading.Lock:
+def _ledger_lock_for_org(org_id: int) -> threading.Lock:
     with _ledger_locks_guard:
-        lock = _ledger_locks.get(user_id)
+        lock = _ledger_locks.get(org_id)
         if lock is None:
             lock = threading.Lock()
-            _ledger_locks[user_id] = lock
+            _ledger_locks[org_id] = lock
         return lock
 
 
@@ -57,11 +57,11 @@ def _write_temp_pdf(contents: bytes) -> Path:
         return Path(tmp.name)
 
 
-def _reconcile_statement_transactions(transactions: list[dict], user_id: int) -> None:
-    with _ledger_lock_for_user(user_id):
+def _reconcile_statement_transactions(transactions: list[dict], org_id: int) -> None:
+    with _ledger_lock_for_org(org_id):
         db = SessionLocal()
         try:
-            reconcile_statement_batch(db, transactions, user_id)
+            reconcile_statement_batch(db, transactions, org_id)
         finally:
             db.close()
 
@@ -79,7 +79,7 @@ def health():
 @app.post("/process-emails")
 async def process_emails(
     emails: List[EmailPayload],
-    user_id: Optional[int] = None,
+    org_id: Optional[int] = None,
 ):
 
     emails_data = []
@@ -116,11 +116,11 @@ async def process_emails(
     # Updates bank_accounts running balances only. Never writes to the
     # transactions table — persist_transactions_batch mutates each dict in
     # `transactions` in place with its computed balance_after_txn.
-    if user_id is not None:
-        with _ledger_lock_for_user(user_id):
+    if org_id is not None:
+        with _ledger_lock_for_org(org_id):
             db = SessionLocal()
             try:
-                persist_transactions_batch(db, transactions, user_id)
+                persist_transactions_batch(db, transactions, org_id)
             finally:
                 db.close()
 
@@ -131,7 +131,7 @@ async def process_emails(
 async def process_statement(
     file: Optional[UploadFile] = File(None),
     file_path: Optional[str] = Form(None),
-    user_id: Optional[int] = Form(None),
+    org_id: Optional[int] = Form(None),
     original_filename: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
 ):
@@ -149,7 +149,7 @@ async def process_statement(
 
     upload_file = _direct_upload_file(file)
     resolved_file_path = _direct_form_text(file_path)
-    resolved_user_id = _direct_form_int(user_id)
+    resolved_org_id = _direct_form_int(org_id)
     resolved_original_filename = _direct_form_text(original_filename)
     resolved_password = _direct_form_text(password)
 
@@ -188,11 +188,11 @@ async def process_statement(
             f"source=file_path rows={len(transactions or [])}"
         )
 
-        if resolved_user_id is not None:
+        if resolved_org_id is not None:
             await run_in_threadpool(
                 _reconcile_statement_transactions,
                 transactions,
-                resolved_user_id,
+                resolved_org_id,
             )
 
         return transactions
@@ -222,11 +222,11 @@ async def process_statement(
             f"source=upload rows={len(transactions or [])}"
         )
 
-        # if resolved_user_id is not None:
+        # if resolved_org_id is not None:
         #     await run_in_threadpool(
         #         _reconcile_statement_transactions,
         #         transactions,
-        #         resolved_user_id,
+        #         resolved_org_id,
         #     )
 
         return transactions

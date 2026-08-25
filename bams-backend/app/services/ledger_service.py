@@ -114,7 +114,7 @@ def _is_empty(value: Any) -> bool:
 
 def get_or_create_daily_balance(
     db: Session,
-    user_id: int,
+    org_id: int,
     account_number: str,
     day: date,
     bank_name: Optional[str] = None,
@@ -128,13 +128,13 @@ def get_or_create_daily_balance(
     closest earlier day-row for that account, or 0 if this account has never
     been seen before.
     """
-    row_id = f"{user_id}_{account_number}_{day.strftime('%Y%m%d')}"
+    row_id = f"{org_id}_{account_number}_{day.strftime('%Y%m%d')}"
 
     existing = (
         db.query(BankAccounts)
         .filter(
             BankAccounts.id == row_id,
-            BankAccounts.user_id == user_id,
+            BankAccounts.org_id == org_id,
         )
         .first()
     )
@@ -155,7 +155,7 @@ def get_or_create_daily_balance(
     previous = (
         db.query(BankAccounts)
         .filter(
-            BankAccounts.user_id == user_id,
+            BankAccounts.org_id == org_id,
             BankAccounts.account_number == account_number,
             BankAccounts.created_at < _day_start(day),
         )
@@ -167,7 +167,7 @@ def get_or_create_daily_balance(
 
     new_row = BankAccounts(
         id=row_id,
-        user_id=user_id,
+        org_id=org_id,
         bank_name=bank_name or (previous.bank_name if previous else None) or "Unknown",
         account_holder_name=(
             account_holder_name or (previous.account_holder_name if previous else None) or "Unknown"
@@ -187,7 +187,7 @@ def get_or_create_daily_balance(
 
 def apply_transaction_to_ledger(
     db: Session,
-    user_id: int,
+    org_id: int,
     account_number: str,
     txn_type: str,
     amount: Decimal,
@@ -205,7 +205,7 @@ def apply_transaction_to_ledger(
     """
     day_row, created = get_or_create_daily_balance(
         db,
-        user_id=user_id,
+        org_id=org_id,
         account_number=account_number,
         day=txn_day,
         bank_name=bank_name,
@@ -228,7 +228,7 @@ def apply_transaction_to_ledger(
 
 def set_daily_closing_balance(
     db: Session,
-    user_id: int,
+    org_id: int,
     account_number: str,
     day: date,
     closing_balance: Decimal,
@@ -243,7 +243,7 @@ def set_daily_closing_balance(
     """
     day_row, created = get_or_create_daily_balance(
         db,
-        user_id=user_id,
+        org_id=org_id,
         account_number=account_number,
         day=day,
         bank_name=bank_name,
@@ -268,8 +268,8 @@ def set_daily_closing_balance(
 # ------------------------------------------------------------------ #
 
 
-def _row_id(user_id: int, account_number: str, day: date) -> str:
-    return f"{user_id}_{account_number}_{day.strftime('%Y%m%d')}"
+def _row_id(org_id: int, account_number: str, day: date) -> str:
+    return f"{org_id}_{account_number}_{day.strftime('%Y%m%d')}"
 
 
 def _row_day(row: BankAccounts) -> Optional[date]:
@@ -360,19 +360,19 @@ def _fill_account_meta(row: BankAccounts, meta: dict[str, Any]) -> None:
 
 def _get_or_create_recalculation_row(
     db: Session,
-    user_id: int,
+    org_id: int,
     account_number: str,
     day: date,
     meta: dict[str, Any],
     source: str,
     stats: dict[str, int],
 ) -> BankAccounts:
-    row_id = _row_id(user_id, account_number, day)
+    row_id = _row_id(org_id, account_number, day)
     row = (
         db.query(BankAccounts)
         .filter(
             BankAccounts.id == row_id,
-            BankAccounts.user_id == user_id,
+            BankAccounts.org_id == org_id,
         )
         .first()
     )
@@ -384,7 +384,7 @@ def _get_or_create_recalculation_row(
 
     row = BankAccounts(
         id=row_id,
-        user_id=user_id,
+        org_id=org_id,
         bank_name=meta.get("bank_name") or "Unknown",
         account_holder_name=meta.get("account_holder_name") or "Unknown",
         account_type=meta.get("account_type"),
@@ -403,7 +403,7 @@ def _get_or_create_recalculation_row(
 
 def recalculate_account_ledger(
     db: Session,
-    user_id: int,
+    org_id: int,
     account_number: str,
     stats: dict[str, int] | None = None,
 ) -> dict[str, int]:
@@ -431,7 +431,7 @@ def recalculate_account_ledger(
     existing_rows = (
         db.query(BankAccounts)
         .filter(
-            BankAccounts.user_id == user_id,
+            BankAccounts.org_id == org_id,
             BankAccounts.account_number == account_number,
         )
         .order_by(BankAccounts.created_at.asc())
@@ -446,7 +446,7 @@ def recalculate_account_ledger(
     transactions = (
         db.query(Transactions)
         .filter(
-            Transactions.user_id == user_id,
+            Transactions.org_id == org_id,
             Transactions.account_number == account_number,
             Transactions.txn_date.isnot(None),
             Transactions.amount.isnot(None),
@@ -505,7 +505,7 @@ def recalculate_account_ledger(
         else:
             row = _get_or_create_recalculation_row(
                 db,
-                user_id=user_id,
+                org_id=org_id,
                 account_number=account_number,
                 day=day,
                 meta=meta,
@@ -549,7 +549,7 @@ def recalculate_account_ledger(
 
     print(
         "Ledger recalculated: "
-        f"user={user_id} account={account_number} rows={touched_count} "
+        f"org={org_id} account={account_number} rows={touched_count} "
         f"bank_accounts_inserted={local_stats['bank_accounts_inserted']} "
         f"bank_accounts_updated={local_stats['bank_accounts_updated']}"
     )
@@ -563,7 +563,7 @@ def recalculate_account_ledger(
 def recalculate_ledgers_for_transactions(
     db: Session,
     transactions: List[Transactions],
-    user_id: int,
+    org_id: int,
     stats: dict[str, int] | None = None,
 ) -> dict[str, int]:
     account_numbers = {
@@ -583,7 +583,7 @@ def recalculate_ledgers_for_transactions(
         before_updated = (stats or {}).get("bank_accounts_updated", 0)
         account_result = recalculate_account_ledger(
             db,
-            user_id=user_id,
+            org_id=org_id,
             account_number=account_number,
             stats=stats,
         )
@@ -605,7 +605,7 @@ def recalculate_ledgers_for_transactions(
 def persist_transaction(
     db: Session,
     transaction: Dict[str, Any],
-    user_id: int,
+    org_id: int,
     stats: dict[str, int] | None = None,
 ) -> Optional[Dict[str, Any]]:
     """
@@ -637,7 +637,7 @@ def persist_transaction(
     if account_number and txn_day and txn_type_norm in ("credit", "debit"):
         balance_after_txn = apply_transaction_to_ledger(
             db,
-            user_id=user_id,
+            org_id=org_id,
             account_number=account_number,
             txn_type=txn_type_norm,
             amount=amount,
@@ -660,7 +660,7 @@ def persist_transaction(
 def persist_transactions_batch(
     db: Session,
     transactions: List[Dict[str, Any]],
-    user_id: int,
+    org_id: int,
 ) -> Dict[str, Any]:
     """
     Process a batch of extracted email transactions, updating bank_accounts
@@ -678,7 +678,7 @@ def persist_transactions_batch(
     for transaction in transactions:
         before_stats = dict(stats)
         try:
-            result = persist_transaction(db, transaction, user_id, stats=stats)
+            result = persist_transaction(db, transaction, org_id, stats=stats)
         except Exception as exc:
             stats.update(before_stats)
             db.rollback()
@@ -695,7 +695,7 @@ def persist_transactions_batch(
 
     print(
         "Email ledger DB: "
-        f"user={user_id} transactions_applied={len(persisted_refs)} "
+        f"org={org_id} transactions_applied={len(persisted_refs)} "
         f"bank_accounts_inserted={stats['bank_accounts_inserted']} "
         f"bank_accounts_updated={stats['bank_accounts_updated']} "
         f"skipped={len(skipped)}"
@@ -726,7 +726,7 @@ def _fallback_match_key(transaction: Dict[str, Any]) -> Optional[tuple]:
 
 def _find_matching_transaction(
     db: Session,
-    user_id: int,
+    org_id: int,
     transaction: Dict[str, Any],
     occurrence_counter: Dict[tuple, int],
 ) -> Optional[Transactions]:
@@ -757,7 +757,7 @@ def _find_matching_transaction(
         match = (
             db.query(Transactions)
             .filter(
-                Transactions.user_id == user_id,
+                Transactions.org_id == org_id,
                 Transactions.account_number == account_number,
                 Transactions.ref_number == ref_number,
             )
@@ -775,7 +775,7 @@ def _find_matching_transaction(
 
     _, amount, txn_day = key
     query = db.query(Transactions).filter(
-        Transactions.user_id == user_id,
+        Transactions.org_id == org_id,
         Transactions.account_number == account_number,
         Transactions.amount == amount,
         Transactions.txn_date == _day_start(txn_day),
@@ -807,7 +807,7 @@ def _fill_transaction_gaps_from_existing(transaction: Dict[str, Any], existing_r
 def reconcile_statement_batch(
     db: Session,
     transactions: List[Dict[str, Any]],
-    user_id: int,
+    org_id: int,
 ) -> Dict[str, Any]:
     """
     Reconcile a batch of statement-extracted transactions (typically a full
@@ -871,7 +871,7 @@ def reconcile_statement_batch(
                 "account_type": transaction.get("account_type"),
             }
 
-        existing = _find_matching_transaction(db, user_id, transaction, occurrence_counter)
+        existing = _find_matching_transaction(db, org_id, transaction, occurrence_counter)
         if existing:
             _fill_transaction_gaps_from_existing(transaction, existing)
 
@@ -885,7 +885,7 @@ def reconcile_statement_batch(
         meta = account_meta.get(account_number, {})
         set_daily_closing_balance(
             db,
-            user_id=user_id,
+            org_id=org_id,
             account_number=account_number,
             day=day,
             closing_balance=closing_balance,
@@ -900,12 +900,12 @@ def reconcile_statement_batch(
     # Refresh statement_balance/last_synced_at using each account's most recent day in this statement.
     for account_number, day in last_day_per_account.items():
         closing_balance = day_closing_balance[(account_number, day)]
-        row_id = f"{user_id}_{account_number}_{day.strftime('%Y%m%d')}"
+        row_id = f"{org_id}_{account_number}_{day.strftime('%Y%m%d')}"
         day_row = (
             db.query(BankAccounts)
             .filter(
                 BankAccounts.id == row_id,
-                BankAccounts.user_id == user_id,
+                BankAccounts.org_id == org_id,
             )
             .first()
         )
@@ -917,7 +917,7 @@ def reconcile_statement_batch(
     for account_number in sorted({account for account, _day in day_closing_balance}):
         result = recalculate_account_ledger(
             db,
-            user_id=user_id,
+            org_id=org_id,
             account_number=account_number,
             stats=recalculation_stats,
         )
@@ -927,7 +927,7 @@ def reconcile_statement_batch(
 
     print(
         "Statement ledger DB: "
-        f"user={user_id} bank_accounts_inserted={stats['bank_accounts_inserted']} "
+        f"org={org_id} bank_accounts_inserted={stats['bank_accounts_inserted']} "
         f"bank_accounts_updated={stats['bank_accounts_updated']} "
         f"recalculated_rows={recalculated_account_rows} "
         f"recalc_inserted={recalculation_stats['bank_accounts_inserted']} "

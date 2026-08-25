@@ -40,7 +40,7 @@ def get_dashboard_summary_tool(
     end_date: str | None = None,
     account: str | None = None,
 ) -> dict:
-    return get_dashboard_summary(ctx.db, ctx.user_id, _date_range_filters(start_date, end_date, account))
+    return get_dashboard_summary(ctx.db, ctx.org_id, _date_range_filters(start_date, end_date, account))
 
 
 @tool(
@@ -50,7 +50,7 @@ def get_dashboard_summary_tool(
     cache_tier="medium",
 )
 def get_cash_flow_trend(ctx: ToolContext, start_date: str, end_date: str, account: str | None = None) -> dict:
-    summary = get_dashboard_summary(ctx.db, ctx.user_id, _date_range_filters(start_date, end_date, account))
+    summary = get_dashboard_summary(ctx.db, ctx.org_id, _date_range_filters(start_date, end_date, account))
     return {"cashFlowTrend": summary.get("cashFlowTrend", [])}
 
 
@@ -74,7 +74,7 @@ def get_category_breakdown_tool(
     filters = _date_range_filters(start_date, end_date)
     if tab:
         filters["tab"] = tab
-    return {"categories": get_category_breakdown(ctx.db, ctx.user_id, filters, txn_type)}
+    return {"categories": get_category_breakdown(ctx.db, ctx.org_id, filters, txn_type)}
 
 
 @tool(
@@ -84,7 +84,7 @@ def get_category_breakdown_tool(
     cache_tier="medium",
 )
 def get_via_breakdown_tool(ctx: ToolContext, start_date: str | None = None, end_date: str | None = None) -> dict:
-    return {"breakdown": get_via_breakdown(ctx.db, ctx.user_id, _date_range_filters(start_date, end_date))}
+    return {"breakdown": get_via_breakdown(ctx.db, ctx.org_id, _date_range_filters(start_date, end_date))}
 
 
 @tool(
@@ -101,8 +101,8 @@ def compare_periods(
     period_b_end: str,
     account: str | None = None,
 ) -> dict:
-    summary_a = get_dashboard_summary(ctx.db, ctx.user_id, _date_range_filters(period_a_start, period_a_end, account))
-    summary_b = get_dashboard_summary(ctx.db, ctx.user_id, _date_range_filters(period_b_start, period_b_end, account))
+    summary_a = get_dashboard_summary(ctx.db, ctx.org_id, _date_range_filters(period_a_start, period_a_end, account))
+    summary_b = get_dashboard_summary(ctx.db, ctx.org_id, _date_range_filters(period_b_start, period_b_end, account))
     return {
         "period_a": {"start": period_a_start, "end": period_a_end, "summary": summary_a},
         "period_b": {"start": period_b_start, "end": period_b_end, "summary": summary_b},
@@ -118,7 +118,7 @@ def compare_periods(
     name="find_biggest_balance_drop",
     description=(
         "Find which account(s) had the biggest balance drop (or rise) between two dates. Optionally "
-        "restrict to a scope list of account identifiers; otherwise scans all of the user's accounts. "
+        "restrict to a scope list of account identifiers; otherwise scans all of the org's accounts. "
         "Results are sorted with the biggest drop first."
     ),
     params_model=BalanceDropParams,
@@ -133,13 +133,13 @@ def find_biggest_balance_drop(
     if scope:
         identifiers = scope
     else:
-        all_accounts = get_paginated_accounts(ctx.db, ctx.user_id, {}, page=1, page_size=100)
+        all_accounts = get_paginated_accounts(ctx.db, ctx.org_id, {}, page=1, page_size=100)
         identifiers = [a["account_number"] for a in all_accounts.get("accounts", []) if a.get("account_number")]
 
     results = []
     for identifier in identifiers:
-        start_snapshot = get_account_balance_as_of(ctx.db, ctx.user_id, identifier, start_date)
-        end_snapshot = get_account_balance_as_of(ctx.db, ctx.user_id, identifier, end_date)
+        start_snapshot = get_account_balance_as_of(ctx.db, ctx.org_id, identifier, start_date)
+        end_snapshot = get_account_balance_as_of(ctx.db, ctx.org_id, identifier, end_date)
         if not start_snapshot or not end_snapshot:
             continue
 

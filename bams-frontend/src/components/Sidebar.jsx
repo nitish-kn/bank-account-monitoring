@@ -5,11 +5,14 @@ import { Landmark, } from "lucide-react";
 import { formatRelativeSyncTime } from "../lib/helper";
 import { Badge } from "@radix-ui/themes";
 import { NavLinks } from "../assets/navlinks";
+import { usePermissions } from "../lib/permissions";
 
-const Sidebar = ({ picture, name, onClose, lastSyncAt }) => {
+const Sidebar = ({ picture, name, userName, onClose, lastSyncAt }) => {
   const pathname = useLocation().pathname;
   const [now, setNow] = useState(() => new Date());
-  
+  const can = usePermissions();
+  const visibleLinks = NavLinks.filter((item) => can(item.permission));
+
   const syncLabel = formatRelativeSyncTime(lastSyncAt, now);
 
 
@@ -37,7 +40,7 @@ const Sidebar = ({ picture, name, onClose, lastSyncAt }) => {
       </div>
 
       <div className="flex flex-col mt-6 gap-1.5 w-full">
-        {NavLinks?.map((item) => (
+        {visibleLinks.map((item) => (
           <Link
             to={item.route}
             key={item.name}
@@ -60,8 +63,10 @@ const Sidebar = ({ picture, name, onClose, lastSyncAt }) => {
         <div className="flex border-t border-gray-300 pt-2 justify-between items-center">
           <div className="flex items-center gap-2 px-2">
             <img src={picture} alt="Profile" className="w-8 h-8 rounded-full" />
-            <span className="text-gray-600 w-11/12 truncate text-sm font-semibold text mr-2">{name}</span>
-
+            <div className="w-11/12 mr-2 truncate">
+              <p className="text-gray-800 truncate text-sm font-semibold">{name}</p>
+              {userName && <p className="text-gray-600 truncate text-xs font-medium">{userName}</p>}
+            </div>
           </div>
 
           <Logout

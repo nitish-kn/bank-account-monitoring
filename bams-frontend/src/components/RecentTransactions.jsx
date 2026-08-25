@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import CustomTable from "./ui/CustomTable";
-import { EllipsisVertical, Eye, FileText, MoreHorizontal } from "lucide-react";
+import { EllipsisVertical, Eye, FileText, MoreHorizontal, Search } from "lucide-react";
 import { Button } from "@radix-ui/themes";
 import { formatAmount, formatCompactINR, formatDateAndTime } from "../lib/helper";
 import Pagination from "./Pagination";
-import CustomSearchBar from "./ui/CustomSearchBar";
+import CustomInput from "./ui/CustomInput";
 import DialogPopup from "./ui/DialogPopup";
 import CustomPopover from "./ui/CustomPopover";
 import CustomButton from "./ui/CustomButton";
@@ -213,10 +213,11 @@ const RecentTransactions = ({
                 Updating...
               </span>
             )}
-            <CustomSearchBar
+            <CustomInput
               value={searchTerm}
               onChange={setSearchTerm}
               placeholder="Search transactions..."
+              icon={Search}
               className="w-72"
             />
           </div>

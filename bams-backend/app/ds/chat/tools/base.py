@@ -1,10 +1,10 @@
 """Tool registration + execution.
 
 Every tool is registered here via @tool(...), which is also where the
-per-user cache key is built (tools never build their own cache key) and
+per-org cache key is built (tools never build their own cache key) and
 where a tool's JSON-schema `parameters` block is generated -- since that
-schema never includes a user_id field, there is no argument the model could
-be prompted into supplying that would let a tool call reach another user's
+schema never includes a org_id field, there is no argument the model could
+be prompted into supplying that would let a tool call reach another org's
 data.
 """
 
@@ -28,7 +28,7 @@ TOOL_CACHE_TIER: dict[str, str | None] = {}
 
 
 class ToolError(Exception):
-    """Raised by a tool implementation for an expected, user-facing failure
+    """Raised by a tool implementation for an expected, org-facing failure
     (e.g. "no account found") -- caught here and turned into a normal
     {"error": ...} result so the model can react within the conversation
     instead of the turn crashing."""
@@ -79,9 +79,9 @@ def _json_safe(value):
     return value
 
 
-def _cache_key(tool_name: str, user_id: int, arguments: dict) -> str:
+def _cache_key(tool_name: str, org_id: int, arguments: dict) -> str:
     canonical = json.dumps(arguments, sort_keys=True, separators=(",", ":"), default=str)
-    return f"{tool_name}:{user_id}:{canonical}"
+    return f"{tool_name}:{org_id}:{canonical}"
 
 
 def validate_arguments(tool_name: str, raw_arguments: dict) -> dict:
@@ -106,7 +106,7 @@ def run_tool(ctx: ToolContext, tool_name: str, arguments: dict) -> tuple[dict, b
         return {"error": f"Invalid arguments: {exc.errors()}"}, False, int((time.monotonic() - start) * 1000)
 
     cache_tier = TOOL_CACHE_TIER.get(tool_name)
-    cache_key = _cache_key(tool_name, ctx.user_id, validated_args) if cache_tier else None
+    cache_key = _cache_key(tool_name, ctx.org_id, validated_args) if cache_tier else None
 
     if cache_tier:
         cached = cache_get(cache_tier, cache_key)

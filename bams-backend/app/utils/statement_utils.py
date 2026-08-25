@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 def parse_statement_pdf_sync(
     pdf_path: Path,
-    user_id: int,
+    org_id: int,
     original_filename: str | None = None,
     password: str | None = None,
 ) -> list[dict]:
@@ -34,7 +34,7 @@ def parse_statement_pdf_sync(
     return asyncio.run(
         process_statement(
             file_path=str(pdf_path),
-            user_id=user_id,
+            org_id=org_id,
             original_filename=original_filename or pdf_path.name,
             password=password,
         )

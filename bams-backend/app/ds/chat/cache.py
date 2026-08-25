@@ -4,8 +4,8 @@ matches the existing in-process precedents elsewhere in the backend
 worker deployment, a known limitation if that ever changes.
 
 Cache keys are built by tools/base.py's run_tool(), which always folds in
-the calling user's id -- individual tools never build their own cache key,
-so a tool can't accidentally leak one user's cached result to another.
+the calling org's id -- individual tools never build their own cache key,
+so a tool can't accidentally leak one org's cached result to another.
 """
 
 import cachetools

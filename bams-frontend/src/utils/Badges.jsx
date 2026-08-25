@@ -110,3 +110,19 @@ export const AccountCategoryBadge = ({ category }) => {
     </span>
   );
 };
+
+// Role names are whatever an org names them, so this only special-cases the
+// one name that's ever guaranteed to exist -- everything else gets a
+// consistent neutral-blue pill rather than guessing at more colors.
+export const RoleBadge = ({ role }) => {
+  const isSuperAdmin = String(role || "").trim().toLowerCase() === "super admin";
+  const colorClass = isSuperAdmin
+    ? "bg-amber-100 text-amber-800"
+    : "bg-blue-50 text-blue-700";
+
+  return (
+    <span className={`inline-flex w-fit items-center justify-center rounded-md! px-2.5 py-1 text-xs font-semibold ${colorClass}`}>
+      {role || "-"}
+    </span>
+  );
+};

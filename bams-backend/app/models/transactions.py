@@ -9,12 +9,12 @@ from uuid import uuid4
 class Transactions(Base):
     __tablename__ = "transactions"
     __table_args__ = (
-        UniqueConstraint("user_id", "dedupe_key", name="uq_transactions_user_dedupe_key"),
+        UniqueConstraint("org_id", "dedupe_key", name="uq_transactions_org_dedupe_key"),
     )
 
     id = Column(String, primary_key=True)
 
-    user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=False, index=True)
+    org_id = Column(ID_TYPE, ForeignKey("organizations.id"), nullable=False, index=True)
 
     gmail_message_id = Column(String, index=True)
 
@@ -48,7 +48,7 @@ class Transactions(Base):
     dedupe_key = Column(String, nullable=False, index=True)
     email_metadata = Column(JSONB)
     parser_metadata = Column(JSONB)
-    
+
     optional_fields = Column(JSONB)
 
     sheets_synced_at = Column(DateTime(timezone=True), nullable=True)
@@ -58,5 +58,5 @@ class Transactions(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    user = relationship("User", back_populates="transactions")  # or appropriate name
+    org = relationship("Organization", back_populates="transactions")  # or appropriate name
     transaction_logs = relationship("TransactionLog", back_populates="transactions")

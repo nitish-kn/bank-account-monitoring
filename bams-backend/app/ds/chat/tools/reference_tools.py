@@ -24,7 +24,7 @@ def _digits(text: str) -> str:
         "Resolve a vague natural-language reference to a bank account or credit card (e.g. 'my HDFC "
         "card', 'axis salary account') into its canonical account number / card last-4, bank/issuer, "
         "and holder name -- cross-referencing both the reference sheets and the accounts actually "
-        "present in the user's own data. Call this first when a question references an account or "
+        "present in the org's own data. Call this first when a question references an account or "
         "card ambiguously, before calling other tools."
     ),
     params_model=ResolveAccountParams,
@@ -66,12 +66,12 @@ def resolve_account_or_card(ctx: ToolContext, query_text: str) -> dict:
     except Exception:
         pass
 
-    db_accounts = get_paginated_accounts(ctx.db, ctx.user_id, {"search": query_text}, page=1, page_size=5)
+    db_accounts = get_paginated_accounts(ctx.db, ctx.org_id, {"search": query_text}, page=1, page_size=5)
     for account in db_accounts.get("accounts", []):
         matches.append(
             {
                 "kind": "bank_account",
-                "source": "user_data",
+                "source": "org_data",
                 "bank_name": account["bank_name"],
                 "account_holder_name": account["account_holder_name"],
                 "account_type": account["account_type"],
@@ -80,7 +80,7 @@ def resolve_account_or_card(ctx: ToolContext, query_text: str) -> dict:
         )
 
     if not matches:
-        filter_options = get_filter_options(ctx.db, ctx.user_id)
+        filter_options = get_filter_options(ctx.db, ctx.org_id)
         suggestions = difflib.get_close_matches(query_text, filter_options.get("entities", []), n=3)
         return {"matches": [], "suggestions": suggestions}
 
