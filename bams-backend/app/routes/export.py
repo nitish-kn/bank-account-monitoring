@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..core.dependencies import get_current_org
+from ..core.dependencies import get_current_org, require_permission
 from ..database import get_db
 from ..models.organization import Organization
 from ..services.export_service import EXPORT_SOURCES, build_export, get_export_sources
@@ -31,7 +31,7 @@ def list_export_sources():
     return {"sources": get_export_sources()}
 
 
-@router.post("/download")
+@router.post("/download", dependencies=[Depends(require_permission("export_data", "trigger"))])
 def export_data(
     req: ExportRequest,
     current_org: Organization = Depends(get_current_org),

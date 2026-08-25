@@ -20,6 +20,7 @@ import { cleanText, formatAmount, formatDateAndTime } from "../../lib/helper";
 import { SourceBadge } from "../../utils/Badges";
 import { transactionApi } from "../../api/transactions";
 import AuditChangesTable from "./AuditChangesTable";
+import { usePermissions, PERMISSIONS } from "../../lib/permissions";
 
 const emptyValue = "-";
 
@@ -161,6 +162,7 @@ const OptionalDetails = ({ data }) => {
 
 
 const ActionList = ({ data }) => {
+  const can = usePermissions();
   const [openDialog, setOpenDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -174,7 +176,7 @@ const ActionList = ({ data }) => {
   useEffect(() => {
     let cancelled = false;
 
-    if (!openDialog || !data?.id || !hasUpdates) {
+    if (!openDialog || !data?.id || !hasUpdates || !can(PERMISSIONS.AUDIT_LOG_VIEW)) {
       setAuditLogs([]);
       setAuditError("");
       setAuditLoading(false);
@@ -222,16 +224,18 @@ const ActionList = ({ data }) => {
           View Details
         </CustomButton>
 
-        <CustomButton
-          color="gray"
-          variant="ghost"
-          size="2"
-          className="h-8! flex! justify-start! gap-4! px-3!"
-          onClick={() => setOpenEditDialog((prev) => !prev)}
-        >
-          <Pencil className="h-5 w-5 font-bold" />
-          Edit Details
-        </CustomButton>
+        {can(PERMISSIONS.TRANSACTIONS_UPDATE) && (
+          <CustomButton
+            color="gray"
+            variant="ghost"
+            size="2"
+            className="h-8! flex! justify-start! gap-4! px-3!"
+            onClick={() => setOpenEditDialog((prev) => !prev)}
+          >
+            <Pencil className="h-5 w-5 font-bold" />
+            Edit Details
+          </CustomButton>
+        )}
       </div>
 
 
@@ -330,7 +334,7 @@ const ActionList = ({ data }) => {
               <DetailField label="Account Type" value={data.account_type} />
             </DetailSection>
               
-            {hasUpdates && (
+            {hasUpdates && can(PERMISSIONS.AUDIT_LOG_VIEW) && (
               <DetailSection title="Update History" icon={History} contentClassName="space-y-3">
                 {auditLoading ? (
                   <div className="rounded-lg border border-gray-100 bg-white px-3 py-2 text-xs font-medium text-gray-500">

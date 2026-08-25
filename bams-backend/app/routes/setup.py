@@ -5,7 +5,7 @@ import json
 from sqlalchemy.orm import Session
 
 from ..core.constants import SYNC_STATUS_RUNNING
-from ..core.dependencies import get_current_org
+from ..core.dependencies import get_current_org, require_permission
 from ..models.transactions import Transactions
 from ..models.organization import Organization
 from ..services.setup_service import setup_process_with_progress, perform_incremental_sync, _is_sync_genuinely_running, _mark_sync_failed
@@ -80,7 +80,7 @@ def get_sync_status(current_org: Organization = Depends(get_current_org), db: Se
         "last_synced_email_date": datetime_to_iso(current_org.last_synced_email_date),
     }
 
-@router.post("/sync")
+@router.post("/sync", dependencies=[Depends(require_permission("sync_data", "trigger"))])
 def sync_dashboard(
     current_org: Organization = Depends(get_current_org),
     db: Session = Depends(get_db)

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from sqlalchemy.orm import Session
 from typing import List
 
-from ..core.dependencies import get_current_org
+from ..core.dependencies import get_current_org, require_permission
 from ..database import get_db
 from ..models.organization import Organization
 from ..services.statements_service import (
@@ -14,7 +14,11 @@ from ..services.statements_service import (
 
 router = APIRouter()
 
-@router.post("/api/statements/upload", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/api/statements/upload",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_permission("upload_statements", "trigger"))],
+)
 async def upload_statements(
     files: List[UploadFile] = File(...),
     password: Optional[str] = Form(None),

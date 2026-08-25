@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..core.dependencies import get_current_org
+from ..core.dependencies import get_current_org, require_permission
 from ..database import get_db
 from ..models.organization import Organization
 from ..services.accounts_service import get_paginated_accounts, create_new_account, get_recent_account_transactions
@@ -34,7 +34,7 @@ class CreateAccountRequest(BaseModel):
     type: str
     name: str
 
-@router.post("/query")
+@router.post("/query", dependencies=[Depends(require_permission("accounts", "view"))])
 def query_accounts(
     req: AccountsQueryRequest,
     current_org: Organization = Depends(get_current_org),
@@ -51,7 +51,7 @@ def query_accounts(
     )
 
 
-@router.get("/{account_id}/transactions")
+@router.get("/{account_id}/transactions", dependencies=[Depends(require_permission("accounts", "view"))])
 def get_account_transactions(
     account_id: str,
     limit: int = 5,
@@ -66,7 +66,7 @@ def get_account_transactions(
     )
 
 
-@router.post("/")
+@router.post("/", dependencies=[Depends(require_permission("accounts", "create"))])
 def create_account(request: CreateAccountRequest, current_org: Organization = Depends(get_current_org), db: Session= Depends(get_db)):
 
     return create_new_account(db, request, current_org.id)

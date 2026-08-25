@@ -27,6 +27,10 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=True)
+    # Reversible copy of the same password, kept only so an admin can reveal
+    # it later (e.g. to hand it to the user again). Login always verifies
+    # against password_hash above -- this column is never read for auth.
+    password_encrypted = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False, server_default="true")
     created_by_user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=True)
     role_assigned_by_user_id = Column(ID_TYPE, ForeignKey("users.id"), nullable=True)

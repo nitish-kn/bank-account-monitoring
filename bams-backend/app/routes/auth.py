@@ -2,11 +2,24 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..services.auth_service import create_or_update_org_from_google, generate_oauth_url, exchange_google_code, apply_permission_flags, get_login_scopes, serialize_org
-from ..core.dependencies import get_current_org
+from ..services.auth_service import (
+    build_session_payload,
+    create_or_update_org_from_google,
+    generate_oauth_url,
+    exchange_google_code,
+    apply_permission_flags,
+    get_login_scopes,
+    login_with_password,
+    serialize_org,
+)
+from ..services.rbac_service import get_user_permissions
+from ..core.dependencies import get_current_org, get_current_user
 from ..models.organization import Organization
+from ..models.users import User
+from ..utils.serializers import serialize_user
 from pydantic import BaseModel
 from ..core.auth import verify_token_ignore_expiry, create_access_token
+from ..core.dependencies import TOKEN_TYPE
 from ..services.credentials import build_credentials
 from google.auth.exceptions import RefreshError
 import time
@@ -25,10 +38,35 @@ class RefreshRequest(BaseModel):
     token: str
 
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 @router.post("/google")
 def google_auth(request: GoogleAuthRequest, db: Session = Depends(get_db)):
     """Main entrypoint in backend, Google OAuth callback endpoint. Expects a code from the frontend and creates/updates the org."""
     return create_or_update_org_from_google(code=request.code, db=db)
+
+
+@router.post("/login")
+def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """Email/password sign-in for sub-users created by an admin."""
+    return login_with_password(request.email, request.password, db)
+
+
+@router.get("/me")
+def get_me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Current identity plus permissions -- the frontend re-reads this on load
+    so a role change takes effect without waiting for the token to expire."""
+    return {
+        "org": serialize_org(current_user.organization),
+        "user": serialize_user(current_user),
+        "permissions": sorted(get_user_permissions(db, current_user)),
+    }
 
 
 @router.get("/permission")
@@ -97,37 +135,41 @@ def refresh_token(request: RefreshRequest, db: Session = Depends(get_db)):
     if (time.time() - exp) > 7 * 86400:
         raise HTTPException(status_code=401, detail="Session expired too long ago. Please log in again.")
         
-    org_id = payload.get("sub")
-    if not org_id:
+    if payload.get("typ") != TOKEN_TYPE:
+        raise HTTPException(status_code=401, detail="Invalid token subject")
+
+    user_id = payload.get("sub")
+    if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token subject")
     try:
-        org_id = int(org_id)
+        user_id = int(user_id)
     except (ValueError, TypeError):
         raise HTTPException(status_code=401, detail="Invalid token subject")
-        
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    if not org or not org.refresh_token:
-        raise HTTPException(status_code=401, detail="Organization session not found or Google refresh token missing")
-        
-    # Attempt to build credentials (which triggers Google OAuth refresh if credentials expired)
-    try:
-        creds = build_credentials(org)
-        if not creds or not creds.token:
-            raise HTTPException(status_code=401, detail="Failed to refresh Google session")
-        org.access_token = creds.token
-        if creds.expiry:
-            org.token_expiry = creds.expiry
-        db.commit()
-    except RefreshError:
-        raise HTTPException(status_code=401, detail="Google session expired. Please log in again.")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Failed to refresh Google session: {str(e)}")
-        
-    # Generate new JWT token
-    new_jwt = create_access_token(data={"sub": str(org.id)})
-    return {
-        "access_token": new_jwt,
-        "org": serialize_org(org)
-    }
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Session not found")
+
+    org = user.organization
+    if not org:
+        raise HTTPException(status_code=401, detail="Session not found")
+
+    # Only the Google-linked owner has Google credentials to refresh; sub-users
+    # sign in with a password, so their session just gets a fresh JWT.
+    if org.refresh_token and user.password_hash is None:
+        try:
+            creds = build_credentials(org)
+            if not creds or not creds.token:
+                raise HTTPException(status_code=401, detail="Failed to refresh Google session")
+            org.access_token = creds.token
+            if creds.expiry:
+                org.token_expiry = creds.expiry
+            db.commit()
+        except RefreshError:
+            raise HTTPException(status_code=401, detail="Google session expired. Please log in again.")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Failed to refresh Google session: {str(e)}")
+
+    return build_session_payload(db, user)

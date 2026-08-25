@@ -128,8 +128,8 @@ export const useSetupStore = create((set, get) => ({
                 const refreshResponse = await api.post("/auth/refresh", {
                   token: expiredToken,
                 });
-                const { access_token, org } = refreshResponse?.data;
-                useAuthStore.getState().login(org, access_token);
+                const { access_token } = refreshResponse?.data || {};
+                useAuthStore.getState().login(refreshResponse?.data, access_token);
 
                 // Re-initialize setup asynchronously with the new token
                 setTimeout(() => {

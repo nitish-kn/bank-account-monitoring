@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, Any, Literal
 
-from ..core.dependencies import get_current_org
+from ..core.dependencies import get_current_org, require_permission
 from ..database import get_db
 from ..models.organization import Organization
 from ..services.transaction_service import get_paginated_transactions, get_dashboard_summary, get_filter_options
@@ -62,7 +62,7 @@ class EditTransactionRequest(BaseModel):
     reason: Optional[str] = None
 
 
-@router.put("/{id}")
+@router.put("/{id}", dependencies=[Depends(require_permission("transactions", "update"))])
 def edit_transaction(
     id: str,
     payload: EditTransactionRequest,
@@ -79,7 +79,7 @@ def edit_transaction(
         ip_address=ip_address
     )
 
-@router.get("/audit-log")
+@router.get("/audit-log", dependencies=[Depends(require_permission("audit_log", "view"))])
 def get_audit_log(
     page: int = 1,
     pageSize: int = 50,

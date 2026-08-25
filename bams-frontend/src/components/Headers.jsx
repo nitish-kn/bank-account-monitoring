@@ -6,6 +6,7 @@ import { formatRelativeSyncTime } from "../lib/helper";
 import { ChevronDown, Menu, Upload, CloudUpload, FileText, X, Download } from "lucide-react";
 import DialogPopup from "./ui/DialogPopup";
 import ExportDataDialog from "./ui/ExportDataDialog";
+import { usePermissions, PERMISSIONS } from "../lib/permissions";
 import api from "../lib/api";
 import { toast } from "react-toastify";
 import { useSetupStore } from "../store/setupStore";
@@ -27,6 +28,7 @@ const getStatementSuccessMessage = (job) => {
 };
 
 const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
+  const can = usePermissions();
   const triggerRefresh = useSetupStore((state) => state.triggerRefresh);
   const pathname = useLocation().pathname.split("/")[1];
   const pageTitle = pathname[0].toUpperCase() + pathname.slice(1);
@@ -195,39 +197,44 @@ const Headers = ({ isSyncing, lastSyncAt, syncDashboard, setShowMenu }) => {
           </p>
         </div>
         <div className="flex md:flex-row items-center gap-1 md:gap-2.5 relative">
-          <CustomButton onClick={() => setShowUploadDialog(true)} variant="soft" disabled={isStatementUploadBusy}>
-            {isStatementUploadBusy ? "Processing..." : (
-              <>
-                <Upload className="h-4 w-4" /> 
-                <span className="hidden md:inline">Upload Statements</span>
-              </>
-            )}
-          </CustomButton>
+          {can(PERMISSIONS.UPLOAD_STATEMENTS) && (
+            <CustomButton onClick={() => setShowUploadDialog(true)} variant="soft" disabled={isStatementUploadBusy}>
+              {isStatementUploadBusy ? "Processing..." : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  <span className="hidden md:inline">Upload Statements</span>
+                </>
+              )}
+            </CustomButton>
+          )}
 
+          {can(PERMISSIONS.SYNC_DATA) && (
+            <CustomButton
+              variant="soft"
+              disabled={isSyncing}
+              onClick={syncDashboard}
+              className="cursor-pointer text-center"
+            >
+              {isSyncing ? (
+                <span className="flex items-center gap-2">
+                  <Spinner size="1" />
+                  Syncing...
+                </span>
+              ) : (
+                "Sync your data"
+              )}
+            </CustomButton>
+          )}
 
-          <CustomButton
-            variant="soft"
-            disabled={isSyncing}
-            onClick={syncDashboard}
-            className="cursor-pointer text-center"
-          >
-            {isSyncing ? (
-              <span className="flex items-center gap-2">
-                <Spinner size="1" />
-                Syncing...
-              </span>
-            ) : (
-              "Sync your data"
-            )}
-          </CustomButton>
-
-          <CustomButton
-            variant="soft"
-            onClick={() => setOpenExportDialog(prev => !prev)}
-            className="cursor-pointer text-center"
-          >
-            <Download className="h-4 w-4" /> Export Data
-          </CustomButton>
+          {can(PERMISSIONS.EXPORT_DATA) && (
+            <CustomButton
+              variant="soft"
+              onClick={() => setOpenExportDialog(prev => !prev)}
+              className="cursor-pointer text-center"
+            >
+              <Download className="h-4 w-4" /> Export Data
+            </CustomButton>
+          )}
 
 
           {/* <CustomButton color="gray" variant="ghost" className="ml-1! flex! md:hidden!" onClick={() => setShowSyncTime(prev => !prev)}>

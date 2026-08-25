@@ -7,9 +7,15 @@ import { useSetupStore } from "../store/setupStore";
 import { useGoogleLogin } from "@react-oauth/google";
 import api from "../lib/api";
 import { SetupFlowOverlay } from "./SetupFlowOverlay";
+import { rbacApi } from "../api/rbac";
 
 const Layout = () => {
-  const { org, accessToken, setOrg } = useAuthStore();
+  const { org, user, accessToken, setOrg, setIdentity } = useAuthStore();
+
+  // Google setup/permission granting belongs to the org's Google-linked owner.
+  // Sub-users sign in with a password and have no Google account to grant from,
+  // so they must never see the setup overlay or auto-trigger the setup run.
+  const isOwner = Boolean(user?.is_owner);
   const {
     isSyncing, lastSyncAt, syncDashboard, startSyncStatusPolling,
     initializeSetup, isLoading, error: setupError, message, stepHistory,
@@ -32,12 +38,19 @@ const Layout = () => {
   const needsSheets = !hasSheetsPermissions;
   const permissionsMissing = needsEmail || needsSheets;
 
+  // Re-read identity/permissions on load: the persisted copy can be stale if
+  // an admin changed this user's role since the token was issued.
+  useEffect(() => {
+    if (!accessToken) return;
+    rbacApi.getMe().then(setIdentity).catch(() => {});
+  }, [accessToken, setIdentity]);
+
   // For the first time login - Auto-start setup when permissions are granted and the org has not completed setup yet
   useEffect(() => {
-    if ( org && !hasCompletedSetup && !permissionsMissing && !isSetupComplete && !isLoading && !setupError ) {
+    if ( isOwner && org && !hasCompletedSetup && !permissionsMissing && !isSetupComplete && !isLoading && !setupError ) {
       initializeSetup();
     }
-  }, [ org, hasCompletedSetup, permissionsMissing, isSetupComplete, isLoading, setupError, initializeSetup, ]);
+  }, [ isOwner, org, hasCompletedSetup, permissionsMissing, isSetupComplete, isLoading, setupError, initializeSetup, ]);
 
   // Keep progress polling alive for setup/manual syncs that are already running.
   // Returning users should sync only when they click the refresh button.
@@ -79,7 +92,7 @@ const Layout = () => {
 
   // Check if org is new or hasn't completed setup yet
   const showSetupOverlay = Boolean(
-    org && (!hasCompletedSetup || (isSetupComplete && !hasDismissedSetup)),
+    isOwner && org && (!hasCompletedSetup || (isSetupComplete && !hasDismissedSetup)),
   );
 
   // For sidebar to close in small screens, when user touches out of sidebar
@@ -106,7 +119,7 @@ const Layout = () => {
       
       <div className="flex w-full">
         <div className="hidden lg:flex">
-          <Sidebar picture={org?.picture} name={org?.name} lastSyncAt={effectiveLastSyncAt}/>
+          <Sidebar picture={org?.picture} name={org?.name} userName={user?.name} lastSyncAt={effectiveLastSyncAt}/>
         </div>
 
         {showMenu && (
@@ -116,7 +129,7 @@ const Layout = () => {
             
             {/* Sidebar from the left */}
             <div ref={showMenuRef} className="fixed inset-y-0 left-0 bg-white shadow-xl z-50 lg:hidden animate-in slide-in-from-left-full duration-300">
-              <Sidebar picture={org?.picture} name={org?.name} onClose={() => setShowMenu(false)} />
+              <Sidebar picture={org?.picture} name={org?.name} userName={user?.name} onClose={() => setShowMenu(false)} />
             </div>
           </>
         )}

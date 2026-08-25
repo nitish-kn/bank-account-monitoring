@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..core.dependencies import get_current_org
+from ..core.dependencies import get_current_org, require_permission
 from ..database import get_db
 from ..models.organization import Organization
 from ..services.chat_service import (
@@ -34,7 +34,7 @@ class DevMessageRequest(BaseModel):
     session_id: Optional[str] = None
 
 
-@router.post("/sessions")
+@router.post("/sessions", dependencies=[Depends(require_permission("chat_assistant", "view"))])
 def create_chat_session(
     req: CreateSessionRequest = CreateSessionRequest(),
     current_org: Organization = Depends(get_current_org),
@@ -43,7 +43,7 @@ def create_chat_session(
     return create_session(db, current_org.id, req.title)
 
 
-@router.get("/sessions")
+@router.get("/sessions", dependencies=[Depends(require_permission("chat_assistant", "view"))])
 def list_chat_sessions(
     page: int = 1,
     pageSize: int = 20,
@@ -53,7 +53,7 @@ def list_chat_sessions(
     return list_sessions(db, current_org.id, page, pageSize)
 
 
-@router.get("/sessions/{session_id}")
+@router.get("/sessions/{session_id}", dependencies=[Depends(require_permission("chat_assistant", "view"))])
 def get_chat_session(
     session_id: str,
     current_org: Organization = Depends(get_current_org),
@@ -62,7 +62,7 @@ def get_chat_session(
     return get_session(db, current_org.id, session_id)
 
 
-@router.get("/sessions/{session_id}/messages")
+@router.get("/sessions/{session_id}/messages", dependencies=[Depends(require_permission("chat_assistant", "view"))])
 def list_chat_messages(
     session_id: str,
     page: int = 1,
@@ -73,7 +73,7 @@ def list_chat_messages(
     return get_session_messages(db, current_org.id, session_id, page, pageSize)
 
 
-@router.post("/sessions/{session_id}/messages")
+@router.post("/sessions/{session_id}/messages", dependencies=[Depends(require_permission("chat_assistant", "view"))])
 def send_chat_message(
     session_id: str,
     req: PostMessageRequest,
@@ -94,7 +94,11 @@ def dev_send_chat_message(req: DevMessageRequest, db: Session = Depends(get_db))
     return dev_send_message(db, req.org_id, req.message, req.session_id)
 
 
-@router.delete("/sessions/{session_id}", status_code=204)
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=204,
+    dependencies=[Depends(require_permission("chat_assistant", "view"))],
+)
 def delete_chat_session(
     session_id: str,
     current_org: Organization = Depends(get_current_org),

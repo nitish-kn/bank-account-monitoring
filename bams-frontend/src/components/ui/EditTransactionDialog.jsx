@@ -3,10 +3,14 @@ import DialogPopup from "./DialogPopup";
 import CustomInput from "./CustomInput";
 import { transactionApi } from "../../api/transactions";
 import { useSetupStore } from "../../store/setupStore";
+import { useAuthStore } from "../../store/authStore";
 import { Info, TriangleAlert, ArrowLeftRight } from "lucide-react";
 import { formatAmount } from "../../lib/helper";
 
 const EditTransactionDialog = ({ open, setOpen, data }) => {
+  // RBAC identifies who's actually signed in, so the operator name is no
+  // longer free text someone could misattribute -- it's fixed to them.
+  const { user } = useAuthStore();
   const [formState, setFormState] = useState({
     counterparty: "",
     mode: "",
@@ -44,13 +48,13 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
         txn_date: formattedDate,
         account_number: data.account_number || "",
         account_holder_name: data.account_holder_name || "",
-        changed_by: "",
+        changed_by: user?.name || "",
         reason: "",
       });
       setError("");
       setShowConfirm(false);
     }
-  }, [data, open]);
+  }, [data, open, user?.name]);
 
   const handleChange = (value, event) => {
     const name = event?.target?.name;
@@ -99,11 +103,6 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
 
   const handleUpdateClick = () => {
     setError("");
-    if (!formState.changed_by.trim()) {
-      setError("Name of person changing is mandatory.");
-      return;
-    }
-
     const changes = detectChanges();
     if (changes.length === 0) {
       setError("No fields have been modified.");
@@ -218,10 +217,10 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
           <CustomInput
             name="changed_by"
             type="text"
-            labelText="Who is editing? (Mandatory) *"
-            placeholder="Enter your name"
+            labelText="Editing as"
             value={formState.changed_by}
             onChange={handleChange}
+            disabled
           />
           <CustomInput
             name="reason"

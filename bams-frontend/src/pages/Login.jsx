@@ -11,16 +11,25 @@ import LoginLoading from "../components/ui/LoginLoading";
 const Login = () => {
   const { login } = useAuthStore();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("org");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
 
-  // Email/password sign-in isn't wired to a backend yet — this app only
-  // authenticates through Google. These fields exist for now as a visual
-  // placeholder for that future flow, so submitting just does nothing.
-  const handlePlaceholderSubmit = (event) => {
+  // Email/password sign-in for sub-users an admin created. The org owner has
+  // no password and signs in with the Google button below instead.
+  const handlePasswordSubmit = async (event) => {
     event.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const response = await api.post("/auth/login", { email: username, password });
+      login(response?.data, response?.data?.access_token);
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Unable to sign in. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogin = useGoogleLogin({
@@ -35,8 +44,8 @@ const Login = () => {
 
         const backendData = response?.data;
 
-        // Save backend session token / org info globally to store
-        login(backendData?.org, backendData?.access_token);
+        // Save backend session token / identity / permissions to the store
+        login(backendData, backendData?.access_token);
       } catch (error) {
         console.error("Failed to authenticate with backend:", error);
       } finally {
@@ -69,10 +78,12 @@ const Login = () => {
         <div className="w-full sm:max-w-md">
           
           {/* Logo */}
-          <div className="flex justify-center">
+          <div className="flex justify-center items-center gap-2">
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600">
               <Landmark className="h-7 w-7 text-white" />
             </span>
+            
+            {/* <p className="font-semibold text-4xl text-gray-800 tracking-wide text-shadow-sm">BAMS</p> */}
           </div>
 
           {/* Heading text */}
@@ -80,124 +91,74 @@ const Login = () => {
           <p className="mt-1 text-center text-sm text-gray-500"> Sign in to continue to your account </p>
 
 
-          {/* User / Organization switch */}
-          <div className="mt-6 flex items-center gap-1 rounded-full bg-gray-100 p-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab("user")}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-full py-2 text-sm font-medium transition ${
-                activeTab === "user"
-                  ? "bg-white text-blue-600 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <User className="h-4 w-4" /> User
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("org")}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-full py-2 text-sm font-medium transition ${
-                activeTab === "org"
-                  ? "bg-white text-blue-600 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <Landmark className="h-4 w-4" /> Organization
-            </button>
+          <p className="mt-6 text-xs font-semibold tracking-wide text-gray-400 uppercase text-center">
+            Sign in as a user
+          </p>
+
+          <form onSubmit={handlePasswordSubmit} className="mt-2 space-y-4">
+            {/* Email input */}
+            <CustomInput
+              id="username"
+              type="email"
+              labelText="Email"
+              placeholder="Enter your email"
+              value={username}
+              onChange={setUsername}
+              icon={User}
+              inputClassName="h-10"
+            />
+
+            {/* Password input */}
+            <CustomInput
+              id="password"
+              type={showPassword ? "text" : "password"}
+              labelText="Password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={setPassword}
+              icon={Lock}
+              inputClassName="h-10"
+              endAdornment={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="text-gray-400 hover:text-gray-600"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              }
+            />
+
+            {error && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">{error}</p>
+            )}
+
+            <CustomButton type="submit" size="3" className="w-full! h-12! mt-1 justify-center">
+              Sign in
+            </CustomButton>
+          </form>
+
+          {/* Divider */}
+          <div className="my-6 flex items-center gap-3">
+            <span className="h-px flex-1 bg-gray-200" />
+            <span className="text-xs text-gray-400">or</span>
+            <span className="h-px flex-1 bg-gray-200" />
           </div>
 
-          {/* Both panels are stacked in the same grid cell so the container's
-              height always matches the taller one — switching tabs only
-              toggles visibility, never how much space is reserved. */}
-          <div className="mt-6 grid">
-            <form
-              onSubmit={handlePlaceholderSubmit}
-              aria-hidden={activeTab !== "user"}
-              className={`col-start-1 row-start-1 space-y-4 ${
-                activeTab === "user" ? "visible opacity-100" : "invisible opacity-0 pointer-events-none"
-              }`}
-            >
-              {/* Username input */}
-              <CustomInput
-                id="username"
-                type="text"
-                labelText="Username"
-                placeholder="Enter your username"
-                value={username}
-                onChange={setUsername}
-                icon={User}
-                inputClassName="h-10"
-                tabIndex={activeTab === "user" ? undefined : -1}
-              />
+          <p className="mb-2 text-xs font-semibold tracking-wide text-gray-400 uppercase text-center">
+            Sign in as an organisation or owner (Google account)
+          </p>
 
-              {/* Password input */}
-              <CustomInput
-                id="password"
-                type={showPassword ? "text" : "password"}
-                labelText="Password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={setPassword}
-                icon={Lock}
-                inputClassName="h-10"
-                tabIndex={activeTab === "user" ? undefined : -1}
-                endAdornment={
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="text-gray-400 hover:text-gray-600"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    tabIndex={activeTab === "user" ? undefined : -1}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                }
-              />
-
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 text-gray-600">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    tabIndex={activeTab === "user" ? undefined : -1}
-                  />
-                  Remember me
-                </label>
-              </div>
-
-              <CustomButton
-                type="submit"
-                size="3"
-                className="w-full! h-12! mt-1 justify-center"
-                tabIndex={activeTab === "user" ? undefined : -1}
-              >
-                Sign in
-              </CustomButton>
-            </form>
-
-            <div
-              aria-hidden={activeTab !== "org"}
-              className={`col-start-1 row-start-1 flex flex-col gap-4 items- justify-center text-center text-sm text-gray-500 ${
-                activeTab === "org" ? "visible opacity-100" : "invisible opacity-0 pointer-events-none"
-              }`}
-            >
-
-
-              <p className="text-gray-400 mb-4">Organization accounts sign in with Google below.</p>
-
-              
-              <CustomButton
-                onClick={handleLogin}
-                variant="surface"
-                color="gray"
-                size="3"
-                className="w-full! h-12! justify shadow-lg!"
-              >
-                <GoogleIcon /> Sign in with Google
-              </CustomButton>
-            </div>
-          </div>
-
+          <CustomButton
+            onClick={handleLogin}
+            variant="surface"
+            color="gray"
+            size="3"
+            className="w-full! h-12! justify-center shadow-lg!"
+          >
+            <GoogleIcon /> Sign in with Google
+          </CustomButton>
 
           <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-gray-400">
             <ShieldCheck className="h-3.5 w-3.5" /> Secure, encrypted, and protected

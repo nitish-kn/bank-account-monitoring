@@ -19,6 +19,7 @@ class Permission(Base):
     id = Column(ID_TYPE, primary_key=True)
     module = Column(String, nullable=False, index=True)
     action = Column(String, nullable=False)
+    name = Column(String)
     description = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

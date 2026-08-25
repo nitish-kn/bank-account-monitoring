@@ -16,6 +16,7 @@ import { getAccountFilterOptions } from "../lib/transactional-helper";
 import AddAcounts from "../components/AddAcounts";
 import { useExportContextStore } from "../store/exportContextStore";
 import { AccountCategoryBadge, AmountColor, TypeBadge } from "../utils/Badges";
+import { usePermissions, PERMISSIONS } from "../lib/permissions";
 
 const ALL_FILTER_VALUE = "all";
 
@@ -162,6 +163,7 @@ const DeltaBadge = ({ value }) => {
 };
 
 const Accounts = () => {
+  const can = usePermissions();
   const navigate = useNavigate();
   const filterOptions = useMemo(() => getAccountFilterOptions(), []);
   const [accounts, setAccounts] = useState([]);
@@ -620,13 +622,15 @@ const Accounts = () => {
               <span className="hidden sm:flex">Filter</span>
             </CustomButton>
             
-            <CustomButton
-              className="h-9!"
-              onClick={() => setAddAccounts((prev) => !prev)}
-            >
-              <Plus className="h-5 w-5" />
-              Add Account
-            </CustomButton>
+            {can(PERMISSIONS.ACCOUNTS_CREATE) && (
+              <CustomButton
+                className="h-9!"
+                onClick={() => setAddAccounts((prev) => !prev)}
+              >
+                <Plus className="h-5 w-5" />
+                Add Account
+              </CustomButton>
+            )}
           </div>
         </div>
 
