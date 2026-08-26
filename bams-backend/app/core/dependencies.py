@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.organization import Organization
+from ..models.permission import Permission
 from ..models.users import User
 from ..services.rbac_service import get_user_permissions
 from .auth import verify_token
@@ -47,9 +48,11 @@ def get_current_org(current_user: User = Depends(get_current_user)) -> Organizat
 def require_permission(module: str, action: str):
     """Route dependency asserting the caller holds `module.action`.
 
-    Create/update/delete also require `module.view` -- someone who can't see
-    a resource shouldn't be able to change it either, even if their role was
-    (mis)configured with the write permission alone.
+    Create/update/delete also require `module.view`, but only for modules
+    that actually define one (accounts/users/roles) -- someone who can't see
+    a resource shouldn't be able to change it either. Modules with a single
+    action and no paired view (sync_data.trigger, transactions.update, etc.)
+    have nothing to require, so this is a no-op for them.
     """
     required = f"{module}.{action}"
     also_required = f"{module}.view" if action != "view" else None
@@ -59,8 +62,14 @@ def require_permission(module: str, action: str):
         db: Session = Depends(get_db),
     ) -> User:
         held = get_user_permissions(db, current_user)
-        if required not in held or (also_required and also_required not in held):
+        if required not in held:
             raise HTTPException(status_code=403, detail=f"You don't have permission to {action} {module}.")
+        if also_required and also_required not in held:
+            view_defined = db.query(Permission.id).filter(
+                Permission.module == module, Permission.action == "view"
+            ).first()
+            if view_defined:
+                raise HTTPException(status_code=403, detail=f"You don't have permission to {action} {module}.")
         return current_user
 
     return dependency
