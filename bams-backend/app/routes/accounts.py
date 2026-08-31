@@ -66,7 +66,7 @@ def get_account_transactions(
     )
 
 
-@router.post("/", dependencies=[Depends(require_permission("accounts", "create"))])
+@router.post("", dependencies=[Depends(require_permission("accounts", "create"))])
 def create_account(request: CreateAccountRequest, current_org: Organization = Depends(get_current_org), db: Session= Depends(get_db)):
 
     return create_new_account(db, request, current_org.id)

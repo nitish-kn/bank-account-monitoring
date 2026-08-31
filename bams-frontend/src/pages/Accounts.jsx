@@ -307,7 +307,6 @@ const Accounts = () => {
     return accounts.slice(startIndex, startIndex + pageSize);
   }, [accounts, page, pageSize]);
 
-  console.log(accounts)
   const summaryCards = useMemo(
     () => getAccountSummaryCards(accounts, { asOfDate: filters.date }),
     [accounts, filters.date],
