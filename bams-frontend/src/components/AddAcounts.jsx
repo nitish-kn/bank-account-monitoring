@@ -29,7 +29,6 @@ const AddAcounts = ({open, setOpen}) => {
 
     try{
         const result = await accountsApi.createAccounts(account)
-        console.log(result)
 
         if(result.status === 201){
           toast.success(`Account with account no. - ${account?.accountno} created successfully`)
