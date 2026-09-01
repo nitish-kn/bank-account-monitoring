@@ -8,6 +8,9 @@ services:
       - ./bams-backend/.env
     ports:
       - "7788:8000"
+    volumes:
+      - ./bams-backend/app/ds/llm/utils:/app/app/ds/llm/utils
+
 
   # Frontend Service
   frontend:
