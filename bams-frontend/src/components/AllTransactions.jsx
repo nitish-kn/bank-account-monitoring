@@ -253,7 +253,7 @@ export function AllTransactions({ org }) {
         sortable: true,
         render: (transaction) => {
           return (
-            <SourceBadge source={transaction?.source} gmail_msg_id={transaction?.gmail_message_id} />
+            <SourceBadge source={transaction?.source} email_metadata={transaction?.email_metadata} gmail_msg_id={transaction?.gmail_message_id} />
           );
         },
       },

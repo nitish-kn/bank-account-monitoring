@@ -18,6 +18,12 @@ class BankAccounts(Base):
     statement_balance = Column(Numeric(12, 2))
     last_synced_at = Column(DateTime(timezone=True))
     source = Column(String, nullable=False)
+
+    # Statement coverage: the period the account's statements cover on file.
+    # Null until something (a future upload/backfill step) fills it in --
+    # not populated by any code path yet.
+    period_from = Column(DateTime(timezone=True), nullable=True)
+    period_to = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

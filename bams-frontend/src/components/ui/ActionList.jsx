@@ -262,7 +262,7 @@ const ActionList = ({ data }) => {
 
                 <div className="shrink-0 rounded-lg bg-white p-3 text-left shadow-sm ring-1 ring-blue-100 sm:text-right">
                   <div className="flex justify-center">
-                    <SourceBadge source={data?.source} gmail_msg_id={data?.gmail_message_id} className="w-10 h-10" />
+                    <SourceBadge source={data?.source} email_metadata={data?.email_metadata} gmail_msg_id={data?.gmail_message_id} className="w-10 h-10" />
                   </div>
                   <p className="text-[11px] mt-1.5 font-bold uppercase tracking-wide text-gray-400">Source</p>
                 </div>

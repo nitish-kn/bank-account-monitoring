@@ -9,6 +9,8 @@ export const PERMISSIONS = {
   ACCOUNTS_VIEW: "accounts.view",
   ACCOUNTS_CREATE: "accounts.create",
   TRANSACTIONS_UPDATE: "transactions.update",
+  NEEDS_REVIEW_VIEW: "needs_review.view",
+  NEEDS_REVIEW_UPDATE: "needs_review.update",
   AUDIT_LOG_VIEW: "audit_log.view",
   CHAT_ASSISTANT_VIEW: "chat_assistant.view",
   SHEETS_VIEW: "sheets.view",

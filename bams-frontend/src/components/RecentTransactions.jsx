@@ -129,7 +129,7 @@ const RecentTransactions = ({
         width: "w-16",
         sortable: true,
         sortKey: "source",
-        render: (row) => <SourceBadge source={row?.source} gmail_msg_id={row?.gmail_message_id} />,
+        render: (row) => <SourceBadge source={row?.source} email_metadata={row?.email_metadata} gmail_msg_id={row?.gmail_message_id} />,
       },
       {
         key: "actions",

@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 from ..core.dependencies import get_current_org, require_permission
 from ..database import get_db
 from ..models.organization import Organization
-from ..services.accounts_service import get_paginated_accounts, create_new_account, get_recent_account_transactions
+from ..services.accounts_service import (
+    get_paginated_accounts,
+    create_new_account,
+    get_recent_account_transactions,
+    get_account_statement_timeline,
+)
 
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
@@ -70,5 +75,14 @@ def get_account_transactions(
 def create_account(request: CreateAccountRequest, current_org: Organization = Depends(get_current_org), db: Session= Depends(get_db)):
 
     return create_new_account(db, request, current_org.id)
+
+
+@router.get("/{account_number}/timeline", dependencies=[Depends(require_permission("accounts", "view"))])
+def get_account_timeline(
+    account_number: str,
+    current_org: Organization = Depends(get_current_org),
+    db: Session = Depends(get_db),
+):
+    return get_account_statement_timeline(db=db, org_id=current_org.id, account_number=account_number)
 
     

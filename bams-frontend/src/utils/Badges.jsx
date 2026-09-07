@@ -1,8 +1,10 @@
-import { EllipsisVertical, FileText } from "lucide-react";
+import { useState } from "react";
+import { EllipsisVertical, ExternalLink, FileText, TriangleAlert } from "lucide-react";
 import { formatAmount } from "../lib/helper";
 import CustomPopover from "../components/ui/CustomPopover";
 import ActionList from "../components/ui/ActionList";
 import CustomButton from "../components/ui/CustomButton";
+import DialogPopup from "../components/ui/DialogPopup";
 
 
 export const TypeBadge = ({ type }) => {
@@ -48,18 +50,59 @@ export const CategoryBadge = ({ category, type }) => {
 };
 
 
-export const SourceBadge = ({ source, gmail_msg_id, className }) => {
+// Preview the source email in-app instead of sending the user out to Gmail.
+// Statement-sourced rows (uploaded PDFs) have no email to preview, so they
+// just keep the static icon for now.
+export const SourceBadge = ({ source, email_metadata, gmail_msg_id, className }) => {
+  const [open, setOpen] = useState(false);
+
+  if (source !== "email") {
+    return (
+      <span className="flex items-center justify-center w-full">
+        <FileText className={`text-blue-600 w-5 h-5 ${className}`} />
+      </span>
+    );
+  }
+
+  const fromName = email_metadata?.original_from_name;
+  const fromEmail = email_metadata?.original_from_email;
+  const fromLine = fromName && fromEmail ? `${fromName} <${fromEmail}>` : fromName || fromEmail || "";
+  const gmailLink = gmail_msg_id ? `https://mail.google.com/mail/u/0/#inbox/${gmail_msg_id}` : null;
+
   return (
-    <a href={`https://mail.google.com/mail/u/0/#inbox/${gmail_msg_id}`} target="_blank" rel="noopener" className="flex items-center justify-center w-full gap-1">
-      {source === "email" ? (
-        // Email source
-        <div className="flex items-center">
-          <img src="./gmail-icon.png" alt="Gmail" className={`w-5 h-5 ${className}`} />
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center justify-center w-full"
+        aria-label="Preview source email"
+      >
+        <img src="./gmail-icon.png" alt="Gmail" className={`w-5 h-5 ${className}`} />
+      </button>
+
+      <DialogPopup open={open} setOpen={setOpen} heading={email_metadata?.subject || "Email"} subheading={fromLine} maxWidth="560px">
+        <div className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700">
+          {email_metadata?.body || "No preview available for this email."}
         </div>
-      ) :
-        <span><FileText className={`text-blue-600 w-5 h-5 ${className}`} /></span>
-      }
-    </a>
+
+        {/* Some senders' emails don't clean up perfectly here -- this is
+            always the escape hatch rather than trying to detect "garbled". */}
+        {gmailLink && (
+          <p className="mt-3 flex items-center gap-1.5 text-xs pl-1 font-medium text-gray-600">
+            <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+            Doesn't look right?
+            <a
+              href={gmailLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+            >
+              Open the original email <ExternalLink className="h-3 w-3" />
+            </a>
+          </p>
+        )}
+      </DialogPopup>
+    </>
   );
 };
 
@@ -96,7 +139,7 @@ const colorMap = {
   business: "bg-purple-100 text-purple-800",
   huf: "bg-green-100 text-green-800",
   family: "bg-blue-100 text-blue-800",
-  jointbusiness: "bg-red-100 text-red-800",
+  nre: "bg-red-100 text-red-800",
   firm: "bg-orange-100 text-orange-800",
   others: "bg-gray-100 text-gray-800",
 };

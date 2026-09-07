@@ -11,12 +11,14 @@ import CustomTable from "../components/ui/CustomTable";
 import DataCard from "../components/ui/DataCard";
 import Pagination from "../components/Pagination";
 import { cleanText, formatAmount, formatDate, formatDateAndTime, formatINR } from "../lib/helper";
-import { getAccountBalanceTotals, getAccountSummaryCards } from "../lib/accounts-helper";
+import { getAccountBalanceTotals, getAccountSummaryCards, getIndividualAccountFilterValue } from "../lib/accounts-helper";
 import { getAccountFilterOptions } from "../lib/transactional-helper";
 import AddAcounts from "../components/AddAcounts";
 import { useExportContextStore } from "../store/exportContextStore";
 import { AccountCategoryBadge, AmountColor, TypeBadge } from "../utils/Badges";
 import { usePermissions, PERMISSIONS } from "../lib/permissions";
+import CustomDrawer from "../components/ui/CustomDrawer";
+import TimelineView from "../components/TimelineView";
 
 const ALL_FILTER_VALUE = "all";
 
@@ -54,24 +56,6 @@ const getAllOptionLabel = (options = [], fallback = "All") => (
 const toNumber = (value) => {
   const numberValue = Number(value || 0);
   return Number.isFinite(numberValue) ? numberValue : 0;
-};
-
-const getAccountNumberFilterLabel = (accountNumber) => {
-  const rawAccountNumber = String(accountNumber || "").trim();
-  const digits = rawAccountNumber.replace(/\D/g, "");
-
-  if (digits.length >= 4) return `XX${digits.slice(-4)}`;
-  return rawAccountNumber;
-};
-
-const getIndividualAccountFilterValue = (account) => {
-  const accountParts = [
-    account?.account_holder_name,
-    account?.bank_name,
-    getAccountNumberFilterLabel(account?.account_number),
-  ].filter(Boolean);
-
-  return accountParts.join(" - ").toLowerCase();
 };
 
 const getLatestTransactionDateRange = (transactions = []) => {
@@ -182,6 +166,13 @@ const Accounts = () => {
   const [recentTransactionsLoading, setRecentTransactionsLoading] = useState({});
   const [recentTransactionsError, setRecentTransactionsError] = useState({});
   const [openFilter, setOpenFilter] = useState(false);
+  const [openDraw, setOpenDraw] = useState(false);
+  const [timelineAccount, setTimelineAccount] = useState(null);
+
+  const openAccountTimeline = (account) => {
+    setTimelineAccount(account);
+    setOpenDraw(true);
+  };
 
   const updateDraftFilter = (key, value) => {
     setDraftFilters((currentFilters) => ({
@@ -346,8 +337,18 @@ const Accounts = () => {
             </CustomButton>
 
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-slate-950" title={account.account_holder_name}>
+              <p className="flex gap-2 pr-2 truncate py-1 text-sm font-bold text-slate-950 w-full" title={account.account_holder_name}>
                 {account.account_holder_name || "-"}
+
+                <CustomButton
+                  variant="ghost"
+                  color="gray"
+                  size="1"
+                  aria-label={`View statement timeline for ${account.account_holder_name || "account"}`}
+                  onClick={() => openAccountTimeline(account)}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </CustomButton>
               </p>
               <p className="mt-1 truncate text-xs font-medium text-slate-400" title={`${account.account_number || "-"} · ${account.bank_name || "-"}`}>
                 {account.account_number || "-"} · {account.bank_name || "-"}
@@ -424,7 +425,7 @@ const Accounts = () => {
         header: "Delta",
         sortable: true,
         sortKey: "delta",
-        columnWidth: "150px",
+        columnWidth: "200px",
         headerAlign: "right",
         headerClassName: "text-right",
         cellClassName: "text-right [&>div]:justify-end",
@@ -448,7 +449,7 @@ const Accounts = () => {
         ),
       },
     ],
-    [balanceTotals, expandedAccountIds, recentTransactionsLoading, toggleAccountTransactions],
+    [balanceTotals, expandedAccountIds, recentTransactionsLoading, toggleAccountTransactions, openAccountTimeline],
   );
 
   const recentTransactionColumns = useMemo(() => [
@@ -863,6 +864,15 @@ const Accounts = () => {
       </div>
 
       <AddAcounts open={addAccounts} setOpen={setAddAccounts}/>
+      
+      <CustomDrawer
+        open={openDraw}
+        setOpen={setOpenDraw}
+        title="Statement Timeline"
+        size="420px"
+      >
+        <TimelineView account={timelineAccount} />
+      </CustomDrawer>
     </main>
   );
 };

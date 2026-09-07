@@ -3,12 +3,17 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, Any, Literal
 
-from ..core.dependencies import get_current_org, require_permission
+from ..core.dependencies import get_current_org, require_any_permission, require_permission
 from ..database import get_db
 from ..models.organization import Organization
 from ..services.transaction_service import get_paginated_transactions, get_dashboard_summary, get_filter_options
 from fastapi import Request
-from ..services.transaction_service import update_transaction, query_audit_logs
+from ..services.transaction_service import (
+    update_transaction,
+    query_audit_logs,
+    get_flagged_transactions,
+    bulk_unflag_transactions,
+)
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
@@ -49,6 +54,23 @@ def query_transactions(req: TransactionQueryRequest, current_org: Organization =
     return result
 
 
+@router.post("/flagged", dependencies=[Depends(require_permission("needs_review", "view"))])
+def query_flagged_transactions(req: TransactionQueryRequest, current_org: Organization = Depends(get_current_org), db: Session = Depends(get_db)):
+    sort_dict = req.sort.dict() if req.sort else None
+    result = get_flagged_transactions(db, current_org.id, req.filters, req.pagination.page, req.pagination.pageSize, sort_dict)
+    return {"transactions": result["data"], "totalCount": result["totalCount"]}
+
+
+class UnflagTransactionsRequest(BaseModel):
+    ids: list[str]
+
+
+@router.post("/unflag", dependencies=[Depends(require_permission("needs_review", "update"))])
+def unflag_transactions_route(req: UnflagTransactionsRequest, current_org: Organization = Depends(get_current_org), db: Session = Depends(get_db)):
+    updated = bulk_unflag_transactions(db, current_org.id, req.ids)
+    return {"updated": updated}
+
+
 class EditTransactionRequest(BaseModel):
     category: Optional[str] = None
     narration: Optional[str] = None
@@ -62,7 +84,10 @@ class EditTransactionRequest(BaseModel):
     reason: Optional[str] = None
 
 
-@router.put("/{id}", dependencies=[Depends(require_permission("transactions", "update"))])
+@router.put(
+    "/{id}",
+    dependencies=[Depends(require_any_permission(("transactions", "update"), ("needs_review", "update")))],
+)
 def edit_transaction(
     id: str,
     payload: EditTransactionRequest,
