@@ -51,7 +51,7 @@ def _append_sheet_rows(sheets_service: Any, spreadsheet_id: str, sheet_title: st
     return {"updated": True, "rows_written": len(rows)}
 
 
-def append_account_to_local_excel(bank_name: str, name: str, ac_type: str, account_no: str) -> bool:
+def append_account_to_local_excel(bank_name: str, name: str, ac_type: str, account_no: str, category: str, mobileno: str, statementpassword: str) -> bool:
     """Append a new bank account row to the local 'Bank Accounts V1.xlsx' spreadsheet.
     Resolves the file location in app/utils/ or app/ds/llm/utils/ robustly.
     """
@@ -92,8 +92,10 @@ def append_account_to_local_excel(bank_name: str, name: str, ac_type: str, accou
             name.strip(),
             ac_type.strip(),
             acc_val,
-            None, # Mobile No (optional)
-            None  # Email ID (optional)
+            mobileno.strip() if mobileno else None, # Mobile No (optional)
+            None, # Email ID (optional)
+            statementpassword.strip() if statementpassword else None,  # Statement Password (optional)
+            category.strip() if category else None  # Category (optional)
         ]
         
         ws.append(row_to_add)

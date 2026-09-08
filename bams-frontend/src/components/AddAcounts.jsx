@@ -12,6 +12,9 @@ const AddAcounts = ({open, setOpen}) => {
     accountno: "",
     type: "",
     name: "",
+    category: "",
+    mobileno: "",
+    statementpassword: "",
   });
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -94,6 +97,33 @@ const AddAcounts = ({open, setOpen}) => {
           labelText="Enter Account Holder Name *"
           placeholder="John Doe"
           value={account.name}
+          onChange={handleChange}
+        />
+
+        <CustomInput
+          name="category"
+          type="text"
+          labelText="Enter Account Category *"
+          placeholder="Personal / Business"
+          value={account.category}
+          onChange={handleChange}
+        />
+
+        <CustomInput
+          name="mobileno"
+          type="number"
+          labelText="Enter Mobile Number (Optional)"
+          placeholder="1234567890"
+          value={account.mobileno}
+          onChange={handleChange}
+        />
+
+        <CustomInput
+          name="statementpassword"
+          type="password"
+          labelText="Enter Statement Password (Optional)"
+          placeholder="••••••••"
+          value={account.statementpassword}
           onChange={handleChange}
         />
       </div>

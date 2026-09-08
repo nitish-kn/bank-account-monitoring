@@ -33,6 +33,9 @@ class CreateAccountRequest(BaseModel):
     accountno: str
     type: str
     name: str
+    category: str
+    mobileno: Optional[str] = None
+    statementpassword: Optional[str] = None
 
 @router.post("/query", dependencies=[Depends(require_permission("accounts", "view"))])
 def query_accounts(
