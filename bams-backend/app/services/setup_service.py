@@ -445,8 +445,21 @@ def _persist_extracted_transactions(
     transactions from it are still being saved."""
     try:
         parsed_result_count = _parsed_transaction_count(transactions)
+
+        # Carry-forward rows (Opening/Closing Balance, Balance B/F or C/F)
+        # are a stated balance, not a real transaction -- bank_accounts was
+        # already updated for them inside parse_statement_pdf_sync (see
+        # reconcile_statement_batch), so they must never reach the
+        # transactions table or Sheets. They still count as "this email
+        # parsed successfully" for parse-status tracking below, so
+        # `transactions` itself stays unfiltered for that call.
+        transactions_to_save = [
+            transaction for transaction in transactions
+            if str(transaction.get("txn_type") or "").strip().lower() != "carry_forward"
+        ]
+
         saved_transactions = save_valid_transaction_to_db(
-            transactions,
+            transactions_to_save,
             org.id,
             db,
         )

@@ -225,6 +225,27 @@ def _process_saved_statements_sync(org_id: int, saved_files: list[tuple[str, Pat
                 "Statement parsed | org=%s file=%s rows=%d",
                 org.id, original_filename, len(extracted_txns or []),
             )
+
+            # Carry-forward rows (Opening/Closing Balance, Balance B/F or C/F)
+            # already updated bank_accounts inside parse_statement_pdf_sync
+            # (see reconcile_statement_batch) -- they are a stated balance,
+            # never a real transaction, so they must never reach the
+            # transactions table or Google Sheets.
+            carry_forward_count = sum(
+                1 for txn in extracted_txns or []
+                if str(txn.get("txn_type") or "").strip().lower() == "carry_forward"
+            )
+            extracted_txns = [
+                txn for txn in extracted_txns or []
+                if str(txn.get("txn_type") or "").strip().lower() != "carry_forward"
+            ]
+            if carry_forward_count:
+                logger.info(
+                    "Statement carry-forward rows excluded from transactions table | "
+                    "org=%s file=%s count=%d",
+                    org.id, original_filename, carry_forward_count,
+                )
+
             if not extracted_txns:
                 file_result["status"] = "no_transactions_found"
                 processed_files.append(file_result)

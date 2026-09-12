@@ -4,6 +4,7 @@ Account lookup utility for matching and filling account details from Excel file.
 
 import difflib
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -87,6 +88,56 @@ def get_all_bank_account_passwords(df: pd.DataFrame = None) -> list[str]:
     return list(dict.fromkeys(passwords))
 
 
+def _normalize_account_digits(value: Any) -> Optional[str]:
+    """Strip whitespace/separators so account numbers with different
+    formatting (spaces, dashes) still compare equal. Returns None for
+    masked values (e.g. "XX6744") -- those aren't a "full" number and must
+    go through the last-4-digit path instead."""
+    text = re.sub(r"[\s-]+", "", str(value or "").strip())
+    if not text or not text.isdigit():
+        return None
+    return text
+
+
+def find_account_by_full_number(account_number: str, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+    """
+    Find account details by an EXACT full account-number match. Preferred
+    over last-4-digit matching whenever the statement prints a full,
+    unmasked account number -- matching on just the last 4 digits alone can
+    collide across two different accounts that happen to share a suffix.
+
+    Only matches when both the incoming number and the sheet's "Axis A/c No"
+    value normalize to plausible full numbers (>= 8 digits) -- short/masked
+    values are left for find_account_in_excel's last-4 fallback.
+    """
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return None
+
+    account_col = "Axis A/c No"
+    if account_col not in df.columns:
+        return None
+
+    target = _normalize_account_digits(account_number)
+    if not target or len(target) < 8:
+        return None
+
+    normalized_col = df[account_col].apply(_normalize_account_digits)
+    matching_accounts = df[normalized_col == target]
+
+    if matching_accounts.empty:
+        return None
+
+    match = matching_accounts.iloc[0]
+
+    return {
+        "bank_name": match.get("S No"),
+        "account_holder_name": match.get("Name"),
+        "account_type": match.get("Type"),
+        "account_number": str(match.get(account_col)),
+        "category": match.get("Category"),
+    }
+
+
 def find_account_in_excel(last_four_digits: str, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     """
     Find account details in the Excel data by matching last 4 digits.
@@ -96,7 +147,7 @@ def find_account_in_excel(last_four_digits: str, df: pd.DataFrame) -> Optional[D
         df: DataFrame with bank accounts data
 
     Returns:
-        dict: Account details (bank_name, account_holder_name, account_type, account_number) or None if not found
+        dict: Account details (bank_name, account_holder_name, account_type, account_number, category) or None if not found
     """
     if not last_four_digits or not isinstance(df, pd.DataFrame) or df.empty:
         return None
@@ -119,6 +170,7 @@ def find_account_in_excel(last_four_digits: str, df: pd.DataFrame) -> Optional[D
         "account_holder_name": match.get("Name"),
         "account_type": match.get("Type"),
         "account_number": str(match.get(account_col)),
+        "category": match.get("Category"),
     }
 
 
@@ -237,13 +289,43 @@ def fuzzy_find_accounts_in_excel(
     return [match for _, match in scored[:limit]]
 
 
-def fill_missing_account_details(transaction: Dict[str, Any], df: pd.DataFrame = None) -> Dict[str, Any]:
+def _uppercase_extracted_account_fields(transaction: Dict[str, Any]) -> Dict[str, Any]:
+    """No mapping-sheet match -- keep whatever the LLM itself extracted
+    (account_number, account_holder_name, bank_name, account_type) rather
+    than discarding it, just normalized to upper case."""
+    for field in ("account_number", "account_holder_name", "bank_name", "account_type"):
+        value = transaction.get(field)
+        if isinstance(value, str) and value:
+            transaction[field] = value.upper()
+    return transaction
+
+
+def fill_missing_account_details(
+    transaction: Dict[str, Any],
+    df: pd.DataFrame = None,
+    use_last_four_fallback: bool = True,
+    uppercase_when_unmatched: bool = False,
+) -> Dict[str, Any]:
     """
     Fill missing account details by matching account number from Excel file.
 
     Args:
         transaction: Transaction object/dict with account information
         df: Optional pre-loaded DataFrame. If None, will load it
+        use_last_four_fallback: also try matching by last-4-digit suffix when
+            there's no full-number match. The email flow keeps this on (a
+            masked "XX6744" is all an email ever shows); the statement flow
+            turns it off -- a statement usually prints the full number, and
+            matching by suffix alone risks colliding across two accounts
+            that happen to share the same last 4 digits.
+        uppercase_when_unmatched: when no match is found at all, keep the
+            LLM's own extracted values (upper-cased) instead of discarding
+            the account identity. Used by the statement flow, where an
+            unmatched account is still the statement's own account, just one
+            not yet in Bank Accounts V1. The email flow leaves this off,
+            since an unmatched email account may genuinely be a
+            beneficiary's/counterparty's account rather than the customer's
+            own (see extractor.py) and must stay null.
 
     Returns:
         dict: Transaction with filled account details
@@ -259,31 +341,43 @@ def fill_missing_account_details(transaction: Dict[str, Any], df: pd.DataFrame =
     if not account_number:
         return transaction
 
-    last_four = extract_last_four_digits(account_number)
-    match = find_account_in_excel(last_four, df) if last_four else None
+    # A full, unmasked account number is matched exactly first -- matching
+    # by last-4-digit suffix alone can collide across two different accounts
+    # that happen to share the same last 4 digits.
+    match = find_account_by_full_number(account_number, df)
+    if not match and use_last_four_fallback:
+        last_four = extract_last_four_digits(account_number)
+        match = find_account_in_excel(last_four, df) if last_four else None
 
-    # The account number in the email must belong to one of our own monitored
-    # accounts (Bank Accounts V1). If it isn't in that file, it's a
-    # counterparty's / unknown account — discard the account identity entirely
-    # so we never attribute a transaction to an account we don't own.
     if not match:
+        if uppercase_when_unmatched:
+            return _uppercase_extracted_account_fields(transaction)
+
+        # The account number in the email must belong to one of our own
+        # monitored accounts (Bank Accounts V1). If it isn't in that file,
+        # it's a counterparty's / unknown account — discard the account
+        # identity entirely so we never attribute a transaction to an
+        # account we don't own.
         transaction["account_number"] = None
         transaction["account_holder_name"] = None
         transaction["account_type"] = None
+        transaction["account_category"] = None
         return transaction
 
+    # Account number matched a known record — the mapping sheet's values
+    # always win, regardless of whatever the email/statement itself shows.
     if match.get("bank_name"):
         transaction["bank_name"] = match["bank_name"]
 
-    # if not transaction.get("account_number") or len(str(transaction.get("account_number", ""))) < 10:
     transaction["account_number"] = match["account_number"]
 
-    # Account number matched a known record — the Excel name always wins,
-    # regardless of whatever name the email/statement itself shows.
     if match.get("account_holder_name"):
         transaction["account_holder_name"] = match["account_holder_name"]
 
     if match.get("account_type"):
         transaction["account_type"] = match["account_type"]
+
+    if match.get("category"):
+        transaction["account_category"] = match["category"]
 
     return transaction

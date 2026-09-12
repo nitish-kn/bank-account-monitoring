@@ -37,8 +37,13 @@ from PIL import Image
 from pydantic import BaseModel, Field, ValidationError
 
 from ...config import settings
+from ...utils.sheets_utils import append_account_to_local_excel
 from .schemas.transaction_schema import Transaction
-from .utils.account_lookup import fill_missing_account_details
+from .utils.account_lookup import (
+    fill_missing_account_details,
+    find_account_by_full_number,
+    load_bank_accounts_data,
+)
 from .utils.pdf_password_lookup import get_all_known_pdf_passwords
 from .utils.credit_card_lookup import fill_missing_credit_card_details
 # from tracing import init_tracing
@@ -64,6 +69,8 @@ class AccountContext(BaseModel):
     account_number: Optional[str] = None
     account_type: Optional[str] = None
     currency: Optional[str] = None
+    period_from: Optional[str] = None
+    period_to: Optional[str] = None
 
 
 class TransactionBatch(BaseModel):
@@ -129,16 +136,14 @@ Before extracting any row, classify it as one of:
 * INFORMATION_ROW
 * ILLUSTRATIVE_EXAMPLE
 
-Only extract rows classified as **TRANSACTION**.
+Extract rows classified as **TRANSACTION** (a real money movement) AND rows classified as
+**CARRIED_FORWARD** (a stated Opening Balance / Closing Balance / Balance B/F / Balance C/F line —
+see the "CARRIED FORWARD BALANCE ROWS" section below for exactly how to extract these).
 
 ### Never Extract
 
-* Opening Balance
-* Closing Balance
 * Available Balance
 * Ledger Balance
-* Balance B/F
-* Balance C/F
 * Total Debit
 * Total Credit
 * Net Total
@@ -147,7 +152,6 @@ Only extract rows classified as **TRANSACTION**.
 * Page Total
 * Grand Total
 * Interest Summary
-* Carried Forward Rows
 * Headers
 * Footers
 * Notes
@@ -157,6 +161,8 @@ Only extract rows classified as **TRANSACTION**.
 * Example / Hypothetical Transaction Rows
 
 A row is a **TRANSACTION** only if it represents a distinct movement of money (credit or debit).
+A row is **CARRIED_FORWARD** only if it is a standalone Opening Balance / Closing Balance /
+Balance B/F / Balance C/F line with no actual debit or credit movement of its own.
 
 ### Illustrative / sample content (common on credit card statements)
 
@@ -227,6 +233,32 @@ If a row contains only a cheque number, reference number, account number, balanc
 
 ---
 
+# CARRIED FORWARD BALANCE ROWS
+
+A statement's Opening Balance / Closing Balance / Balance B/F ("brought forward") / Balance C/F
+("carried forward") lines are not real transactions, but the stated balance they carry is still
+valuable — it tells us the true account balance on a specific date even when no transaction
+happened that day. Extract ONE Transaction object for each such row you see, shaped like this:
+
+* `txn_type` = `"carry_forward"`
+* `balance_after_txn` = the stated balance on that row.
+* `txn_date` = the date printed on that specific row, if any.
+  * If the row itself has no date (common for a summary-box "Opening Balance" / "Closing Balance"
+    at the top of the statement with no date of its own), use the statement's `period_from` for an
+    Opening Balance / Balance B/F row, or `period_to` for a Closing Balance / Balance C/F row (see
+    STATEMENT ACCOUNT CONTEXT below). If neither a row date nor a statement period is available,
+    leave `txn_date` null.
+* `amount` = null. This is not a debit or credit — never put the balance in `amount`.
+* `narration`, `counterparty`, `counterparty_kind`, `mode`, `category`, `txn_via`, `ref_number`,
+  `place` = null. None of these apply to a carried-forward balance.
+* `bank_name`, `account_holder_name`, `account_number`, `account_type`, `currency` = repeat the
+  same account-level values as every other row from this statement.
+
+Do not skip these rows anymore, and do not classify them as TRANSACTION — always use
+`txn_type = "carry_forward"` so downstream code can tell them apart from a real transaction.
+
+---
+
 # STATEMENT ACCOUNT CONTEXT
 
 Account details are statement-level header details, not transaction rows.
@@ -238,6 +270,10 @@ On the first page/header of a bank statement, carefully extract:
 * `account_number`
 * `account_type`
 * `currency`
+* `period_from` / `period_to` — the date range this statement covers, from a header like
+  "Statement Period", "Statement for the period", "Statement From ... To ...", or a printed
+  "From DD/MM/YYYY To DD/MM/YYYY". Return each as `YYYY-MM-DD`. If no explicit period is printed,
+  leave both null — never infer it from the first/last transaction date.
 
 Return these values in `account_context`, and repeat the same values on every extracted transaction.
 
@@ -358,6 +394,9 @@ If direction still cannot be determined:
 
 * `debit` = money out
 * `credit` = money in
+* `carry_forward` = this row is a carried-forward balance (Opening/Closing Balance, Balance B/F /
+  C/F), not a real transaction — see CARRIED FORWARD BALANCE ROWS above. Never mix this with
+  `debit`/`credit`.
 * Infer from Dr/Cr columns, narration, or balance movement.
 * Never leave null when evidence exists.
 
@@ -457,6 +496,7 @@ Leave these fields null — they are filled in by our code, not by you:
 * gmail_message_id
 * source
 * dedupe_key
+* account_category (resolved from the Bank Accounts V1 mapping sheet using account_number)
 * email_metadata (all sub-fields)
 * parser_metadata (all sub-fields)
 * optional_fields.trips_left, optional_fields.vehicle_number (FASTag details only ever come from email, not statements)
@@ -480,9 +520,11 @@ Leave these fields null — they are filled in by our code, not by you:
 Before returning:
 
 1. Count transaction rows on the page.
-2. Count extracted Transaction objects.
+2. Count extracted TRANSACTION-classified Transaction objects (excluding CARRIED_FORWARD rows).
 3. They must match.
-4. Exclude all balance, summary, total, carried-forward, header, footer, informational, and illustrative/example rows.
+4. Exclude all balance, summary, total, header, footer, informational, and illustrative/example rows
+   — except Opening Balance / Closing Balance / Balance B/F / Balance C/F rows, which are extracted
+   separately as `txn_type = "carry_forward"` per the CARRIED FORWARD BALANCE ROWS section above.
 5. Return only actual money-movement transactions the cardholder/account holder genuinely made.
 """
 # ------------------------------------------------------------------ #
@@ -605,6 +647,8 @@ ACCOUNT_CONTEXT_FIELDS = (
     "account_number",
     "account_type",
     "currency",
+    "period_from",
+    "period_to",
 )
 
 EMPTY_ACCOUNT_VALUES = {"", "-", "--", "n/a", "na", "none", "null", "not available"}
@@ -671,6 +715,67 @@ def _apply_account_context(
 
 def _is_credit_card_statement_context(account_context: dict[str, str]) -> bool:
     return str(account_context.get("account_type") or "").strip().lower() == "credit card"
+
+
+CARRY_FORWARD_TXN_TYPE = "carry_forward"
+
+
+def _is_carry_forward_transaction(tx_dict: dict) -> bool:
+    return str(tx_dict.get("txn_type") or "").strip().lower() == CARRY_FORWARD_TXN_TYPE
+
+
+def _normalize_carry_forward_transaction(tx_dict: dict) -> dict:
+    """
+    A carry-forward row (Opening/Closing Balance, Balance B/F or C/F) isn't a
+    real transaction -- only txn_date/balance_after_txn/account fields carry
+    meaning. Belt-and-suspenders clearing of every transaction-only field in
+    case the model didn't leave them null, so a stray narration/amount can
+    never make this look like (or get counted as) a real debit/credit
+    downstream, and it never gets mistaken for a Credit Card row either.
+    """
+    tx_dict["amount"] = None
+    tx_dict["narration"] = None
+    tx_dict["counterparty"] = None
+    tx_dict["counterparty_kind"] = None
+    tx_dict["mode"] = None
+    tx_dict["category"] = None
+    tx_dict["txn_via"] = None
+    tx_dict["ref_number"] = None
+    tx_dict["place"] = None
+    return tx_dict
+
+
+def _register_unmatched_statement_account(tx_dict: dict, registered_accounts: set[str]) -> None:
+    """
+    A statement account number that doesn't match anything in Bank Accounts
+    V1 is still one of this org's own accounts -- just not on file yet (see
+    fill_missing_account_details's uppercase_when_unmatched path). Register
+    it now via the same helper the "Add Account" UI flow already uses, so
+    every later statement for this account matches on the first try instead
+    of falling through to the uppercase-LLM-values path every time.
+
+    `registered_accounts` is scoped to one extract_transactions_from_pdf()
+    run -- without it, every transaction row on this statement (all sharing
+    the same account) would append a duplicate row.
+    """
+    account_number = tx_dict.get("account_number")
+    bank_name = tx_dict.get("bank_name")
+    account_holder_name = tx_dict.get("account_holder_name")
+    account_type = tx_dict.get("account_type")
+
+    if not (account_number and bank_name and account_holder_name and account_type):
+        return
+    if account_number in registered_accounts:
+        return
+
+    registered_accounts.add(account_number)
+    if not append_account_to_local_excel(
+        bank_name=bank_name,
+        name=account_holder_name,
+        ac_type=account_type,
+        account_no=account_number,
+    ):
+        log.warning("Could not register new account %s in Bank Accounts V1.", account_number)
 
 
 def _recover_credit_card_number(tx_dict: dict) -> dict:
@@ -879,6 +984,13 @@ def extract_transactions_from_pdf(
     all_transactions: list[Transaction] = []
     all_log_entries: list[ExtractionLogEntry] = []
     statement_account_context: dict[str, str] = {}
+    newly_registered_accounts: set[str] = set()
+
+    try:
+        account_lookup_df = load_bank_accounts_data()
+    except Exception as exc:
+        log.warning("Could not load Bank Accounts V1 mapping sheet: %s", exc)
+        account_lookup_df = None
 
     batches = [
         list(range(i, min(i + batch_size, total_pages)))
@@ -932,10 +1044,23 @@ def extract_transactions_from_pdf(
                 # of optional_fields.credit_card_number.
                 tx_dict = _recover_credit_card_number(tx_dict)
 
+            if _is_carry_forward_transaction(tx_dict):
+                tx_dict = _normalize_carry_forward_transaction(tx_dict)
+
             _merge_account_context(statement_account_context, _transaction_account_context(tx_dict))
             tx_dict = _apply_account_context(tx_dict, statement_account_context)
             # print(f"BEFORE ENRICHMENT - {tx_dict}")
-            enriched_tx = fill_missing_account_details(tx_dict)
+            account_matched = bool(
+                find_account_by_full_number(tx_dict.get("account_number"), account_lookup_df)
+            )
+            enriched_tx = fill_missing_account_details(
+                tx_dict,
+                df=account_lookup_df,
+                use_last_four_fallback=False,
+                uppercase_when_unmatched=True,
+            )
+            if not account_matched:
+                _register_unmatched_statement_account(enriched_tx, newly_registered_accounts)
             # print(f"ENRICHED - {enriched_tx}")
             enriched_tx = fill_missing_credit_card_details(enriched_tx)
             # enriched_tx = _apply_account_context(
@@ -981,6 +1106,10 @@ def extract_transactions_from_pdf(
     if _is_credit_card_statement_context(statement_account_context):
         for index, txn in enumerate(all_transactions):
             if str(txn.txn_via or "").strip().lower() == "credit card":
+                continue
+            if str(txn.txn_type or "").strip().lower() == CARRY_FORWARD_TXN_TYPE:
+                # Carry-forward rows have no card number to enrich and must
+                # keep txn_via null (see _normalize_carry_forward_transaction).
                 continue
 
             txn_dict = _force_credit_card_transaction(txn.model_dump())
