@@ -637,8 +637,11 @@ def create_new_account(db: Session, request: dict, org_id: int) -> None:
     account_no = request.accountno
     account_type = request.type
     account_holder_name = request.name
+    category = request.category
+    mobileno = request.mobileno
+    statementpassword = request.statementpassword
 
-    if not (bank_name and account_no and account_type and account_holder_name):
+    if not (bank_name and account_no and account_type and account_holder_name and category):
         raise HTTPException(
             status_code=400,
             detail="Important fields are missing."
@@ -661,6 +664,7 @@ def create_new_account(db: Session, request: dict, org_id: int) -> None:
             account_number = account_no,
             account_type = account_type,
             account_holder_name = account_holder_name,
+            category = category,
             source = "manual",
             org_id = org_id
         )
@@ -672,7 +676,10 @@ def create_new_account(db: Session, request: dict, org_id: int) -> None:
             bank_name=bank_name,
             name=account_holder_name,
             ac_type=account_type,
-            account_no=account_no
+            account_no=account_no,
+            category=category,
+            mobileno=mobileno,
+            statementpassword=statementpassword,
         )
         if not excel_success:
             raise Exception("Failed to write to Excel sheet")
