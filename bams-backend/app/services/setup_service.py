@@ -56,6 +56,7 @@ from .ledger_service import recalculate_ledgers_for_transactions
 
 from ..utils.sheets_utils import _get_sheet_title, _append_sheet_rows, _read_existing_column_values
 from ..utils.statement_utils import normalize_statement_transaction, parse_statement_pdf_sync
+from .statement_storage_service import store_and_link_statement_file
 from ..utils.transaction_utils import (
     transactions_to_sheet_rows,
     transaction_column_for_field,
@@ -329,9 +330,15 @@ def _attachment_email_metadata(email: dict, attachment: dict) -> dict:
     }
 
 
-def _parse_statement_attachments_from_email(org: Organization, email: dict) -> tuple[list[dict], list[str]]:
+def _parse_statement_attachments_from_email(org: Organization, email: dict) -> tuple[list[dict], list[str], list[dict]]:
+    """Parse every PDF attachment on a statement email. The third item holds
+    one {"content", "filename", "gmail_message_id", "transactions"} entry per
+    parsed PDF -- this runs in a worker thread with no DB session, and a PDF
+    is only stored once its transactions are saved and turn out to be new,
+    so that waits for _persist_extracted_transactions."""
     transactions = []
     errors = []
+    statement_files = []
     message_id = email.get("id")
     pdf_attachments = _pdf_attachments_for_email(email)
 
@@ -376,6 +383,7 @@ def _parse_statement_attachments_from_email(org: Organization, email: dict) -> t
                 org.id,
                 original_filename=str(filename),
             )
+
             normalized_txns = [
                 normalize_statement_transaction(
                     transaction,
@@ -386,6 +394,13 @@ def _parse_statement_attachments_from_email(org: Organization, email: dict) -> t
                 for transaction in extracted_txns or []
             ]
             transactions.extend(normalized_txns)
+            if normalized_txns:
+                statement_files.append({
+                    "content": file_bytes,
+                    "filename": str(filename),
+                    "gmail_message_id": message_id,
+                    "transactions": normalized_txns,
+                })
             logger.info(
                 "Statement attachment parsed | org=%s gmail_message_id=%s file=%s rows=%d",
                 org.id, message_id, filename, len(normalized_txns),
@@ -423,7 +438,7 @@ def _parse_statement_attachments_from_email(org: Organization, email: dict) -> t
                         saved_path, error,
                     )
 
-    return transactions, errors
+    return transactions, errors, statement_files
 
 
 def _persist_extracted_transactions(
@@ -436,13 +451,17 @@ def _persist_extracted_transactions(
     log_label: str,
     force_status: str | None = None,
     force_status_reason: str | None = None,
+    statement_files: list[dict] | None = None,
 ) -> list:
     """Save extracted transactions, then upsert the parse-status row for each
     of `emails`. `force_status`, if given, pins that status regardless of
     what parser_metadata says on `transactions` — used when the caller
     already knows the outcome should read as failed (e.g. a statement email
     with a partially or fully unrecoverable attachment) even though some
-    transactions from it are still being saved."""
+    transactions from it are still being saved.
+
+    `statement_files` are the parsed PDFs behind these transactions; each is
+    stored in RustFS after the commit, and only if it brought new transactions."""
     try:
         parsed_result_count = _parsed_transaction_count(transactions)
         saved_transactions = save_valid_transaction_to_db(
@@ -487,6 +506,18 @@ def _persist_extracted_transactions(
         db.add(org)
         db.commit()
         return []
+
+    for statement_file in statement_files or []:
+        store_and_link_statement_file(
+            db,
+            org.id,
+            content=statement_file["content"],
+            filename=statement_file["filename"],
+            source="email_statement",
+            statement_transactions=statement_file["transactions"],
+            saved_transactions=saved_transactions,
+            gmail_message_id=statement_file["gmail_message_id"],
+        )
 
     if saved_transactions:
         _sync_transactions_to_sheet(
@@ -710,6 +741,7 @@ def _run_backfill_sync_for_org(org_id: int) -> None:
                         job_emails, result["transactions"], result["label"],
                         force_status=forced_status,
                         force_status_reason=result.get("forced_status_reason"),
+                        statement_files=result.get("statement_files"),
                     )
 
                 existing_gmail_message_ids.update(
@@ -790,6 +822,7 @@ def _statement_job_result(
     label: str,
     forced_status: str | None = None,
     forced_status_reason: str | None = None,
+    statement_files: list[dict] | None = None,
 ) -> dict:
     return {
         "emails": [email],
@@ -798,6 +831,7 @@ def _statement_job_result(
         "error": None,
         "forced_status": forced_status,
         "forced_status_reason": forced_status_reason,
+        "statement_files": statement_files or [],
     }
 
 
@@ -816,10 +850,10 @@ def _extract_transactions_for_statement_email(org: SyncUserSnapshot, email: dict
       doesn't get buried under a coincidental "not_transaction" verdict
       from that fallback scan.
     """
-    transactions, attachment_errors = _parse_statement_attachments_from_email(org, email)
+    transactions, attachment_errors, statement_files = _parse_statement_attachments_from_email(org, email)
 
     if transactions and not attachment_errors:
-        return _statement_job_result(email, transactions, "Statement attachment")
+        return _statement_job_result(email, transactions, "Statement attachment", statement_files=statement_files)
 
     total_attachments = len(_pdf_attachments_for_email(email))
     reason = (
@@ -829,7 +863,10 @@ def _extract_transactions_for_statement_email(org: SyncUserSnapshot, email: dict
 
     if transactions:
         # Partial failure: keep what parsed, but flag the whole email.
-        return _statement_job_result(email, transactions, "Statement attachment", FAILED_STATUS, reason)
+        return _statement_job_result(
+            email, transactions, "Statement attachment", FAILED_STATUS, reason,
+            statement_files=statement_files,
+        )
 
     logger.info(
         "Statement fallback to email pipeline | gmail_message_id=%s attachment_errors=%d errors=%s",

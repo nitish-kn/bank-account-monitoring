@@ -1,4 +1,5 @@
 from sqlalchemy import Column, ForeignKey, String, Numeric, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
 from ..database import Base
 from .types import ID_TYPE
 from sqlalchemy.orm import relationship
@@ -24,6 +25,11 @@ class BankAccounts(Base):
     # not populated by any code path yet.
     period_from = Column(DateTime(timezone=True), nullable=True)
     period_to = Column(DateTime(timezone=True), nullable=True)
+
+    # Stored-PDF info for the statement whose last day this row is (see
+    # statement_storage_service.attach_statement_metadata). The DB column is
+    # "metadata", but that name is reserved on SQLAlchemy models.
+    statement_metadata = Column("metadata", JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

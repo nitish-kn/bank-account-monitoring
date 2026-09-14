@@ -1,12 +1,15 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
 
-from ..core.dependencies import get_current_org, require_permission
+from ..core.dependencies import get_current_org, get_current_user, require_permission
 from ..database import get_db
 from ..models.organization import Organization
+from ..models.users import User
+from ..services.statement_storage_service import open_statement_file
 from ..services.statements_service import (
     get_statement_upload_job,
     process_and_upload_statements,
@@ -22,6 +25,7 @@ router = APIRouter()
 async def upload_statements(
     files: List[UploadFile] = File(...),
     password: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_user),
     current_org: Organization = Depends(get_current_org),
     db: Session = Depends(get_db)
 ):
@@ -33,7 +37,12 @@ async def upload_statements(
     "this PDF needs a password" popup) when re-uploading the one file that
     failed to unlock.
     """
-    return await process_and_upload_statements(current_org, files, db, password=password)
+    # Name is what the UI shows; id/email pin down who it was, since names
+    # aren't unique and can be edited later.
+    uploaded_by = {"id": current_user.id, "name": current_user.name, "email": current_user.email}
+    return await process_and_upload_statements(
+        current_org, files, db, password=password, uploaded_by=uploaded_by,
+    )
 
 
 @router.get("/api/statements/upload/{job_id}/status")
@@ -43,3 +52,24 @@ def get_statement_upload_status(
 ):
     """Return the background status for a statement upload job."""
     return get_statement_upload_job(current_org.id, job_id)
+
+
+@router.get("/api/statements/file")
+def get_statement_file(
+    key: str,
+    current_org: Organization = Depends(get_current_org),
+):
+    """Stream a stored statement PDF for in-app preview. `key` is its RustFS
+    storage key -- a transaction's parser_metadata.source_file_path, or a
+    bank_accounts row's metadata.storage_key."""
+    stored = open_statement_file(current_org.id, key)
+
+    headers = {"Content-Disposition": f'inline; filename="{stored["filename"]}"'}
+    if stored["content_length"] is not None:
+        headers["Content-Length"] = str(stored["content_length"])
+
+    return StreamingResponse(
+        stored["body"].iter_chunks(),
+        media_type=stored["content_type"],
+        headers=headers,
+    )

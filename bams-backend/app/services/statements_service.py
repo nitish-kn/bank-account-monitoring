@@ -25,6 +25,7 @@ from ..utils.statement_utils import (
     parse_statement_pdf_sync,
 )
 from .setup_service import _sync_transactions_to_sheet
+from .statement_storage_service import store_and_link_statement_file
 
 logger = logging.getLogger(__name__)
 
@@ -127,9 +128,14 @@ def _statement_error_message(error: Exception) -> str:
     return str(error) or "Statement parsing failed."
 
 
-def _run_statement_upload_job(job_id: str, org_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
+def _run_statement_upload_job(
+    job_id: str,
+    org_id: int,
+    saved_files: list[tuple[str, Path, str | None]],
+    uploaded_by: dict | None = None,
+) -> None:
     try:
-        result = _process_saved_statements_sync(org_id, saved_files)
+        result = _process_saved_statements_sync(org_id, saved_files, uploaded_by=uploaded_by)
 
         _set_statement_job(
             job_id,
@@ -149,10 +155,15 @@ def _run_statement_upload_job(job_id: str, org_id: int, saved_files: list[tuple[
         )
 
 
-def _start_statement_job_thread(job_id: str, org_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
+def _start_statement_job_thread(
+    job_id: str,
+    org_id: int,
+    saved_files: list[tuple[str, Path, str | None]],
+    uploaded_by: dict | None = None,
+) -> None:
     thread = threading.Thread(
         target=_run_statement_upload_job,
-        args=(job_id, org_id, saved_files),
+        args=(job_id, org_id, saved_files, uploaded_by),
         daemon=True,
         name=f"statement-upload-{job_id}",
     )
@@ -165,10 +176,16 @@ def _start_statement_job_thread(job_id: str, org_id: int, saved_files: list[tupl
 
 
 
-def _process_saved_statements_sync(org_id: int, saved_files: list[tuple[str, Path, str | None]]) -> dict:
+def _process_saved_statements_sync(
+    org_id: int,
+    saved_files: list[tuple[str, Path, str | None]],
+    uploaded_by: dict | None = None,
+) -> dict:
     """
     Blocking statement pipeline. It runs in a worker thread so PDF rendering,
-    LLM calls, Google Sheets calls, and DB commits do not block FastAPI's event loop. """
+    LLM calls, Google Sheets calls, and DB commits do not block FastAPI's event loop.
+
+    `uploaded_by` is the uploader's {id, name, email}, recorded in the stored PDF's metadata. """
 
     db = SessionLocal()
 
@@ -275,6 +292,20 @@ def _process_saved_statements_sync(org_id: int, saved_files: list[tuple[str, Pat
                     detail=f"Failed saving statement transactions for '{original_filename}': {str(e)}"
                 )
 
+            # 8b. Keep the PDF in RustFS -- only if this statement brought new
+            # transactions, so re-uploading an already-saved statement stores
+            # nothing. Best-effort: the transactions above are saved either way.
+            file_result["source_file_path"] = store_and_link_statement_file(
+                db,
+                org.id,
+                content=saved_path.read_bytes(),
+                filename=original_filename,
+                source="statement",
+                statement_transactions=statement_txns,
+                saved_transactions=saved_transactions,
+                uploaded_by=uploaded_by,
+            )
+
             total_duplicates_skipped += duplicates_skipped
             total_flagged_for_review += flagged_for_review
 
@@ -353,6 +384,7 @@ async def process_and_upload_statements(
     files: List[UploadFile],
     db: Session,
     password: str | None = None,
+    uploaded_by: dict | None = None,
 ) -> dict:
     """
     Service to process uploaded bank statement files.
@@ -389,7 +421,7 @@ async def process_and_upload_statements(
     )
 
     try:
-        _start_statement_job_thread(job_id, org.id, saved_files)
+        _start_statement_job_thread(job_id, org.id, saved_files, uploaded_by=uploaded_by)
     except Exception:
         _delete_saved_statements(saved_files)
         _set_statement_job(
