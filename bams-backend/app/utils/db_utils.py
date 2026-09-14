@@ -19,7 +19,7 @@ from ..core.constants import (
 )
 from ..models.parsed import Parsed
 from ..models.transactions import Transactions
-from .date_utils import utc_now
+from .date_utils import as_ist_if_naive, utc_now
 from .transaction_utils import normalize_transaction_date, normalize_transaction_datetime
 
 logger = logging.getLogger(__name__)
@@ -79,8 +79,11 @@ def _decimal_or_none(value) -> Decimal | None:
 
 
 def _datetime_or_none(value) -> datetime | None:
-    if value is None or isinstance(value, datetime):
-        return value
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        return as_ist_if_naive(value)
 
     # Preserve time-of-day when the source actually provides one -- plain
     # normalize_transaction_date() would silently truncate it to midnight.
@@ -90,7 +93,9 @@ def _datetime_or_none(value) -> datetime | None:
 
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(normalized, fmt)
+            # strptime never produces a tz-aware result for these formats,
+            # so this is always the naive-IST case -- see as_ist_if_naive.
+            return as_ist_if_naive(datetime.strptime(normalized, fmt))
         except (TypeError, ValueError):
             continue
 
@@ -859,7 +864,7 @@ def transaction_to_schema_dict(transaction: Transactions) -> dict:
         "parser_metadata": transaction.parser_metadata or {},
         "optional_fields": optional_fields,
         # "raw_data": transaction.raw_data or {},
-        "is_flag": False,
+        "is_flag": bool(transaction.is_flag),
     }
 
     for field in TRANSACTION_SCHEMA:
@@ -867,7 +872,7 @@ def transaction_to_schema_dict(transaction: Transactions) -> dict:
             data[field] = optional_fields.get(field)
 
     result = {field: data.get(field) for field in TRANSACTION_SCHEMA}
-    result["is_flag"] = False
+    result["is_flag"] = bool(transaction.is_flag)
     result["created_at"] = transaction.created_at.isoformat() if transaction.created_at else None
     result["updated_at"] = transaction.updated_at.isoformat() if transaction.updated_at else None
     return result

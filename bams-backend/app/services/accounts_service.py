@@ -197,7 +197,100 @@ def account_to_dict(account: BankAccounts) -> dict:
         "last_updated": _datetime_to_iso(calculated_updated_at),
         "created_at": _datetime_to_iso(account.created_at),
         "updated_at": _datetime_to_iso(account.updated_at),
+        "period_from": _datetime_to_iso(account.period_from),
+        "period_to": _datetime_to_iso(account.period_to),
     }
+
+
+def get_account_statement_timeline(db: Session, org_id: int, account_number: str) -> dict:
+    """Statement coverage timeline for one account, built from every
+    bank_accounts row on file for it (one row per sync/upload), not just the
+    single "latest" row the accounts list shows.
+
+    Each row carries its own (period_from, period_to) -- the range whatever
+    statement produced it covers. We group rows into distinct periods,
+    merge the ones that overlap or touch (no gap between them) into
+    continuous covered ranges, and report the uncovered stretches between
+    and after them so the UI can render both.
+    """
+    rows = (
+        db.query(BankAccounts)
+        .filter(
+            BankAccounts.org_id == org_id,
+            BankAccounts.account_number == account_number,
+            BankAccounts.period_from.isnot(None),
+            BankAccounts.period_to.isnot(None),
+        )
+        .all()
+    )
+
+    # Distinct (from, to) pairs -- many rows (repeat syncs of the same
+    # upload) can share the exact same period; only the shape of the range
+    # matters, plus which row inside it is the one to read a balance off.
+    groups: dict[tuple[datetime, datetime], list[BankAccounts]] = {}
+    for row in rows:
+        groups.setdefault((row.period_from, row.period_to), []).append(row)
+
+    def _closing_balance_for(group_rows: list[BankAccounts]):
+        # Within one period, the closing balance is the statement balance of
+        # whichever row was synced most recently -- last_synced_at (falling
+        # back to created_at for rows that never synced) is "how fresh is
+        # this row's data", which is exactly what decides that.
+        latest = max(
+            group_rows,
+            key=lambda r: _datetime_rank(r.last_synced_at) or _datetime_rank(r.created_at),
+        )
+        balance = latest.statement_balance if latest.statement_balance is not None else latest.current_balance
+        return balance
+
+    segments = sorted(
+        (
+            {"from": period_from, "to": period_to, "closing_balance": _closing_balance_for(group_rows)}
+            for (period_from, period_to), group_rows in groups.items()
+        ),
+        key=lambda s: s["from"],
+    )
+
+    merged: list[dict] = []
+    for seg in segments:
+        if merged and seg["from"] <= merged[-1]["to"] + timedelta(days=1):
+            if seg["to"] > merged[-1]["to"]:
+                # This sub-range extends the merged segment further out --
+                # its balance is the freshest calendar-wise, so it becomes
+                # the merged segment's closing balance too.
+                merged[-1]["to"] = seg["to"]
+                merged[-1]["closing_balance"] = seg["closing_balance"]
+        else:
+            merged.append(dict(seg))
+
+    now = datetime.now(timezone.utc)
+    timeline: list[dict] = []
+    for index, seg in enumerate(merged):
+        timeline.append(
+            {
+                "type": "covered",
+                "from": _datetime_to_iso(seg["from"]),
+                "to": _datetime_to_iso(seg["to"]),
+                "closing_balance": _decimal_to_string(seg["closing_balance"]),
+            }
+        )
+        next_from = merged[index + 1]["from"] if index + 1 < len(merged) else None
+        gap_start = seg["to"] + timedelta(days=1)
+        gap_end = next_from - timedelta(days=1) if next_from else now
+        if gap_start <= gap_end:
+            timeline.append(
+                {
+                    "type": "gap",
+                    # A gap between two confirmed periods is a known hole;
+                    # the trailing gap after the newest statement just means
+                    # nothing has been uploaded for it yet -- less alarming.
+                    "status": "missing" if next_from else "pending",
+                    "from": _datetime_to_iso(gap_start),
+                    "to": _datetime_to_iso(gap_end),
+                }
+            )
+
+    return {"account_number": account_number, "timeline": timeline}
 
 
 def _account_identity_key(account: BankAccounts) -> tuple[str, str, str]:

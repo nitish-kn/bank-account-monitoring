@@ -101,7 +101,37 @@ class Transaction(BaseModel):
 
     account_number: Optional[str] = None
 
-    txn_type: Optional[str] = None
+    account_category: Optional[str] = Field(
+        default=None,
+        description=(
+            "The bank ACCOUNT's own category (e.g. 'Personal', 'Business', 'HUF'), resolved from the "
+            "Bank Accounts V1 mapping sheet. Filled by our code, not the LLM -- unrelated to `category`, "
+            "which is this transaction's own business-purpose classification."
+        ),
+    )
+
+    period_from: Optional[str] = Field(
+        default=None,
+        description=(
+            "\"YYYY-MM-DD\". The start date of the period this statement covers (e.g. from a "
+            "'Statement Period' / 'Statement for the period' / 'From ... To ...' header). "
+            "Extracted once from the statement header and repeated on every row like the other "
+            "account-context fields."
+        ),
+    )
+
+    period_to: Optional[str] = Field(
+        default=None,
+        description="\"YYYY-MM-DD\". The end date of the period this statement covers -- see period_from.",
+    )
+
+    txn_type: Optional[str] = Field(
+        default=None,
+        description=(
+            "'credit' | 'debit' for a real transaction, or 'carry_forward' for an extracted "
+            "Opening/Closing Balance or Balance B/F / C/F row that isn't a real money movement."
+        ),
+    )
 
     mode: Optional[str] = None
 

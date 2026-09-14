@@ -23,4 +23,10 @@ export const accountsApi = {
 
     return response.data;
   },
+
+  getStatementTimeline: async (accountNumber) => {
+    const response = await api.get(`/accounts/${encodeURIComponent(accountNumber)}/timeline`);
+
+    return response.data;
+  },
 };

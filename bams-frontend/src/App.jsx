@@ -34,7 +34,7 @@ function App() {
         <Route path="/chat-assistant" element={<ProtectedRoute permission={PERMISSIONS.CHAT_ASSISTANT_VIEW}><ChatAssistant /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute permission={PERMISSIONS.USERS_VIEW}><Users /></ProtectedRoute>} />
         <Route path="/roles-permissions" element={<ProtectedRoute permission={PERMISSIONS.ROLES_VIEW}><RolePermissions /></ProtectedRoute>} />
-        {/* <Route path="/needs-review" element={<NeedsReview />} /> */}
+        <Route path="/needs-review" element={<ProtectedRoute permission={PERMISSIONS.NEEDS_REVIEW_VIEW}><NeedsReview /></ProtectedRoute>} />
       </Route>
       
       <Route

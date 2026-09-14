@@ -3,6 +3,28 @@ import { formatAmount } from "./helper";
 export const ACCOUNT_RECONCILIATION_TOLERANCE = 100;
 export const ACCOUNT_STALE_FEED_DAYS = 30;
 
+/** Last 4 digits of the account number, e.g. "XX2006" -- how the transaction
+ * filters identify one account without needing its full number. */
+export const getAccountNumberFilterLabel = (accountNumber) => {
+  const rawAccountNumber = String(accountNumber || "").trim();
+  const digits = rawAccountNumber.replace(/\D/g, "");
+
+  if (digits.length >= 4) return `XX${digits.slice(-4)}`;
+  return rawAccountNumber;
+};
+
+/** The "holder - bank - XX1234" string the /transactions/query
+ * `individualAccount` filter matches a single account by. */
+export const getIndividualAccountFilterValue = (account) => {
+  const accountParts = [
+    account?.account_holder_name,
+    account?.bank_name,
+    getAccountNumberFilterLabel(account?.account_number),
+  ].filter(Boolean);
+
+  return accountParts.join(" - ").toLowerCase();
+};
+
 const toNumber = (value) => {
   const numberValue = Number(value || 0);
   return Number.isFinite(numberValue) ? numberValue : 0;

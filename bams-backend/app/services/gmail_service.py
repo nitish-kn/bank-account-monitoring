@@ -142,17 +142,46 @@ def _decode_gmail_base64(raw_data: str) -> str:
     except Exception:
         return ""
 
+_STYLE_SCRIPT_BLOCK_RE = re.compile(r"<(style|script)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
+
+
+def _unescape_fully(text: str, max_passes: int = 100) -> str:
+    """Some senders' templates HTML-escape their own markup multiple times
+    over -- "&amp;amp;lt;style&amp;amp;gt;" instead of "<style>" -- so a
+    single unescape() leaves it looking like escaped text rather than the
+    real tag it is. Repeat until a pass changes nothing (capped so a
+    pathological input can't loop forever)."""
+    for _ in range(max_passes):
+        unescaped = unescape(text)
+        if unescaped == text:
+            break
+        text = unescaped
+    return text
+
+
 def _clean_html(html_content: str) -> str:
-    """Drops all HTML tags, decodes entities, and collapses deeply nested whitespace/newlines."""
+    """Drops all HTML tags (including <style>/<script> block content),
+    fully decodes HTML entities, and collapses deeply nested whitespace/newlines."""
     if not html_content:
         return ""
-    
-    # Replace HTML tags with a space (prevents words from smashing together)
-    text = re.sub(r"<[^>]+>", " ", html_content)
-    
-    # Decode HTML entities like &#39; or &amp;
-    text = unescape(text)
-    
+
+    # Decode entities first -- until this fully unwinds, a multiply-escaped
+    # <style>/<script>/tag isn't visible as a real tag yet, so stripping it
+    # below would otherwise be a no-op and leak straight through.
+    text = _unescape_fully(html_content)
+
+    # Strip <style>/<script> blocks whole -- a plain tag-strip alone only
+    # removes the tags themselves, leaving their CSS/JS text (e.g. an
+    # Outlook/Hotmail compatibility stylesheet) sitting in the "cleaned" body.
+    text = _STYLE_SCRIPT_BLOCK_RE.sub(" ", text)
+
+    # Replace remaining HTML tags with a space (prevents words from smashing together)
+    text = re.sub(r"<[^>]+>", " ", text)
+
+    # A second decode pass catches entities that only became visible after
+    # the tags/attributes hiding them were removed above.
+    text = _unescape_fully(text, max_passes=5)
+
     # Process line-by-line to clear out the heavy indentation
     cleaned_lines = []
     for line in text.splitlines():
@@ -172,10 +201,12 @@ def _extract_message_body(payload: dict) -> str:
 
     mime_type = payload.get("mimeType", "").lower()
 
-    if mime_type == "text/plain":
-        return _decode_gmail_base64(payload.get("body", {}).get("data", ""))
-
-    if mime_type == "text/html":
+    if mime_type in ("text/plain", "text/html"):
+        # _clean_html runs on both, not just text/html: some senders' "plain
+        # text" alternative is actually a botched dump of their HTML
+        # template -- escaped tags, a <style> block, all of it. It's a no-op
+        # on genuine plain text (nothing to unescape or strip), so this is
+        # safe rather than special-casing senders that do this.
         return _clean_html(_decode_gmail_base64(payload.get("body", {}).get("data", "")))
 
     for part in payload.get("parts", []) or []:

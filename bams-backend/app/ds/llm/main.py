@@ -66,6 +66,22 @@ def _reconcile_statement_transactions(transactions: list[dict], org_id: int) -> 
             db.close()
 
 
+# Fields that only exist to get bank_accounts updated correctly (see
+# reconcile_statement_batch) -- period_from/period_to describe the
+# statement's coverage range, account_category is the ACCOUNT's own
+# category, not this transaction's. The `transactions` table has no
+# matching columns for any of them, so leaving them on the returned dicts
+# would just dump them into Transactions.optional_fields as unused clutter.
+_BANK_ACCOUNT_ONLY_FIELDS = ("period_from", "period_to", "account_category")
+
+
+def _strip_bank_account_only_fields(transactions: list[dict]) -> list[dict]:
+    for transaction in transactions or []:
+        for field in _BANK_ACCOUNT_ONLY_FIELDS:
+            transaction.pop(field, None)
+    return transactions
+
+
 @app.get("/")
 def health():
     return {
@@ -195,7 +211,7 @@ async def process_statement(
                 resolved_org_id,
             )
 
-        return transactions
+        return _strip_bank_account_only_fields(transactions)
 
     if not (upload_file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(
@@ -229,7 +245,7 @@ async def process_statement(
         #         resolved_org_id,
         #     )
 
-        return transactions
+        return _strip_bank_account_only_fields(transactions)
 
     finally:
         tmp_path.unlink(missing_ok=True)
