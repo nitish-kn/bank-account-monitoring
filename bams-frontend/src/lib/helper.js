@@ -7,6 +7,16 @@ export const getStatusColor = (status) => {
     return "green";
 }
 
+// Statements that don't print a reference number get a synthetic one
+// generated from a content hash (see _fallback_reference in
+// statement_utils.py) so dedupe matching still has something to key off.
+// It's an internal stand-in, not a real bank reference -- never show it as
+// if it were one.
+export const displayRefNumber = (refNumber) => {
+  const value = String(refNumber || "").trim();
+  return value && !value.startsWith("stmt_") ? value : "-";
+};
+
 export const cleanText = (value = "") => {
   if (value === null || value === undefined) return "";
 
@@ -199,4 +209,46 @@ export const formatDateAndTime = (dateValue) => {
     date: formatDate(normalized),
     time: hasTime ? formatTime(normalized) : null,
   };
+};
+
+/**
+ * Email bodies arrive in three shapes: already-plain text, real HTML, and
+ * HTML that was entity-escaped one or more times over (&amp;amp;lt;div&amp;amp;gt;).
+ * The backend cleans this at ingestion now, but rows saved before that fix
+ * still hold the raw blob, so the preview cleans defensively too.
+ *
+ * Parsed via DOMParser and read back as text -- never injected as HTML,
+ * since an email body is third-party content.
+ */
+const MAX_UNESCAPE_PASSES = 5;
+
+export const cleanEmailBody = (body) => {
+  const raw = String(body || "");
+  if (!raw.trim()) return "";
+
+  const parser = new DOMParser();
+  const decodeOnce = (value) =>
+    parser.parseFromString(value, "text/html").documentElement.textContent || "";
+
+  // Peel repeated escaping until it stops changing.
+  let text = raw;
+  for (let pass = 0; pass < MAX_UNESCAPE_PASSES; pass += 1) {
+    const decoded = decodeOnce(text);
+    if (decoded === text) break;
+    text = decoded;
+  }
+
+  // Whatever markup that revealed: drop style/script with their contents
+  // (otherwise the CSS reads as body text), then keep only the text.
+  if (text.includes("<") && text.includes(">")) {
+    const doc = parser.parseFromString(text, "text/html");
+    doc.querySelectorAll("style, script").forEach((node) => node.remove());
+    text = doc.body?.textContent || "";
+  }
+
+  return text
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
 };

@@ -27,6 +27,7 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [alsoUnflag, setAlsoUnflag] = useState(false);
 
   // Load transaction values when data changes
   useEffect(() => {
@@ -53,6 +54,7 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
       });
       setError("");
       setShowConfirm(false);
+      setAlsoUnflag(false);
     }
   }, [data, open, user?.name]);
 
@@ -68,6 +70,7 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
 
   // Get only changed fields
   const detectChanges = () => {
+    if (!data) return [];
     const changedFields = [];
     const fields = [
       "counterparty",
@@ -104,7 +107,10 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
   const handleUpdateClick = () => {
     setError("");
     const changes = detectChanges();
-    if (changes.length === 0) {
+    // A flagged transaction can still be worth confirming on with zero
+    // field edits -- that's the "just unflag it" case, decided in the
+    // confirm step below.
+    if (changes.length === 0 && !data?.is_flag) {
       setError("No fields have been modified.");
       return;
     }
@@ -118,23 +124,30 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
 
     try {
       const changesList = detectChanges();
-      const updatePayload = {
-        changed_by: formState.changed_by.trim(),
-        reason: formState.reason.trim() || null,
-      };
 
-      // Populate only changed fields
-      changesList.forEach((c) => {
-        if (c.field === "txn_date") {
-          // Send as ISO timestamp
-          updatePayload[c.field] = new Date(formState.txn_date).toISOString();
-        } else {
-          updatePayload[c.field] = formState[c.field];
-        }
-      });
+      if (changesList.length > 0) {
+        const updatePayload = {
+          changed_by: formState.changed_by.trim(),
+          reason: formState.reason.trim() || null,
+        };
 
-      await transactionApi.editTransaction(data.id, updatePayload);
-      
+        // Populate only changed fields
+        changesList.forEach((c) => {
+          if (c.field === "txn_date") {
+            // Send as ISO timestamp
+            updatePayload[c.field] = new Date(formState.txn_date).toISOString();
+          } else {
+            updatePayload[c.field] = formState[c.field];
+          }
+        });
+
+        await transactionApi.editTransaction(data.id, updatePayload);
+      }
+
+      if (alsoUnflag) {
+        await transactionApi.unflagTransactions([data.id]);
+      }
+
       // Success: refresh parent states and close
       useSetupStore.getState().triggerRefresh();
       setOpen(false);
@@ -144,6 +157,12 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
       setLoading(false);
     }
   };
+
+  // `data` briefly goes null after a successful save (the parent clears its
+  // selected row right as this closes) while this component is still
+  // mounted and `showConfirm` hasn't been reset yet -- detectChanges below
+  // would otherwise dereference a null `data`.
+  if (!data) return null;
 
   if (showConfirm) {
     const changes = detectChanges();
@@ -177,19 +196,35 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
             </div>
           </div>
 
-          <div className="text-xs font-bold text-gray-700 mt-2 px-1">Modified Fields</div>
-          <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
-            {changes.map((c) => (
-              <div key={c.field} className="p-3 border border-slate-100 bg-white rounded-lg shadow-sm">
-                <p className="font-bold text-xs capitalize text-slate-800 mb-1.5">{c.label}</p>
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="line-through text-red-500 bg-red-50 px-1.5 py-0.5 rounded truncate max-w-[45%]">{c.old}</span>
-                  <ArrowLeftRight className="h-3 w-3 text-gray-400 shrink-0" />
-                  <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-semibold truncate max-w-[45%]">{c.new}</span>
-                </div>
+          {changes.length > 0 && (
+            <>
+              <div className="text-xs font-bold text-gray-700 mt-2 px-1">Modified Fields</div>
+              <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                {changes.map((c) => (
+                  <div key={c.field} className="p-3 border border-slate-100 bg-white rounded-lg shadow-sm">
+                    <p className="font-bold text-xs capitalize text-slate-800 mb-1.5">{c.label}</p>
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="line-through text-red-500 bg-red-50 px-1.5 py-0.5 rounded truncate max-w-[45%]">{c.old}</span>
+                      <ArrowLeftRight className="h-3 w-3 text-gray-400 shrink-0" />
+                      <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-semibold truncate max-w-[45%]">{c.new}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
+
+          {data?.is_flag && (
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2.5 text-xs font-semibold text-green-700">
+              <input
+                type="checkbox"
+                checked={alsoUnflag}
+                onChange={(event) => setAlsoUnflag(event.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+              />
+              Also mark this transaction as unflagged
+            </label>
+          )}
         </div>
       </DialogPopup>
     );

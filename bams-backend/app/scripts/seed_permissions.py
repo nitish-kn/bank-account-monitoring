@@ -34,6 +34,8 @@ PERMISSIONS = [
     ("upload_statements", "trigger", "Upload Statements", "Upload bank statement PDFs for parsing."),
     ("sync_data", "trigger", "Sync Data", "Trigger an incremental sync of new emails/transactions."),
     ("export_data", "trigger", "Export Data", "Export data (transactions, accounts, audit log) to a file."),
+    ("needs_review", "view", "View Needs Review", "See the list of transactions that need review."),
+    ("needs_review", "update", "Update Needs Review", "Edit transactions rows"),
 ]
 
 

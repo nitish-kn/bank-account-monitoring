@@ -280,30 +280,83 @@ SORTABLE_FIELDS = {
     "source": Transactions.source,
 }
 
-def get_paginated_transactions(db: Session, org_id: int, filters: dict, page: int, page_size: int, sort: dict = None):
-    query = build_base_query(db, org_id)
-    query = apply_transaction_filters(query, filters)
-    
-    total_count = query.count()
-    
+def _apply_transaction_sort(query, sort: dict = None):
     sort_field_key = sort.get("field") if sort else None
     sort_order = sort.get("order", "desc") if sort else "desc"
-    
+
     if sort_field_key in SORTABLE_FIELDS:
         col = SORTABLE_FIELDS[sort_field_key]
         if sort_order == "asc":
-            query = query.order_by(col.asc().nulls_last(), Transactions.id.asc())
-        else:
-            query = query.order_by(col.desc().nulls_last(), Transactions.id.asc())
-    else:
-        query = query.order_by(Transactions.txn_date.desc().nulls_last(), Transactions.id.asc())
-        
+            return query.order_by(col.asc().nulls_last(), Transactions.id.asc())
+        return query.order_by(col.desc().nulls_last(), Transactions.id.asc())
+
+    return query.order_by(Transactions.txn_date.desc().nulls_last(), Transactions.id.asc())
+
+
+def get_paginated_transactions(db: Session, org_id: int, filters: dict, page: int, page_size: int, sort: dict = None):
+    query = build_base_query(db, org_id)
+    query = apply_transaction_filters(query, filters)
+
+    total_count = query.count()
+    query = _apply_transaction_sort(query, sort)
     transactions = query.limit(page_size).offset((page - 1) * page_size).all()
-    
+
     return {
         "data": [transaction_to_schema_dict(t) for t in transactions],
         "totalCount": total_count
     }
+
+
+def get_flagged_transactions(db: Session, org_id: int, filters: dict, page: int, page_size: int, sort: dict = None):
+    """The rows where is_flag is true in the DB, nothing else computed --
+    same filter bar as the main transaction list, plus an optional
+    createdRange filter (on created_at, not txn_date)."""
+    query = build_base_query(db, org_id).filter(Transactions.is_flag.is_(True))
+    query = apply_transaction_filters(query, filters)
+
+    created_range = (filters or {}).get("createdRange") or {}
+    start_created = _parse_date_bound(created_range.get("startDate"))
+    end_created = _parse_date_bound(created_range.get("endDate"), end_of_day=True)
+    if start_created:
+        query = query.filter(Transactions.created_at >= start_created)
+    if end_created:
+        query = query.filter(Transactions.created_at <= end_created)
+
+    total_count = query.count()
+    query = _apply_transaction_sort(query, sort)
+    transactions = query.limit(page_size).offset((page - 1) * page_size).all()
+
+    # created_at/updated_at drift isn't a reliable "was this edited" signal
+    # -- routine ledger resyncs touch updated_at on rows nobody edited.
+    # transaction_logs only ever gets a row from an actual save through the
+    # edit dialog, so that's the real signal.
+    txn_ids = [t.id for t in transactions]
+    edited_ids = set()
+    if txn_ids:
+        edited_ids = {
+            row[0] for row in
+            db.query(TransactionLog.txn_id).filter(TransactionLog.txn_id.in_(txn_ids)).distinct().all()
+        }
+
+    data = []
+    for t in transactions:
+        row = transaction_to_schema_dict(t)
+        row["has_edits"] = t.id in edited_ids
+        data.append(row)
+
+    return {"data": data, "totalCount": total_count}
+
+
+def bulk_unflag_transactions(db: Session, org_id: int, ids: list[str]) -> int:
+    if not ids:
+        return 0
+    updated = (
+        db.query(Transactions)
+        .filter(Transactions.org_id == org_id, Transactions.id.in_(ids))
+        .update({Transactions.is_flag: False}, synchronize_session=False)
+    )
+    db.commit()
+    return updated
 
 def get_dashboard_summary(db: Session, org_id: int, filters: dict):
     query = apply_transaction_filters(build_base_query(db, org_id), filters)

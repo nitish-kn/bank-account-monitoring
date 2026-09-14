@@ -24,5 +24,15 @@ export const transactionApi = {
   getAuditLogs: async (params) => {
     const response = await api.get("/transactions/audit-log", { params });
     return response.data;
-  }
+  },
+
+  queryFlagged: async (filters, pagination, sort) => {
+    const response = await api.post("/transactions/flagged", { filters, pagination, sort });
+    return response.data;
+  },
+
+  unflagTransactions: async (ids) => {
+    const response = await api.post("/transactions/unflag", { ids });
+    return response.data;
+  },
 };

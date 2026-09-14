@@ -31,4 +31,12 @@ class Settings(BaseSettings):
     PARSER_NAME: str = PARSER_NAME
     PARSER_VERSION: str = PARSER_VERSION
 
+    # RustFS (S3-compatible) storage for statement PDFs. Optional -- when
+    # unset, statements are still parsed and saved, just without the file.
+    RUSTFS_ENDPOINT_URL: str | None = None
+    RUSTFS_ACCESS_KEY: str | None = None
+    RUSTFS_SECRET_KEY: str | None = None
+    RUSTFS_BUCKET: str | None = None
+    RUSTFS_REGION: str = "us-east-1"
+
 settings = Settings()

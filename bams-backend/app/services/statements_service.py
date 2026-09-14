@@ -25,6 +25,7 @@ from ..utils.statement_utils import (
     parse_statement_pdf_sync,
 )
 from .setup_service import _sync_transactions_to_sheet
+from .statement_storage_service import store_and_link_statement_file
 
 logger = logging.getLogger(__name__)
 
@@ -127,13 +128,19 @@ def _statement_error_message(error: Exception) -> str:
     return str(error) or "Statement parsing failed."
 
 
-def _run_statement_upload_job(job_id: str, org_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
+def _run_statement_upload_job(
+    job_id: str,
+    org_id: int,
+    saved_files: list[tuple[str, Path, str | None]],
+    uploaded_by: dict | None = None,
+) -> None:
     try:
-        result = _process_saved_statements_sync(org_id, saved_files)
+        result = _process_saved_statements_sync(org_id, saved_files, uploaded_by=uploaded_by)
+        failed_files = [file for file in result.get("files", []) if file.get("status") == "failed"]
 
         _set_statement_job(
             job_id,
-            status=STATEMENT_JOB_SUCCESS,
+            status=STATEMENT_JOB_FAILED if failed_files else STATEMENT_JOB_SUCCESS,
             message=result.get("message") or "Statement parsing completed.",
             result=result,
             completed_at=_utc_now_iso(),
@@ -149,10 +156,15 @@ def _run_statement_upload_job(job_id: str, org_id: int, saved_files: list[tuple[
         )
 
 
-def _start_statement_job_thread(job_id: str, org_id: int, saved_files: list[tuple[str, Path, str | None]]) -> None:
+def _start_statement_job_thread(
+    job_id: str,
+    org_id: int,
+    saved_files: list[tuple[str, Path, str | None]],
+    uploaded_by: dict | None = None,
+) -> None:
     thread = threading.Thread(
         target=_run_statement_upload_job,
-        args=(job_id, org_id, saved_files),
+        args=(job_id, org_id, saved_files, uploaded_by),
         daemon=True,
         name=f"statement-upload-{job_id}",
     )
@@ -165,10 +177,16 @@ def _start_statement_job_thread(job_id: str, org_id: int, saved_files: list[tupl
 
 
 
-def _process_saved_statements_sync(org_id: int, saved_files: list[tuple[str, Path, str | None]]) -> dict:
+def _process_saved_statements_sync(
+    org_id: int,
+    saved_files: list[tuple[str, Path, str | None]],
+    uploaded_by: dict | None = None,
+) -> dict:
     """
     Blocking statement pipeline. It runs in a worker thread so PDF rendering,
-    LLM calls, Google Sheets calls, and DB commits do not block FastAPI's event loop. """
+    LLM calls, Google Sheets calls, and DB commits do not block FastAPI's event loop.
+
+    `uploaded_by` is the uploader's {id, name, email}, recorded in the stored PDF's metadata. """
 
     db = SessionLocal()
 
@@ -225,8 +243,42 @@ def _process_saved_statements_sync(org_id: int, saved_files: list[tuple[str, Pat
                 "Statement parsed | org=%s file=%s rows=%d",
                 org.id, original_filename, len(extracted_txns or []),
             )
+
+            # Carry-forward rows (Opening/Closing Balance, Balance B/F or C/F)
+            # already updated bank_accounts inside parse_statement_pdf_sync
+            # (see reconcile_statement_batch) -- they are a stated balance,
+            # never a real transaction, so they must never reach the
+            # transactions table or Google Sheets.
+            carry_forward_count = sum(
+                1 for txn in extracted_txns or []
+                if str(txn.get("txn_type") or "").strip().lower() == "carry_forward"
+            )
+            parsed_statement_txns = list(extracted_txns or [])
+            extracted_txns = [
+                txn for txn in extracted_txns or []
+                if str(txn.get("txn_type") or "").strip().lower() != "carry_forward"
+            ]
+            if carry_forward_count:
+                logger.info(
+                    "Statement carry-forward rows excluded from transactions table | "
+                    "org=%s file=%s count=%d",
+                    org.id, original_filename, carry_forward_count,
+                )
+
             if not extracted_txns:
                 file_result["status"] = "no_transactions_found"
+                if parsed_statement_txns:
+                    file_result["source_file_path"] = store_and_link_statement_file(
+                        db,
+                        org.id,
+                        content=saved_path.read_bytes(),
+                        filename=original_filename,
+                        source="statement",
+                        statement_transactions=parsed_statement_txns,
+                        saved_transactions=[],
+                        uploaded_by=uploaded_by,
+                        store_without_new_transactions=True,
+                    )
                 processed_files.append(file_result)
                 continue
 
@@ -274,6 +326,20 @@ def _process_saved_statements_sync(org_id: int, saved_files: list[tuple[str, Pat
                     status_code=500,
                     detail=f"Failed saving statement transactions for '{original_filename}': {str(e)}"
                 )
+
+            # 8b. Keep the PDF in RustFS -- only if this statement brought new
+            # transactions, so re-uploading an already-saved statement stores
+            # nothing. Best-effort: the transactions above are saved either way.
+            file_result["source_file_path"] = store_and_link_statement_file(
+                db,
+                org.id,
+                content=saved_path.read_bytes(),
+                filename=original_filename,
+                source="statement",
+                statement_transactions=statement_txns,
+                saved_transactions=saved_transactions,
+                uploaded_by=uploaded_by,
+            )
 
             total_duplicates_skipped += duplicates_skipped
             total_flagged_for_review += flagged_for_review
@@ -353,6 +419,7 @@ async def process_and_upload_statements(
     files: List[UploadFile],
     db: Session,
     password: str | None = None,
+    uploaded_by: dict | None = None,
 ) -> dict:
     """
     Service to process uploaded bank statement files.
@@ -389,7 +456,7 @@ async def process_and_upload_statements(
     )
 
     try:
-        _start_statement_job_thread(job_id, org.id, saved_files)
+        _start_statement_job_thread(job_id, org.id, saved_files, uploaded_by=uploaded_by)
     except Exception:
         _delete_saved_statements(saved_files)
         _set_statement_job(
