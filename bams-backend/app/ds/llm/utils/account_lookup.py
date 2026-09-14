@@ -130,11 +130,11 @@ def find_account_by_full_number(account_number: str, df: pd.DataFrame) -> Option
     match = matching_accounts.iloc[0]
 
     return {
-        "bank_name": match.get("S No"),
-        "account_holder_name": match.get("Name"),
-        "account_type": match.get("Type"),
+        "bank_name": _clean_account_value(match.get("S No")),
+        "account_holder_name": _clean_account_value(match.get("Name")),
+        "account_type": _clean_account_value(match.get("Type")),
         "account_number": str(match.get(account_col)),
-        "category": match.get("Category"),
+        "category": _clean_account_value(match.get("Category")),
     }
 
 
@@ -166,11 +166,11 @@ def find_account_in_excel(last_four_digits: str, df: pd.DataFrame) -> Optional[D
     match = matching_accounts.iloc[0]
 
     return {
-        "bank_name": match.get("S No"),
-        "account_holder_name": match.get("Name"),
-        "account_type": match.get("Type"),
+        "bank_name": _clean_account_value(match.get("S No")),
+        "account_holder_name": _clean_account_value(match.get("Name")),
+        "account_type": _clean_account_value(match.get("Type")),
         "account_number": str(match.get(account_col)),
-        "category": match.get("Category"),
+        "category": _clean_account_value(match.get("Category")),
     }
 
 
