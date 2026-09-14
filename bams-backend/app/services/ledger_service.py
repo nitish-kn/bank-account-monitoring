@@ -24,7 +24,10 @@ Two distinct flows:
   row is ever inserted. Every day touched by the statement has its
   bank_accounts.current_balance overwritten with that day's true closing
   balance, correcting any drift from earlier incremental email-based
-  estimates.
+  estimates. This includes days with no real transaction at all but a
+  `txn_type = "carry_forward"` row (Opening/Closing Balance, Balance B/F or
+  C/F) -- those rows carry no amount by design, only a stated balance, and
+  are the only way a dormant day/period still gets its balance corrected.
 
 Day-bucketing rule: a `bank_accounts` row represents one account's balance
 for one calendar day, keyed off the TRANSACTION's own txn_date — not the
@@ -120,6 +123,9 @@ def get_or_create_daily_balance(
     bank_name: Optional[str] = None,
     account_holder_name: Optional[str] = None,
     account_type: Optional[str] = None,
+    category: Optional[str] = None,
+    period_from: Optional[datetime] = None,
+    period_to: Optional[datetime] = None,
     source: Optional[str] = None,
 ) -> tuple[BankAccounts, bool]:
     """
@@ -127,6 +133,12 @@ def get_or_create_daily_balance(
     balance on `day`. A new row's opening balance is carried forward from the
     closest earlier day-row for that account, or 0 if this account has never
     been seen before.
+
+    `period_from`/`period_to` are the coverage range of whatever statement
+    touched this row (see reconcile_statement_batch) -- always None from the
+    email flow. Given, they overwrite the row's existing range outright
+    (rather than fill-if-missing like the other fields) since they describe
+    *this* sync event, not stable account metadata.
     """
     row_id = f"{org_id}_{account_number}_{day.strftime('%Y%m%d')}"
 
@@ -148,6 +160,12 @@ def get_or_create_daily_balance(
             existing.account_holder_name = account_holder_name
         if account_type and not existing.account_type:
             existing.account_type = account_type
+        if category and not existing.category:
+            existing.category = category
+        if period_from is not None:
+            existing.period_from = period_from
+        if period_to is not None:
+            existing.period_to = period_to
         if source == "statement" or (source and existing.source != "statement"):
             existing.source = source
         return existing, False
@@ -173,11 +191,14 @@ def get_or_create_daily_balance(
             account_holder_name or (previous.account_holder_name if previous else None) or "Unknown"
         ),
         account_type=account_type or (previous.account_type if previous else None),
+        category=category or (previous.category if previous else None),
         account_number=account_number,
         current_balance=opening_balance,
         statement_balance=previous.statement_balance if previous else None,
         last_synced_at=previous.last_synced_at if previous else None,
         source=source or (previous.source if previous else None) or "email",
+        period_from=period_from if period_from is not None else (previous.period_from if previous else None),
+        period_to=period_to if period_to is not None else (previous.period_to if previous else None),
         created_at=_day_start(day),
     )
     db.add(new_row)
@@ -235,6 +256,9 @@ def set_daily_closing_balance(
     bank_name: Optional[str] = None,
     account_holder_name: Optional[str] = None,
     account_type: Optional[str] = None,
+    category: Optional[str] = None,
+    period_from: Optional[datetime] = None,
+    period_to: Optional[datetime] = None,
     stats: dict[str, int] | None = None,
 ) -> BankAccounts:
     """
@@ -249,6 +273,9 @@ def set_daily_closing_balance(
         bank_name=bank_name,
         account_holder_name=account_holder_name,
         account_type=account_type,
+        category=category,
+        period_from=period_from,
+        period_to=period_to,
         source="statement",
     )
     day_row.current_balance = closing_balance
@@ -328,6 +355,7 @@ def _account_meta_from_row(row: BankAccounts | None) -> dict[str, Any]:
         "bank_name": row.bank_name,
         "account_holder_name": row.account_holder_name,
         "account_type": row.account_type,
+        "category": row.category,
     }
 
 
@@ -346,6 +374,7 @@ def _fill_account_meta(row: BankAccounts, meta: dict[str, Any]) -> None:
     bank_name = meta.get("bank_name")
     account_holder_name = meta.get("account_holder_name")
     account_type = meta.get("account_type")
+    category = meta.get("category")
 
     if bank_name and (not row.bank_name or row.bank_name == "Unknown"):
         row.bank_name = bank_name
@@ -356,6 +385,8 @@ def _fill_account_meta(row: BankAccounts, meta: dict[str, Any]) -> None:
         row.account_holder_name = account_holder_name
     if account_type and not row.account_type:
         row.account_type = account_type
+    if category and not row.category:
+        row.category = category
 
 
 def _get_or_create_recalculation_row(
@@ -388,6 +419,7 @@ def _get_or_create_recalculation_row(
         bank_name=meta.get("bank_name") or "Unknown",
         account_holder_name=meta.get("account_holder_name") or "Unknown",
         account_type=meta.get("account_type"),
+        category=meta.get("category"),
         account_number=account_number,
         current_balance=Decimal("0"),
         statement_balance=None,
@@ -856,8 +888,12 @@ def reconcile_statement_batch(
         txn_day = _as_day(transaction.get("txn_date"))
         account_number = transaction.get("account_number")
         statement_balance = _as_decimal(transaction.get("balance_after_txn"))
+        is_carry_forward = str(transaction.get("txn_type") or "").strip().lower() == "carry_forward"
 
-        if amount is None or not account_number or txn_day is None:
+        # A carry-forward row (Opening/Closing Balance, Balance B/F or C/F)
+        # has no amount by design -- its whole point is the stated balance,
+        # not a money movement -- so it's exempt from the amount check.
+        if not account_number or txn_day is None or (amount is None and not is_carry_forward):
             skipped.append({
                 "reason": "missing amount, account_number, or txn_date",
                 "ref_number": transaction.get("ref_number"),
@@ -869,6 +905,9 @@ def reconcile_statement_batch(
                 "bank_name": transaction.get("bank_name"),
                 "account_holder_name": transaction.get("account_holder_name"),
                 "account_type": transaction.get("account_type"),
+                "category": transaction.get("account_category"),
+                "period_from": _as_day(transaction.get("period_from")),
+                "period_to": _as_day(transaction.get("period_to")),
             }
 
         existing = _find_matching_transaction(db, org_id, transaction, occurrence_counter)
@@ -883,6 +922,8 @@ def reconcile_statement_batch(
     last_day_per_account: Dict[str, date] = {}
     for (account_number, day), closing_balance in day_closing_balance.items():
         meta = account_meta.get(account_number, {})
+        period_from_day = meta.get("period_from")
+        period_to_day = meta.get("period_to")
         set_daily_closing_balance(
             db,
             org_id=org_id,
@@ -892,6 +933,9 @@ def reconcile_statement_batch(
             bank_name=meta.get("bank_name"),
             account_holder_name=meta.get("account_holder_name"),
             account_type=meta.get("account_type"),
+            category=meta.get("category"),
+            period_from=_day_start(period_from_day) if period_from_day else None,
+            period_to=_day_start(period_to_day) if period_to_day else None,
             stats=stats,
         )
         if account_number not in last_day_per_account or day > last_day_per_account[account_number]:
