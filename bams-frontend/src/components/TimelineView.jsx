@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarX2, Loader2, User } from "lucide-react";
+import { CalendarX2, FileText, Loader2 } from "lucide-react";
 import { accountsApi } from "../api/accounts";
 import { formatDate, formatINR } from "../lib/helper";
 import { EmptyMails } from "../utils/EmptyStates";
+import StatementPreviewDialog from "./StatementPreviewDialog";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -47,6 +48,7 @@ const buildTimelinePoints = (entries) => {
         dot: "green",
         kind: "start",
         closingBalance: entry.closing_balance,
+        files: entry.files || [],
       });
       points.push({ key: `${entry.from}-end`, date: entry.to, dot: "red", kind: "end", gapAfter: null });
     } else if (points.length) {
@@ -72,6 +74,8 @@ const TimelineView = ({ account }) => {
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState([]);
   const [error, setError] = useState(null);
+  // The stored statement file currently open in the preview, if any.
+  const [previewFile, setPreviewFile] = useState(null);
 
   useEffect(() => {
     if (!account?.account_number) return;
@@ -157,7 +161,24 @@ const TimelineView = ({ account }) => {
                             {point.closingBalance != null ? formatINR(point.closingBalance) : "—"}
                           </span>
                         </p>
-                        <p className="text-xs font-medium text-gray-400">File not available</p>
+                        {point.files.length ? (
+                          <div className="flex flex-col items-start gap-1 pt-0.5">
+                            {point.files.map((file) => (
+                              <button
+                                key={file.storage_key}
+                                type="button"
+                                onClick={() => setPreviewFile(file)}
+                                title={file.filename}
+                                className="flex max-w-full items-center gap-1.5 rounded-md text-left text-xs font-medium text-blue-600 hover:underline"
+                              >
+                                <FileText className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{file.filename || "Statement"}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs font-medium text-gray-400">File not available</p>
+                        )}
                       </>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">
@@ -171,6 +192,15 @@ const TimelineView = ({ account }) => {
           })}
         </ol>
       )}
+
+      <StatementPreviewDialog
+        open={Boolean(previewFile)}
+        setOpen={(isOpen) => {
+          if (!isOpen) setPreviewFile(null);
+        }}
+        storageKey={previewFile?.storage_key}
+        fileName={previewFile?.filename}
+      />
     </div>
   );
 };

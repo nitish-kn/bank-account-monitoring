@@ -245,7 +245,12 @@ def get_account_statement_timeline(db: Session, org_id: int, account_number: str
 
     segments = sorted(
         (
-            {"from": period_from, "to": period_to, "closing_balance": _closing_balance_for(group_rows)}
+            {
+                "from": period_from,
+                "to": period_to,
+                "closing_balance": _closing_balance_for(group_rows),
+                "files": _statement_files_for(group_rows),
+            }
             for (period_from, period_to), group_rows in groups.items()
         ),
         key=lambda s: s["from"],
@@ -260,6 +265,8 @@ def get_account_statement_timeline(db: Session, org_id: int, account_number: str
                 # the merged segment's closing balance too.
                 merged[-1]["to"] = seg["to"]
                 merged[-1]["closing_balance"] = seg["closing_balance"]
+            # A merged range is backed by every statement in it.
+            merged[-1]["files"] = _merge_statement_files(merged[-1]["files"], seg["files"])
         else:
             merged.append(dict(seg))
 
@@ -272,6 +279,7 @@ def get_account_statement_timeline(db: Session, org_id: int, account_number: str
                 "from": _datetime_to_iso(seg["from"]),
                 "to": _datetime_to_iso(seg["to"]),
                 "closing_balance": _decimal_to_string(seg["closing_balance"]),
+                "files": seg["files"],
             }
         )
         next_from = merged[index + 1]["from"] if index + 1 < len(merged) else None
@@ -291,6 +299,34 @@ def get_account_statement_timeline(db: Session, org_id: int, account_number: str
             )
 
     return {"account_number": account_number, "timeline": timeline}
+
+
+def _statement_files_for(rows: list[BankAccounts]) -> list[dict]:
+    """The stored statement PDFs behind a set of bank_accounts rows -- only
+    the row a statement ended on carries its file metadata (see
+    statement_storage_service.attach_statement_metadata)."""
+    return _merge_statement_files(
+        [],
+        [
+            {
+                "storage_key": row.statement_metadata.get("storage_key"),
+                "filename": row.statement_metadata.get("filename"),
+                "uploaded_at": row.statement_metadata.get("uploaded_at"),
+                "uploaded_by": (row.statement_metadata.get("uploaded_by") or {}).get("name"),
+                "source": row.statement_metadata.get("source"),
+            }
+            for row in rows
+            if isinstance(row.statement_metadata, dict) and row.statement_metadata.get("storage_key")
+        ],
+    )
+
+
+def _merge_statement_files(existing: list[dict], incoming: list[dict]) -> list[dict]:
+    """Union by storage key, oldest upload first."""
+    by_key = {file["storage_key"]: file for file in existing}
+    for file in incoming:
+        by_key.setdefault(file["storage_key"], file)
+    return sorted(by_key.values(), key=lambda file: file.get("uploaded_at") or "")
 
 
 def _account_identity_key(account: BankAccounts) -> tuple[str, str, str]:
