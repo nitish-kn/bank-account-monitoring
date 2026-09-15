@@ -336,9 +336,9 @@ const Accounts = () => {
               )}
             </CustomButton>
 
-            <div className="min-w-0">
-              <p className="flex gap-2 pr-2 truncate py-1 text-sm font-bold text-slate-950 w-full" title={account.account_holder_name}>
-                {account.account_holder_name || "-"}
+            <div className="min-w-0 ">
+              <div className="flex items-start gap-2 pr-2 py-0.5 text-sm font-bold text-slate-950 w-full" title={account.account_holder_name}>
+                <p className="min-w-0 wrap-break-words"> {account.account_holder_name || "-"} </p>
 
                 <CustomButton
                   variant="ghost"
@@ -349,8 +349,9 @@ const Accounts = () => {
                 >
                   <ExternalLink className="h-4 w-4" />
                 </CustomButton>
-              </p>
-              <p className="mt-1 truncate text-xs font-medium text-slate-400" title={`${account.account_number || "-"} · ${account.bank_name || "-"}`}>
+              </div>
+
+              <p className="mt-1 truncate text-xs font-medium text-slate-600" title={`${account.account_number || "-"} · ${account.bank_name || "-"}`} >
                 {account.account_number || "-"} · {account.bank_name || "-"}
               </p>
             </div>
