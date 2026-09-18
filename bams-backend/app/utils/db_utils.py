@@ -19,7 +19,7 @@ from ..core.constants import (
 )
 from ..models.parsed import Parsed
 from ..models.transactions import Transactions
-from .date_utils import as_ist_if_naive, utc_now
+from .date_utils import as_ist_if_naive, ist_day, utc_now
 from .transaction_utils import normalize_transaction_date, normalize_transaction_datetime
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ def _dates_close(left, right, max_days: int = 1) -> bool:
     if not left_dt or not right_dt:
         return True
 
-    return abs((left_dt.date() - right_dt.date()).days) <= max_days
+    return abs((ist_day(left_dt) - ist_day(right_dt)).days) <= max_days
 
 
 def _similar_text(left, right, threshold: float = 0.70) -> bool:
@@ -388,7 +388,7 @@ def _find_fallback_amount_date_match(
 
     matches: list[tuple[int, Transactions]] = []
     for candidate in candidates:
-        if candidate.txn_date.date() != txn_dt.date():
+        if ist_day(candidate.txn_date) != ist_day(txn_dt):
             continue
         if not _account_bank_type_compatible(candidate, transaction):
             continue

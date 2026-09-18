@@ -4,6 +4,7 @@ import { Badge, Spinner, Table } from "@radix-ui/themes";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, Filter, Plus, RotateCcw, Search } from "lucide-react";
 
 import { accountsApi } from "../api/accounts";
+import { transactionApi } from "../api/transactions";
 import CustomButton from "../components/ui/CustomButton";
 import CustomDropDown from "../components/ui/CustomDropDown";
 import CustomInput from "../components/ui/CustomInput";
@@ -12,7 +13,7 @@ import DataCard from "../components/ui/DataCard";
 import Pagination from "../components/Pagination";
 import { cleanText, formatAmount, formatDate, formatDateAndTime, formatINR } from "../lib/helper";
 import { getAccountBalanceTotals, getAccountSummaryCards, getIndividualAccountFilterValue } from "../lib/accounts-helper";
-import { getAccountFilterOptions } from "../lib/transactional-helper";
+import { getAccountFilterOptionsFromBackend } from "../lib/transactional-helper";
 import AddAcounts from "../components/AddAcounts";
 import { useExportContextStore } from "../store/exportContextStore";
 import { AccountCategoryBadge, AmountColor, TypeBadge } from "../utils/Badges";
@@ -149,7 +150,7 @@ const DeltaBadge = ({ value }) => {
 const Accounts = () => {
   const can = usePermissions();
   const navigate = useNavigate();
-  const filterOptions = useMemo(() => getAccountFilterOptions(), []);
+  const [filterOptions, setFilterOptions] = useState(() => getAccountFilterOptionsFromBackend());
   const [accounts, setAccounts] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -163,6 +164,12 @@ const Accounts = () => {
   const [addAccounts, setAddAccounts] = useState(false);
   const [expandedAccountIds, setExpandedAccountIds] = useState({});
   const [recentTransactionsByAccountId, setRecentTransactionsByAccountId] = useState({});
+
+  useEffect(() => {
+    transactionApi.getFilterOptions()
+      .then((response) => setFilterOptions(getAccountFilterOptionsFromBackend(response)))
+      .catch(console.error);
+  }, []);
   const [recentTransactionsLoading, setRecentTransactionsLoading] = useState({});
   const [recentTransactionsError, setRecentTransactionsError] = useState({});
   const [openFilter, setOpenFilter] = useState(false);
@@ -638,7 +645,7 @@ const Accounts = () => {
         {/* Filter Bar */}
         {openFilter &&
           <>
-            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-9">
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
               <div className="xl:col-span-2">
                 <CustomInput
                   value={draftFilters.search}

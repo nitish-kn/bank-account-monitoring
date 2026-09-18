@@ -49,6 +49,7 @@ from sqlalchemy.orm import Session
 
 from ..models.bank_accounts import BankAccounts
 from ..models.transactions import Transactions
+from ..utils.date_utils import IST, ist_day
 from ..utils.transaction_utils import normalize_transaction_date
 
 PLACEHOLDER_TEXT = "N/A"
@@ -83,7 +84,7 @@ def _as_day(value: Any) -> Optional[date]:
         return value
 
     if isinstance(value, datetime):
-        return value.date()
+        return ist_day(value)
 
     normalized = normalize_transaction_date(value)
     if not normalized:
@@ -103,7 +104,8 @@ def _as_decimal(value: Any) -> Optional[Decimal]:
 
 
 def _day_start(day: date) -> datetime:
-    return datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
+    # Midnight IST, matching how transaction dates are stored.
+    return datetime.combine(day, datetime.min.time(), tzinfo=IST)
 
 
 def _is_empty(value: Any) -> bool:

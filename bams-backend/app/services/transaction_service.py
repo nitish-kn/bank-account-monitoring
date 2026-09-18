@@ -1,8 +1,12 @@
+import logging
+
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_, Date, cast, case, String
+from ..ds.llm.utils.account_lookup import load_bank_accounts_data
+from sqlalchemy import func, or_, and_, Date, cast, case, String, false
 from datetime import datetime, timedelta, time
 
 from ..models.transactions import Transactions
+from ..utils.date_utils import IST, as_ist_if_naive, utc_now
 from ..utils.db_utils import transaction_to_schema_dict
 from ..utils.transaction_utils import normalize_txn_via
 
@@ -12,6 +16,8 @@ from ..models.transaction_logs import TransactionLog
 
 from ..models.organization import Organization
 from ..utils.db_utils import build_transaction_dedupe_key
+
+logger = logging.getLogger(__name__)
 
 def _lower_text(column):
     return func.lower(func.coalesce(cast(column, String), ""))
@@ -43,16 +49,102 @@ def _parse_date_bound(value, end_of_day: bool = False):
         return None
 
     if isinstance(value, datetime):
-        if not end_of_day:
-            return value
-        return value.replace(hour=23, minute=59, second=59, microsecond=999999)
+        bound = value if not end_of_day else value.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return as_ist_if_naive(bound)
 
     try:
         parsed = datetime.strptime(str(value).strip()[:10], "%Y-%m-%d").date()
     except (TypeError, ValueError):
         return None
 
-    return datetime.combine(parsed, time.max if end_of_day else time.min)
+    # A date the user picked means that day in IST -- tagged here so the
+    # comparison never depends on the session's timezone.
+    return datetime.combine(parsed, time.max if end_of_day else time.min, tzinfo=IST)
+
+
+# Filter dropdown options for the transactions page -- only these show, in
+# this order. Any other value stored in the DB is grouped under the catch-all
+# option ("Other" for categories, "Others" for modes).
+DEFAULT_TRANSACTION_CATEGORIES = [
+    "Bank Charges", "Cash Withdrawal", "ECS/NACH", "Education", "Food & Dining",
+    "Healthcare", "Interest", "Other", "Payment", "Salary", "Shopping",
+    "Tax Refund", "Taxes", "Transfer", "Travel", "UPI", "Utilities",
+]
+DEFAULT_TRANSACTION_MODES = [
+    "CH", "Bank Charge", "Cash WDL", "Cheque", "EBA", "ECS/NACH", "ENACH", "IMPS",
+    "IMPS/P2A", "INB", "INB/IFT", "MOB/TPFT", "NEFT", "NEFT/IR", "Net Banking",
+    "RTGS", "RTGS/IR", "SAK/CASH WDL",
+]
+OTHER_CATEGORY = "Other"
+OTHER_MODE = "Others"
+
+
+def _singular(word: str) -> str:
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 3 and word.endswith(("xes", "ses", "ches", "shes", "zes")):
+        return word[:-2]
+    if len(word) > 4 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
+def _option_key(value) -> str:
+    """Grouping key for a category/mode value: case, spacing and punctuation
+    ignored, and singular/plural folded together -- so "Tax", "TAXES" and
+    "taxes" are one option. Whole values only: "Tax" never matches "Tax Refund"."""
+    compact = "".join(ch for ch in str(value or "").lower() if ch.isalnum())
+    return _singular(compact)
+
+
+def _bucket_key(value, default_keys: set[str], other_key: str) -> str:
+    """Which dropdown option a value belongs to: its own option if it's one
+    of the defaults (any spelling), otherwise the catch-all "Other(s)"."""
+    key = _option_key(value)
+    return key if key in default_keys else other_key
+
+
+def _grouped_options(defaults: list[str], other_label: str, stored_values) -> list[str]:
+    """Only the default options, in order, plus the catch-all bucket that
+    every other stored value falls into. A shorter stored spelling of a
+    default is used as its label ("Taxes" + "Tax" shows as "Tax")."""
+    labels = {_option_key(value): value for value in defaults}
+    labels.setdefault(_option_key(other_label), other_label)
+
+    for value in {str(v).strip() for v in stored_values if v and str(v).strip()}:
+        key = _option_key(value)
+        if key in labels and len(value) < len(labels[key]):
+            labels[key] = value
+
+    return list(labels.values())
+
+
+def _apply_option_filter(query, column, filter_val, defaults: list[str], other_label: str):
+    """Filter on dropdown options. A default option matches every stored
+    spelling of it; the catch-all matches everything that isn't a default,
+    including rows with no value at all."""
+    default_keys = {_option_key(value) for value in defaults}
+    other_key = _option_key(other_label)
+    default_keys.discard(other_key)
+
+    selected = {
+        _bucket_key(value, default_keys, other_key)
+        for value in _active_filter_values(filter_val)
+        if _option_key(value)
+    }
+    if not selected:
+        return query
+
+    stored_values = [
+        value for (value,) in query.with_entities(column).distinct().all()
+        if value and str(value).strip()
+        and _bucket_key(value, default_keys, other_key) in selected
+    ]
+    conditions = [column.in_(stored_values)] if stored_values else []
+    if other_key in selected:
+        conditions.extend([column.is_(None), func.trim(column) == ""])
+
+    return query.filter(or_(*conditions)) if conditions else query.filter(false())
 
 
 def _active_filter_values(filter_val):
@@ -175,6 +267,9 @@ def apply_transaction_filters(query, filters: dict):
                 )
             )
 
+        # Exact match, ignoring case and surrounding spaces.
+        column_value = func.trim(column_value)
+        normalized_values = [value.strip() for value in normalized_values]
         if len(values) == 1:
             return query.filter(column_value == normalized_values[0])
         return query.filter(column_value.in_(normalized_values))
@@ -182,10 +277,14 @@ def apply_transaction_filters(query, filters: dict):
     query = _apply_list_filter(query, Transactions.bank_name, filters.get("bank"), contains=True, filter_kind="bank")
     query = _apply_list_filter(query, Transactions.account_number, filters.get("account"), contains=True, filter_kind="account")
     query = _apply_list_filter(query, Transactions.txn_type, filters.get("txnType"))
-    query = _apply_list_filter(query, Transactions.mode, filters.get("mode"), contains=True)
-    query = _apply_list_filter(query, Transactions.category, filters.get("category"), contains=True)
+    query = _apply_option_filter(
+        query, Transactions.mode, filters.get("mode"), DEFAULT_TRANSACTION_MODES, OTHER_MODE,
+    )
+    query = _apply_option_filter(
+        query, Transactions.category, filters.get("category"), DEFAULT_TRANSACTION_CATEGORIES, OTHER_CATEGORY,
+    )
     query = _apply_list_filter(query, Transactions.currency, filters.get("currency"))
-    query = _apply_list_filter(query, Transactions.account_holder_name, filters.get("accountHolderName"), contains=True)
+    query = _apply_list_filter(query, Transactions.account_holder_name, filters.get("accountHolderName"))
     query = _apply_list_filter(query, Transactions.account_type, filters.get("accountType"), contains=True, filter_kind="account_type")
     
     # Status (parsed_status)
@@ -231,7 +330,7 @@ def apply_transaction_filters(query, filters: dict):
                     bank_terms = _match_terms(expected_bank, "bank")
                     account_terms = _match_terms(expected_account, "account")
                     conditions.append(and_(
-                        _lower_text(Transactions.account_holder_name).like(f"%{expected_holder.lower()}%"),
+                        _lower_text(Transactions.account_holder_name) == expected_holder.lower(),
                         or_(
                             *[
                                 _lower_text(Transactions.bank_name).like(f"%{bank_term}%")
@@ -576,6 +675,18 @@ def get_via_breakdown(db: Session, org_id: int, filters: dict) -> list[dict]:
 def get_filter_options(db: Session, org_id: int):
     query = build_base_query(db, org_id)
 
+    def _display_text(value: object, acronyms: tuple[str, ...] = ("HUF", "NRE", "NRO", "LLP")) -> str:
+        """Title-cased for display, but `acronyms` stay upper-case --
+        .title() would otherwise turn "HUF" into "Huf"."""
+        normalized = " ".join(str(value or "").strip().lower().split())
+        if normalized in {"", "nan", "none", "null"}:
+            return ""
+        upper = {acronym.lower() for acronym in acronyms}
+        return " ".join(
+            word.upper() if word in upper else word.title()
+            for word in normalized.split(" ")
+        )
+
     def _distinct_values(column):
         values = {
             str(row[0]).strip()
@@ -584,10 +695,59 @@ def get_filter_options(db: Session, org_id: int):
         }
         return sorted(values, key=str.lower)
 
+    excel_options = {
+        "banks": [],
+        "accountHolderNames": [],
+        "accounts": [],
+        "individualAccounts": [],
+        "accountTypes": [],
+        "accountCategories": [],
+    }
+    try:
+        mapping = load_bank_accounts_data()
+        rows = mapping.to_dict("records")
+        unique_options: dict[str, dict[str, str]] = {
+            key: {} for key in excel_options
+        }
+        for row in rows:
+            bank = _display_text(row.get("S No"))
+            holder = _display_text(row.get("Name"))
+            account_number = str(row.get("Axis A/c No") or "").strip()
+            account_type = _display_text(row.get("Type"))
+            account_category = _display_text(row.get("Category"))
+            if not bank or not holder or not account_number:
+                continue
+
+            account_suffix = f"XX{account_number[-4:]}"
+            bank_key = bank.casefold()
+            holder_key = holder.casefold()
+            account_key = account_suffix.casefold()
+            individual_key = f"{holder_key}|{bank_key}|{account_number}"
+            unique_options["banks"][bank_key] = bank
+            unique_options["accountHolderNames"][holder_key] = holder
+            unique_options["accounts"][account_key] = account_suffix
+            unique_options["individualAccounts"][individual_key] = (
+                f"{holder} - {bank} - {account_suffix}"
+            )
+            if account_type:
+                unique_options["accountTypes"][account_type.casefold()] = account_type
+            if account_category:
+                unique_options["accountCategories"][account_category.casefold()] = account_category
+
+        excel_options = {
+            key: sorted(values.values(), key=str.casefold)
+            for key, values in unique_options.items()
+        }
+    except Exception as error:
+        logger.warning("Could not load Excel filter options: %s", error)
+
     return {
+        **excel_options,
         "entities": _distinct_values(Transactions.email_metadata["forwarded_by_name"].astext),
-        "modes": _distinct_values(Transactions.mode),
-        "categories": _distinct_values(Transactions.category),
+        "modes": _grouped_options(DEFAULT_TRANSACTION_MODES, OTHER_MODE, _distinct_values(Transactions.mode)),
+        "categories": _grouped_options(
+            DEFAULT_TRANSACTION_CATEGORIES, OTHER_CATEGORY, _distinct_values(Transactions.category),
+        ),
         "currencies": _distinct_values(Transactions.currency),
         "statuses": ["parsed", "failed", "not_transaction"],
     }
@@ -675,7 +835,7 @@ def update_transaction(db: Session, org_id: int, txn_id: str, payload, ip_addres
         db.add(log_entry)
 
         # Update updated_at on transaction
-        transaction.updated_at = datetime.utcnow()
+        transaction.updated_at = utc_now()
 
         db.commit()
         db.refresh(transaction)

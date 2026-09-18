@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import DialogPopup from "./DialogPopup";
 import CustomInput from "./CustomInput";
+import CustomTextarea from "./CustomTextarea";
 import { transactionApi } from "../../api/transactions";
 import { useSetupStore } from "../../store/setupStore";
 import { useAuthStore } from "../../store/authStore";
@@ -352,9 +353,8 @@ const EditTransactionDialog = ({ open, setOpen, data }) => {
           />
         </div>
 
-        <CustomInput
+        <CustomTextarea
           name="narration"
-          type="text"
           labelText="Narration"
           placeholder="Detailed transaction narration"
           value={formState.narration}
