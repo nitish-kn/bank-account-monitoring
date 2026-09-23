@@ -2,16 +2,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..services.auth_service import (
-    build_session_payload,
-    create_or_update_org_from_google,
-    generate_oauth_url,
-    exchange_google_code,
-    apply_permission_flags,
-    get_login_scopes,
-    login_with_password,
-    serialize_org,
-)
+from ..services.auth_service import ( build_session_payload, create_or_update_org_from_google, generate_oauth_url, exchange_google_code, apply_permission_flags, get_login_scopes, login_with_password, serialize_org, )
 from ..services.rbac_service import get_user_permissions
 from ..core.dependencies import get_current_org, get_current_user
 from ..models.organization import Organization
@@ -56,12 +47,8 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me")
-def get_me(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Current identity plus permissions -- the frontend re-reads this on load
-    so a role change takes effect without waiting for the token to expire."""
+def get_me( current_user: User = Depends(get_current_user), db: Session = Depends(get_db),): 
+    """Current identity plus permissions -- the frontend re-reads this on page, so a role change takes effect without waiting for the token to expire."""
     return {
         "org": serialize_org(current_user.organization),
         "user": serialize_user(current_user),
@@ -78,11 +65,7 @@ def request_permission_access(current_org: Organization = Depends(get_current_or
 
 
 @router.post("/permission")
-def grant_permission(
-    request: PermissionGrantRequest,
-    current_org: Organization = Depends(get_current_org),
-    db: Session = Depends(get_db),
-):
+def grant_permission( request: PermissionGrantRequest, current_org: Organization = Depends(get_current_org), db: Session = Depends(get_db), ):
     """Grant permissions based on the code, if not given during initial login. Handles both or partial permissions."""
     tokens = exchange_google_code(code=request.code)
     access_token = tokens['access_token']
@@ -106,10 +89,7 @@ def grant_permission(
 
 @router.post("/logout")
 def logout(current_org: Organization = Depends(get_current_org)):
-    """
-    Logout endpoint - validates JWT token and confirms logout.
-    Frontend handles clearing cookies and localStorage.
-    """
+    """ Logout endpoint - validates JWT token and confirms logout. Frontend handles clearing cookies and localStorage. """
     return {
         "message": "Logged out successfully",
         "status": "success"
@@ -118,12 +98,8 @@ def logout(current_org: Organization = Depends(get_current_org)):
 
 @router.post("/refresh")
 def refresh_token(request: RefreshRequest, db: Session = Depends(get_db)):
-    """
-    Refresh JWT token. Decodes the expired JWT token without verifying expiry to retrieve org ID,
-    checks if they have a Google refresh token, verifies it, and issues a new JWT.
-    """
+    """ Refresh JWT token. Decodes the expired JWT token without verifying expiry to retrieve org ID, checks if they have a Google refresh token, verifies it, and issues a new JWT."""
 
-    
     payload = verify_token_ignore_expiry(request.token)
     if not payload or not isinstance(payload, dict):
         raise HTTPException(status_code=401, detail="Invalid token structure")
@@ -141,6 +117,7 @@ def refresh_token(request: RefreshRequest, db: Session = Depends(get_db)):
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token subject")
+
     try:
         user_id = int(user_id)
     except (ValueError, TypeError):
@@ -154,13 +131,13 @@ def refresh_token(request: RefreshRequest, db: Session = Depends(get_db)):
     if not org:
         raise HTTPException(status_code=401, detail="Session not found")
 
-    # Only the Google-linked owner has Google credentials to refresh; sub-users
-    # sign in with a password, so their session just gets a fresh JWT.
+    # Only the Google-linked owner has Google credentials to refresh; sub-users sign in with a password, so their session just gets a fresh JWT.
     if org.refresh_token and user.password_hash is None:
         try:
             creds = build_credentials(org)
             if not creds or not creds.token:
                 raise HTTPException(status_code=401, detail="Failed to refresh Google session")
+
             org.access_token = creds.token
             if creds.expiry:
                 org.token_expiry = creds.expiry

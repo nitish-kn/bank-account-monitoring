@@ -9,25 +9,36 @@ from ..models.users import User
 from ..services.rbac_service import get_user_permissions
 from .auth import verify_token
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")          # For extraction of the token from the Authorization header. The actual token endpoint is /api/auth/login, but this is just a placeholder for FastAPI's dependency injection system.
 
-# JWT `sub` used to hold an organization id and now holds a user id. Tokens
+# The JWT contains a 'typ' claim. JWT `sub` used to hold an organization id and now holds a user id. Tokens
 # are stamped with this claim so a pre-RBAC token can't be mistaken for a
 # user token and silently resolve to whichever user happens to share that id.
+'''{
+  "sub": "42",
+  "typ": "user",
+  "exp": 1780000000
+}'''
+
 TOKEN_TYPE = "user"
 
-
+# Get the bearer token, validate it, find the matching user, and return that user.
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    """ This function is used as a dependency in routes to get the current authenticated user based on the JWT token provided in the Authorization header. 
+     It verifies the token, extracts the user ID, and fetches the corresponding user from the database. 
+     If any step fails, it raises an HTTP 401 Unauthorized exception."""
+
     credentials_exception = HTTPException(
         status_code=401,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
     payload = verify_token(token)
     if payload is None or payload.get("typ") != TOKEN_TYPE:
         raise credentials_exception
 
-    user_id = payload.get("sub")
+    user_id = payload.get("sub")        # sub means “subject”. In this project, it contains the user ID.
     if user_id is None:
         raise credentials_exception
 
@@ -37,37 +48,45 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 
+# Which organization does the signed-in user belong to?
 def get_current_org(current_user: User = Depends(get_current_user)) -> Organization:
-    """The org the signed-in user belongs to. Routes that only care about
-    tenancy keep depending on this and are unaffected by users existing."""
+    """The org the signed-in user belongs to. Routes that only care about tenancy keep depending on this and are unaffected by users existing."""
     if current_user.organization is None:
         raise HTTPException(status_code=401, detail="Could not validate credentials")
     return current_user.organization
 
 
+# This checks whether a user has a permission. Held contains the set of permissions the user has, and module/action is the permission being checked. It also checks whether a view permission is required for create/update/delete actions.
 def _holds_permission(held: set[str], db: Session, module: str, action: str) -> bool:
     """Whether `held` satisfies `module.action`.
 
-    Create/update/delete also require `module.view`, but only for modules
-    that actually define one (accounts/users/roles) -- someone who can't see
-    a resource shouldn't be able to change it either. Modules with a single
-    action and no paired view (sync_data.trigger, transactions.update, etc.)
-    have nothing to require, so this is a no-op for them.
+    Create/update/delete also require `module.view`, but only for modules that actually define one (accounts/users/roles) -- 
+    someone who can't see a resource shouldn't be able to change it either. 
+    Modules with a single action and no paired view (sync_data.trigger, transactions.update, etc.) have nothing to require, so this is a no-op for them.
     """
+
     if f"{module}.{action}" not in held:
         return False
-    also_required = f"{module}.view" if action != "view" else None
+
+    also_required = f"{module}.view" if action != "view" else None      # For write operations, the user may also need view access.
+
     if also_required and also_required not in held:
         view_defined = db.query(Permission.id).filter(
             Permission.module == module, Permission.action == "view"
         ).first()
         if view_defined:
             return False
+        
     return True
 
 
+# Main middleware function that checks for required permissions.
 def require_permission(module: str, action: str):
-    """Route dependency asserting the caller holds `module.action`."""
+    """Route dependency asserting the caller holds `module.action`.
+       Bascially, a decorator or a function wrapper, calling another function to check if user has the required permissions.
+       It calls `_holds_permission` to check if the user has the required permission and raises an HTTP 403 Forbidden exception if not.
+       and the `dependency` function is returned to be used as a dependency in FastAPI routes, which return the current user if they have required permission.
+    """
 
     def dependency(
         current_user: User = Depends(get_current_user),
