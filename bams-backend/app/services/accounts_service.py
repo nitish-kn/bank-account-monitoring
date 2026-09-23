@@ -185,6 +185,10 @@ def _datetime_to_iso(value) -> str | None:
     return value.isoformat() if value else None
 
 
+def _account_last_updated(account: BankAccounts):
+    return account.last_synced_at or account.updated_at or account.created_at
+
+
 def account_to_dict(account: BankAccounts) -> dict:
     current_balance = account.current_balance
     statement_balance = account.statement_balance
@@ -194,7 +198,7 @@ def account_to_dict(account: BankAccounts) -> dict:
         delta = (current_balance or Decimal("0")) - (statement_balance or Decimal("0"))
 
     statement_updated_at = account.last_synced_at or 0
-    calculated_updated_at = account.created_at or 0
+    calculated_updated_at = _account_last_updated(account) or 0
 
     return {
         "id": account.id,
@@ -393,10 +397,6 @@ def _account_delta(account: BankAccounts) -> Decimal | None:
     if account.current_balance is None and account.statement_balance is None:
         return None
     return (account.current_balance or Decimal("0")) - (account.statement_balance or Decimal("0"))
-
-
-def _account_last_updated(account: BankAccounts):
-    return account.last_synced_at or account.updated_at or account.created_at
 
 
 def _account_sort_value(account: BankAccounts, sort_field_key: str | None):

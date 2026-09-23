@@ -13,7 +13,7 @@ export const transactionApi = {
       include,
       sort
     });
-    return response.data;
+    return response?.data;
   },
 
   editTransaction: async (id, body) => {
