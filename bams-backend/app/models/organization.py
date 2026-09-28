@@ -25,9 +25,9 @@ class Organization(Base):
         nullable=True,
         index=True,
     )
-    last_synced_at = Column(DateTime, nullable=True)
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
     last_synced_status = Column(String, default="not_started", nullable=False, server_default='not_started')
-    last_synced_email_date = Column(DateTime, nullable=True)
+    last_synced_email_date = Column(DateTime(timezone=True), nullable=True)
     sync_status = Column(String, default="not_started", nullable=False, server_default='not_started', index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
