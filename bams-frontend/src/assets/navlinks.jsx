@@ -1,4 +1,4 @@
-import { FileSpreadsheetIcon, GalleryVerticalEnd, Landmark, LayoutDashboardIcon, UsersRound, History, MessageCircle, TriangleAlert, ShieldCheck, Flag } from "lucide-react";
+import { FileSpreadsheetIcon, GalleryVerticalEnd, Landmark, LayoutDashboardIcon, UsersRound, History, MessageCircle, TriangleAlert, ShieldCheck, Flag, SquareDashedText, FileSliders, } from "lucide-react";
 import { PERMISSIONS } from "../lib/permissions";
 
 // `permission` gates both the sidebar entry and the route itself (see
@@ -12,5 +12,6 @@ export const NavLinks = [
   { name: "Users", icon: <UsersRound className="h-4 w-4" />, route: "/users", permission: PERMISSIONS.USERS_VIEW, },
   { name: "Roles & Permissions", icon: <ShieldCheck className="h-4 w-4" />, route: "/roles-permissions", permission: PERMISSIONS.ROLES_VIEW, },
   { name: "Needs Review", icon: <TriangleAlert className="h-4 w-4" />, route: "/needs-review", permission: PERMISSIONS.NEEDS_REVIEW_VIEW, },
+  { name: "Tally View", icon: <FileSliders className="h-4 w-4" />, route: "/tally-view", permission: PERMISSIONS.EXPORT_DATA, },
   // { name: "Consolidated View", icon: <UsersRound className="h-4 w-4" />, route: "/consolidated-view", },
 ];

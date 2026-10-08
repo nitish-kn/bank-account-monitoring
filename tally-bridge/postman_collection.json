@@ -1,0 +1,1654 @@
+{
+    "info": {
+        "name": "Tally API Bridge — Complete",
+        "description": "Full automation API for Tally with 66+ endpoints covering Masters, Transactions, Reports, GST, Payroll, and System utilities.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:5001"
+        }
+    ],
+    "item": [
+        {
+            "name": "System",
+            "item": [
+                {
+                    "name": "Health Check",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/health"
+                    }
+                },
+                {
+                    "name": "Company Info",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/company"
+                    }
+                },
+                {
+                    "name": "Bulk Sync",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/sync",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"masters\": [\n    { \"type\": \"LEDGER\", \"name\": \"Bulk Ledger 1\", \"parent\": \"Sundry Debtors\" },\n    { \"type\": \"LEDGER\", \"name\": \"Bulk Ledger 2\", \"parent\": \"Sundry Creditors\" }\n  ],\n  \"vouchers\": [\n    {\n      \"type\": \"Journal\", \"date\": \"20240401\",\n      \"entries\": [\n        { \"ledger\": \"Cash\", \"amount\": 500, \"isDebit\": true },\n        { \"ledger\": \"Sales Accounts\", \"amount\": 500, \"isDebit\": false }\n      ]\n    }\n  ]\n}"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Groups",
+            "item": [
+                {
+                    "name": "Get All Groups",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/groups"
+                    }
+                },
+                {
+                    "name": "Create Group",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/groups",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"API Group\", \"parent\": \"Primary\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Update Group",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/groups/API%20Group",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"newName\": \"API Group Renamed\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Group",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/groups/API%20Group%20Renamed"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Ledgers",
+            "item": [
+                {
+                    "name": "Get All Ledgers",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/ledgers"
+                    }
+                },
+                {
+                    "name": "Create Ledger",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/ledgers",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"API Ledger\", \"parent\": \"Sundry Debtors\", \"openingBalance\": \"0\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Update Ledger",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/ledgers/API%20Ledger",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"newName\": \"API Ledger Updated\", \"openingBalance\": \"1000\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Ledger",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/ledgers/API%20Ledger%20Updated"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Vouchers (Generic)",
+            "item": [
+                {
+                    "name": "Get Vouchers",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/vouchers?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "vouchers"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Voucher",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/vouchers",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240401\", \"type\": \"Journal\", \"narration\": \"Test\", \"entries\": [{ \"ledger\": \"Cash\", \"amount\": 500, \"isDebit\": true }, { \"ledger\": \"Sales Accounts\", \"amount\": 500, \"isDebit\": false }] }"
+                        }
+                    }
+                },
+                {
+                    "name": "Update Voucher",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/vouchers/1",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"type\": \"Journal\", \"narration\": \"Updated\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Voucher",
+                    "request": {
+                        "method": "DELETE",
+                        "url": {
+                            "raw": "{{baseUrl}}/vouchers/1?type=Journal",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "vouchers",
+                                "1"
+                            ],
+                            "query": [
+                                {
+                                    "key": "type",
+                                    "value": "Journal"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Units",
+            "item": [
+                {
+                    "name": "Get All Units",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/units"
+                    }
+                },
+                {
+                    "name": "Create Unit",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/units",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"Box\", \"originalName\": \"Boxes\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Update Unit",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/units/Box",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"newName\": \"Carton\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Unit",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/units/Carton"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Stock Items",
+            "item": [
+                {
+                    "name": "Get All Stock Items",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/stock-items"
+                    }
+                },
+                {
+                    "name": "Create Stock Item",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/stock-items",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"API Product\", \"baseUnit\": \"Nos\", \"openingBalance\": \"50\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Update Stock Item",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/stock-items/API%20Product",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"newName\": \"API Product v2\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Stock Item",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/stock-items/API%20Product%20v2"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Stock Groups",
+            "item": [
+                {
+                    "name": "Get Stock Groups",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/stock-groups"
+                    }
+                },
+                {
+                    "name": "Create Stock Group",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/stock-groups",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"Electronics\", \"parent\": \"Primary\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Update Stock Group",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/stock-groups/Electronics",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"newName\": \"Electronics & Gadgets\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Stock Group",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/stock-groups/Electronics%20%26%20Gadgets"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Stock Categories",
+            "item": [
+                {
+                    "name": "Get Stock Categories",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/stock-categories"
+                    }
+                },
+                {
+                    "name": "Create Stock Category",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/stock-categories",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"Finished Goods\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Update Stock Category",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/stock-categories/Finished%20Goods",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"newName\": \"Finished Products\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Stock Category",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/stock-categories/Finished%20Products"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Godowns",
+            "item": [
+                {
+                    "name": "Get Godowns",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/godowns"
+                    }
+                },
+                {
+                    "name": "Create Godown",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/godowns",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"Warehouse A\", \"address\": \"Industrial Area\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Update Godown",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/godowns/Warehouse%20A",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"newName\": \"Main Warehouse\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Godown",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/godowns/Main%20Warehouse"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Cost Centres",
+            "item": [
+                {
+                    "name": "Get Cost Centres",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/cost-centres"
+                    }
+                },
+                {
+                    "name": "Create Cost Centre",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/cost-centres",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"API CC\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Update Cost Centre",
+                    "request": {
+                        "method": "PUT",
+                        "url": "{{baseUrl}}/cost-centres/API%20CC",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"newName\": \"API CC Renamed\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Cost Centre",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{baseUrl}}/cost-centres/API%20CC%20Renamed"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Other Masters",
+            "item": [
+                {
+                    "name": "Get Currencies",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/currencies"
+                    }
+                },
+                {
+                    "name": "Create Currency",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/currencies",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"$\", \"originalName\": \"US Dollar\", \"decimalPlaces\": \"2\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Voucher Types",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/voucher-types"
+                    }
+                },
+                {
+                    "name": "Create Voucher Type",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/voucher-types",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"API Custom Type\", \"parent\": \"Sales\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Budgets",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/budgets"
+                    }
+                },
+                {
+                    "name": "Create Budget",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/budgets",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"FY 2024-25 Budget\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Cost Categories",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/cost-categories"
+                    }
+                },
+                {
+                    "name": "Create Cost Category",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/cost-categories",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"Department Cost\" }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Sales Invoices",
+            "item": [
+                {
+                    "name": "Get Sales Invoices",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/invoices?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "invoices"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Sales Invoice",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/invoices",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"partyLedger\": \"Cash\", \"salesLedger\": \"Sales Accounts\", \"items\": [{ \"stockItem\": \"API Product\", \"qty\": 5, \"rate\": 1500 }] }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Purchase Invoices",
+            "item": [
+                {
+                    "name": "Get Purchase Invoices",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/purchase-invoices?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "purchase-invoices"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Purchase Invoice",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/purchase-invoices",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"partyLedger\": \"Cash\", \"purchaseLedger\": \"Purchase Accounts\", \"items\": [{ \"stockItem\": \"API Product\", \"qty\": 10, \"rate\": 1000 }] }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Credit & Debit Notes",
+            "item": [
+                {
+                    "name": "Get Credit Notes",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/credit-notes?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "credit-notes"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Credit Note",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/credit-notes",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240420\", \"partyLedger\": \"Cash\", \"salesLedger\": \"Sales Accounts\", \"items\": [{ \"stockItem\": \"API Product\", \"qty\": 2, \"rate\": 1500 }], \"narration\": \"Sales return\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Debit Notes",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/debit-notes?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "debit-notes"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Debit Note",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/debit-notes",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240420\", \"partyLedger\": \"Cash\", \"purchaseLedger\": \"Purchase Accounts\", \"items\": [{ \"stockItem\": \"API Product\", \"qty\": 3, \"rate\": 1000 }] }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Payments & Receipts",
+            "item": [
+                {
+                    "name": "Get Payments",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/payments?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "payments"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Payment",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/payments",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"narration\": \"Vendor payment\", \"entries\": [{ \"ledger\": \"Cash\", \"amount\": 5000, \"isDebit\": false }, { \"ledger\": \"Sundry Creditors\", \"amount\": 5000, \"isDebit\": true }] }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Receipts",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/receipts?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "receipts"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Receipt",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/receipts",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"narration\": \"Customer receipt\", \"entries\": [{ \"ledger\": \"Cash\", \"amount\": 10000, \"isDebit\": true }, { \"ledger\": \"Sundry Debtors\", \"amount\": 10000, \"isDebit\": false }] }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Contra & Journals",
+            "item": [
+                {
+                    "name": "Get Contra",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/contra?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "contra"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Contra",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/contra",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"narration\": \"Cash to bank\", \"entries\": [{ \"ledger\": \"Cash\", \"amount\": 20000, \"isDebit\": false }, { \"ledger\": \"Bank Account\", \"amount\": 20000, \"isDebit\": true }] }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Journals",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/journals?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "journals"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Journal",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/journals",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"narration\": \"Adjustment\", \"entries\": [{ \"ledger\": \"Cash\", \"amount\": 500, \"isDebit\": true }, { \"ledger\": \"Sales Accounts\", \"amount\": 500, \"isDebit\": false }] }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Sales & Purchase Orders",
+            "item": [
+                {
+                    "name": "Get Sales Orders",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/sales-orders?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "sales-orders"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Sales Order",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/sales-orders",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"partyLedger\": \"Cash\", \"items\": [{ \"stockItem\": \"API Product\", \"qty\": 20, \"rate\": 1500 }] }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Purchase Orders",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/purchase-orders?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "purchase-orders"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Purchase Order",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/purchase-orders",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"partyLedger\": \"Cash\", \"items\": [{ \"stockItem\": \"API Product\", \"qty\": 50, \"rate\": 1000 }] }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Stock Movements",
+            "item": [
+                {
+                    "name": "Get Delivery Notes",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/delivery-notes?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "delivery-notes"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Delivery Note",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/delivery-notes",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"partyLedger\": \"Cash\", \"items\": [{ \"stockItem\": \"API Product\", \"qty\": 10, \"rate\": 1500 }] }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Receipt Notes",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/receipt-notes?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "receipt-notes"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Receipt Note",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/receipt-notes",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"partyLedger\": \"Cash\", \"items\": [{ \"stockItem\": \"API Product\", \"qty\": 25, \"rate\": 1000 }] }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Stock Journals",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/stock-journals?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stock-journals"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Stock Journal",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/stock-journals",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"narration\": \"Godown transfer\", \"sourceItems\": [{ \"stockItem\": \"API Product\", \"qty\": 5, \"rate\": 1000, \"godown\": \"Main Location\" }], \"destinationItems\": [{ \"stockItem\": \"API Product\", \"qty\": 5, \"rate\": 1000, \"godown\": \"Branch\" }] }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Reports (Generic)",
+            "item": [
+                {
+                    "name": "Trial Balance (Generic)",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/report",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"reportName\": \"Trial Balance\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Balance Sheet (Generic)",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/report",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"reportName\": \"Balance Sheet\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Day Book (Generic)",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/report",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"reportName\": \"Day Book\", \"fromDate\": \"20231201\", \"toDate\": \"20231231\" }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Reports (Parsed)",
+            "item": [
+                {
+                    "name": "Trial Balance",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/reports/trial-balance?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "reports",
+                                "trial-balance"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Balance Sheet",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/reports/balance-sheet"
+                    }
+                },
+                {
+                    "name": "Profit & Loss",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/reports/profit-loss"
+                    }
+                },
+                {
+                    "name": "Cash Flow",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/reports/cash-flow"
+                    }
+                },
+                {
+                    "name": "Stock Summary",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/reports/stock-summary"
+                    }
+                },
+                {
+                    "name": "Day Book",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/reports/day-book?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "reports",
+                                "day-book"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Outstanding Receivables",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/reports/outstanding/receivables"
+                    }
+                },
+                {
+                    "name": "Outstanding Payables",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/reports/outstanding/payables"
+                    }
+                },
+                {
+                    "name": "Ledger Statement",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/reports/ledger/Cash?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "reports",
+                                "ledger",
+                                "Cash"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "GST",
+            "item": [
+                {
+                    "name": "GSTR-1 (Sales)",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/gst/gstr1?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "gst",
+                                "gstr1"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GSTR-2 (Purchases)",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/gst/gstr2?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "gst",
+                                "gstr2"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GSTR-3B Summary",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/gst/gstr3b?from=20230401&to=20250331",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "gst",
+                                "gstr3b"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20230401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20250331"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "E-Invoice Data",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/gst/e-invoice",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"voucherNumber\": \"1\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "E-Way Bill Data",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/gst/e-waybill",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"voucherNumber\": \"1\", \"vehicleNumber\": \"KA01AB1234\", \"transportMode\": \"Road\" }"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Payroll",
+            "item": [
+                {
+                    "name": "Get Employees",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/employees"
+                    }
+                },
+                {
+                    "name": "Create Employee",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/employees",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"John Doe\", \"designation\": \"Engineer\", \"dateOfJoining\": \"20240101\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Pay Heads",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{baseUrl}}/pay-heads"
+                    }
+                },
+                {
+                    "name": "Create Pay Head",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/pay-heads",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"name\": \"Basic Salary\", \"payType\": \"Earnings\" }"
+                        }
+                    }
+                },
+                {
+                    "name": "Get Attendance",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{baseUrl}}/attendance?from=20240401&to=20240430",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "attendance"
+                            ],
+                            "query": [
+                                {
+                                    "key": "from",
+                                    "value": "20240401"
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "20240430"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Record Attendance",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/attendance",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240415\", \"employee\": \"John Doe\", \"attendanceType\": \"Present\", \"value\": 1 }"
+                        }
+                    }
+                },
+                {
+                    "name": "Create Payroll Voucher",
+                    "request": {
+                        "method": "POST",
+                        "url": "{{baseUrl}}/payroll-vouchers",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{ \"date\": \"20240430\", \"employee\": \"John Doe\", \"narration\": \"April salary\", \"payHeadEntries\": [{ \"payHead\": \"Basic Salary\", \"amount\": 30000, \"isEarning\": true }, { \"payHead\": \"PF Deduction\", \"amount\": 1800, \"isEarning\": false }] }"
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}

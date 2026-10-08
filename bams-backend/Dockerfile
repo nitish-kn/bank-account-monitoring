@@ -16,5 +16,7 @@ COPY . .
 # 6. Expose the port the app runs on
 EXPOSE 8000
 
-# 7. Command to run your application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0"]
+# 7. On every start: apply new migrations, sync the permissions catalog and
+#    roles (all safe to re-run), then start the app. Any failure stops the
+#    container instead of running new code against an old schema.
+CMD ["sh", "-c", "alembic upgrade head && python -m app.scripts.seed_permissions && python -m app.scripts.backfill_org_super_admins && python -m app.scripts.backfill_role_view_permissions && exec uvicorn app.main:app --host 0.0.0.0"]

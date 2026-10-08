@@ -39,4 +39,6 @@ class Settings(BaseSettings):
     RUSTFS_BUCKET: str | None = None
     RUSTFS_REGION: str = "us-east-1"
 
+    TALLY_BRIDGE_URL: str = "http://127.0.0.1:5555"
+
 settings = Settings()

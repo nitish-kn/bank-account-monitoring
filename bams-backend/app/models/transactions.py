@@ -52,6 +52,9 @@ class Transactions(Base):
     optional_fields = Column(JSONB)
 
     sheets_synced_at = Column(DateTime(timezone=True), nullable=True)
+    tally_synced_at = Column(DateTime(timezone=True), nullable=True)
+    # What the voucher was created with: company, debit/credit ledgers, voucher type.
+    tally_voucher = Column(JSONB, nullable=True)
 
     is_flag = Column(Boolean, nullable=False, default=False, server_default="false")
 

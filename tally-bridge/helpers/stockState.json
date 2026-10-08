@@ -1,0 +1,3587 @@
+{
+  "ABS-BLACK-12000": {
+    "quantity": "457.000 kgs",
+    "rate": "60.00",
+    "value": "27420"
+  },
+  "ABS BLACK 12001": {
+    "quantity": "52.900 kgs",
+    "rate": "60.00",
+    "value": "3174"
+  },
+  "ABS-BLACK-14201": {
+    "quantity": "1.000 kgs",
+    "rate": "52.00",
+    "value": "52"
+  },
+  "ABS-GREY-17002": {
+    "quantity": "60.500 kgs",
+    "rate": "100.31",
+    "value": "6068.76"
+  },
+  "ABS-GREY-17010": {
+    "quantity": "450.500 kgs",
+    "rate": "4.31",
+    "value": "1941.66"
+  },
+  "ABS-GREY-17013": {
+    "quantity": "125.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "ABS-ORANGE-72002": {
+    "quantity": "85.000 kgs",
+    "rate": "40.00",
+    "value": "3400"
+  },
+  "ABS-RED-32002": {
+    "quantity": "15.800 kgs",
+    "rate": "60.00",
+    "value": "948"
+  },
+  "ABS-WHITE-22013": {
+    "quantity": "106.000 kgs",
+    "rate": "56.60",
+    "value": "6000"
+  },
+  "Additive-Anti Rodent-Lifeline": {
+    "quantity": "25.000 kgs",
+    "rate": "1338.46",
+    "value": "33461.54"
+  },
+  "Additive-Anti Static-Finastat 9500": {
+    "quantity": "50.000 kgs",
+    "rate": "168.00",
+    "value": "8400"
+  },
+  "Additive-AO-AO 1010": {
+    "quantity": "75.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "Additive-PE/PP-Dispersion-EBS": {
+    "quantity": "0.400 kgs",
+    "rate": "200.00",
+    "value": "80"
+  },
+  "Additives-AO-AO 168": {
+    "quantity": "86.000 kgs",
+    "rate": "11.24",
+    "value": "966.29"
+  },
+  "Additives-AO-AO B215/B225": {
+    "quantity": "311.680 kgs",
+    "rate": "432.95",
+    "value": "134943.07"
+  },
+  "Additives-Flame Retardants-ATO": {
+    "quantity": "0.500 kgs",
+    "rate": "2800.00",
+    "value": "1400"
+  },
+  "Additives-Flame Retardants-DBDPE": {
+    "quantity": "1.500 kgs",
+    "rate": "900.00",
+    "value": "1350"
+  },
+  "Additives-UV-UV 1370": {
+    "quantity": "989.920 kgs",
+    "rate": "5.82",
+    "value": "5757.27"
+  },
+  "Additives-UV-UV 622": {
+    "quantity": "172.000 kgs",
+    "rate": "220.19",
+    "value": "37872.41"
+  },
+  "Additives-UV-UV 944": {
+    "quantity": "193.000 kgs",
+    "rate": "335.18",
+    "value": "64688.99"
+  },
+  "ANTI RODENT ADV-0202": {
+    "quantity": "700.000 kgs",
+    "rate": "32.49",
+    "value": "22743"
+  },
+  "Carbon 1": {
+    "quantity": "100.000 kgs",
+    "rate": "120.00",
+    "value": "12000"
+  },
+  "Carbon-Carbon 1201": {
+    "quantity": "878.000 kgs",
+    "rate": "194.26",
+    "value": "170556"
+  },
+  "Carbon-Carbon 1201RG": {
+    "quantity": "105.000 kgs",
+    "rate": "222.00",
+    "value": "23310"
+  },
+  "Carbon-Carbon 220": {
+    "quantity": "25.000 kgs",
+    "rate": "120.75",
+    "value": "3018.75"
+  },
+  "Carbon-Carbon 330": {
+    "quantity": "750.000 kgs",
+    "rate": "90.00",
+    "value": "67500"
+  },
+  "Carbon-Carbon 339": {
+    "quantity": "2226.000 kgs",
+    "rate": "133.00",
+    "value": "296058"
+  },
+  "Carbon-Carbon  3501": {
+    "quantity": "0.550 kgs",
+    "rate": "95.00",
+    "value": "52.25"
+  },
+  "Carbon-Carbon  3701": {
+    "quantity": "230.000 kgs",
+    "rate": "95.00",
+    "value": "21850"
+  },
+  "Carbon-Carbon 660": {
+    "quantity": "3305.500 kgs",
+    "rate": "131.62",
+    "value": "435081.96"
+  },
+  "Carbon-Carbon 8225": {
+    "quantity": "8675.000 kgs",
+    "rate": "95.00",
+    "value": "824090.6"
+  },
+  "CMB": {
+    "quantity": "3915.402 kgs",
+    "rate": "89.48",
+    "value": "350333.88"
+  },
+  "COMPOUND-1": {
+    "quantity": "11786.180 kgs",
+    "rate": "40.28",
+    "value": "474747.33"
+  },
+  "COMPOUND-2": {
+    "quantity": "656.200 kgs",
+    "rate": "64.15",
+    "value": "42095.23"
+  },
+  "COMPOUND-3": {
+    "quantity": "5863.700 kgs",
+    "rate": "70.59",
+    "value": "413921.07"
+  },
+  "Compound-PP-Natural-SMPP055": {
+    "quantity": "25.000 kgs",
+    "rate": "100.00",
+    "value": "2500"
+  },
+  "DMB": {
+    "quantity": "184.790 kgs",
+    "rate": "27.06",
+    "value": "5000"
+  },
+  "EVA-BLACK-13021": {
+    "quantity": "2573.250 kgs",
+    "rate": "64.34",
+    "value": "165567"
+  },
+  "EVA-BLACK-13022": {
+    "quantity": "19.000 kgs",
+    "rate": "60.00",
+    "value": "1140"
+  },
+  "EVA-BLACK-13023": {
+    "quantity": "4338.700 kgs",
+    "rate": "49.00",
+    "value": "212610"
+  },
+  "EVA-BLACK-13024": {
+    "quantity": "126.000 kgs",
+    "rate": "83.02",
+    "value": "10460.52"
+  },
+  "EVA-BLACK-13026": {
+    "quantity": "209.000 kgs",
+    "rate": "30.00",
+    "value": "6270"
+  },
+  "EVA-BLUE-63005": {
+    "quantity": "0.400 kgs",
+    "rate": "88.00",
+    "value": "35.2"
+  },
+  "EVA-BROWN-93501": {
+    "quantity": "4.300 kgs",
+    "rate": "55.00",
+    "value": "236.5"
+  },
+  "EVA-GREEN-43502": {
+    "quantity": "2.500 kgs",
+    "rate": "88.00",
+    "value": "220"
+  },
+  "EVA-GREY-18003": {
+    "quantity": "183.000 kgs",
+    "rate": "26.00",
+    "value": "4758"
+  },
+  "EVA-GREY-18502": {
+    "quantity": "18.700 kgs",
+    "rate": null,
+    "value": null
+  },
+  "EVA-LAVENDER-83001": {
+    "quantity": "12.500 kgs",
+    "rate": "60.00",
+    "value": "750"
+  },
+  "EVA-ORANGE-72601": {
+    "quantity": "26.700 kgs",
+    "rate": "58.43",
+    "value": "1560.08"
+  },
+  "EVA-PINK-83501": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "EVA-RED-33007": {
+    "quantity": "6.000 kgs",
+    "rate": "55.00",
+    "value": "330"
+  },
+  "EVA-WHITE-23550": {
+    "quantity": "1.000 kgs",
+    "rate": "55.00",
+    "value": "55"
+  },
+  "EVA-YELLOW-53080": {
+    "quantity": "3.400 kgs",
+    "rate": "580.62",
+    "value": "1974.11"
+  },
+  "Fillers-Calcium-Coated-Cal PMC-5%": {
+    "quantity": "10906.633 kgs",
+    "rate": "11.76",
+    "value": "128222.74"
+  },
+  "Fillers-Calcium-UnCoated-Cal Vietnam": {
+    "quantity": "1969.500 kgs",
+    "rate": "12.99",
+    "value": "25584.81"
+  },
+  "Fillers-Talcum-Talc Rose": {
+    "quantity": "331.500 kgs",
+    "rate": "28.94",
+    "value": "9592.15"
+  },
+  "HIPS-GREY-17004": {
+    "quantity": "25.000 kgs",
+    "rate": "83.02",
+    "value": "2075.5"
+  },
+  "InProcess-Combo-CMB2": {
+    "quantity": "712.680 kgs",
+    "rate": "26.36",
+    "value": "18785.22"
+  },
+  "InProcess-Combo-CMB3": {
+    "quantity": "15.000 kgs",
+    "rate": "15.98",
+    "value": "239.7"
+  },
+  "InProcess-Combo-CMB4": {
+    "quantity": "58.080 kgs",
+    "rate": null,
+    "value": null
+  },
+  "InProcess-Combo-CMB5": {
+    "quantity": "506.850 kgs",
+    "rate": "9.47",
+    "value": "4799.44"
+  },
+  "InProcess-DMB-Red-DMB PR53:1-SD RD 507": {
+    "quantity": "21.600 kgs",
+    "rate": "42.00",
+    "value": "907.2"
+  },
+  "InProcess-DMB-Red-DMB PR57:1-SD RD 587": {
+    "quantity": "25.000 kgs",
+    "rate": "43.50",
+    "value": "1087.5"
+  },
+  "InProcess-DMB-Red-DMB PR57:1-SD RD 635": {
+    "quantity": "50.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "InProcess-DMB-Yellow-DMB YEL 114": {
+    "quantity": "15.000 kgs",
+    "rate": "47.87",
+    "value": "718.05"
+  },
+  "InProcess-DMB-Yellow-DMB YEL 13": {
+    "quantity": "10.000 kgs",
+    "rate": "55.05",
+    "value": "550.5"
+  },
+  "InProcess-DMB-Yellow-DMB YEL 143": {
+    "quantity": "215.000 kgs",
+    "rate": "47.50",
+    "value": "10212.5"
+  },
+  "Label-100X100": {
+    "quantity": "1000 PCS",
+    "rate": "0.49",
+    "value": "490"
+  },
+  "Packaging-Bag-Liner": {
+    "quantity": "184.120 kgs",
+    "rate": "105.81",
+    "value": "19482.3"
+  },
+  "Packaging-Empty Bags": {
+    "quantity": "14753.500 kgs",
+    "rate": "11.40",
+    "value": "168138.99"
+  },
+  "Packaging-Empty Bags (PCS)": {
+    "quantity": "199118 PCS",
+    "rate": "15.25",
+    "value": "3036936.45"
+  },
+  "PACKING MATERIAL ( KGS)": {
+    "quantity": "135.620 kgs",
+    "rate": "110.04",
+    "value": "14923.56"
+  },
+  "P- Black": {
+    "quantity": "1896.200 kgs",
+    "rate": "2.91",
+    "value": "5512.8"
+  },
+  "PE-ADDITIVE-Adv-101": {
+    "quantity": "75.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PE-ADDITIVE-ANTI RODENT-ADV-0201": {
+    "quantity": "6.500 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PE-ADDITIVE-BLACK-UV-10191": {
+    "quantity": "75.000 kgs",
+    "rate": "60.00",
+    "value": "4500"
+  },
+  "PE-ADDITIVE-HEATSTAB-ADV-0002": {
+    "quantity": "350.400 kgs",
+    "rate": "28.95",
+    "value": "10143.33"
+  },
+  "PE-ADDITIVE-TPTBLUE-6001": {
+    "quantity": "50.000 kgs",
+    "rate": "60.00",
+    "value": "3000"
+  },
+  "PE-ADDITIVE-UV-ADV-0003": {
+    "quantity": "1500.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PE-ADDITIVE-UV-ADV-001": {
+    "quantity": "120.000 kgs",
+    "rate": "60.00",
+    "value": "7200"
+  },
+  "PE-ADDITIVE-UV ADV-0023": {
+    "quantity": "170.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PE-ADDITIVE-WHITE-21036-ABS": {
+    "quantity": "25.000 kgs",
+    "rate": "83.02",
+    "value": "2075.5"
+  },
+  "PE-ANTIOX-MBADV-151": {
+    "quantity": "351.000 kgs",
+    "rate": "62.21",
+    "value": "21837.18"
+  },
+  "PE-BEIGE-90106": {
+    "quantity": "26.800 kgs",
+    "rate": "60.00",
+    "value": "1608"
+  },
+  "PE-BLACK-10003": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PE-BLACK-10014": {
+    "quantity": "165.300 kgs",
+    "rate": "60.00",
+    "value": "9918"
+  },
+  "PE-BLACK-10029": {
+    "quantity": "43.900 kgs",
+    "rate": "60.00",
+    "value": "2634"
+  },
+  "PE-BLACK-10030": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PE-BLACK-10040": {
+    "quantity": "322.400 kgs",
+    "rate": "32.08",
+    "value": "10344"
+  },
+  "PE-BLACK-10042": {
+    "quantity": "0.200 kgs",
+    "rate": "11493.70",
+    "value": "2298.74"
+  },
+  "PE-BLACK-10043": {
+    "quantity": "335.200 kgs",
+    "rate": "77.77",
+    "value": "26068.5"
+  },
+  "PE-BLACK-10046": {
+    "quantity": "561.100 kgs",
+    "rate": "85.17",
+    "value": "47791.3"
+  },
+  "PE-BLACK-10049": {
+    "quantity": "360.500 kgs",
+    "rate": "60.00",
+    "value": "21630"
+  },
+  "PE-BLACK-10051": {
+    "quantity": "5773.000 kgs",
+    "rate": "70.48",
+    "value": "406859.57"
+  },
+  "PE-BLACK-10052": {
+    "quantity": "22.800 kgs",
+    "rate": "118.63",
+    "value": "2704.76"
+  },
+  "PE-BLACK-10053": {
+    "quantity": "2722.800 kgs",
+    "rate": "64.92",
+    "value": "176759.13"
+  },
+  "PE-BLACK-10060": {
+    "quantity": "56.000 kgs",
+    "rate": "60.00",
+    "value": "3360"
+  },
+  "PE-BLACK-10061": {
+    "quantity": "35.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PE-BLACK-10062": {
+    "quantity": "75.000 kgs",
+    "rate": "83.02",
+    "value": "6226.5"
+  },
+  "PE-BLACK-10138": {
+    "quantity": "23.000 kgs",
+    "rate": "52.00",
+    "value": "1196"
+  },
+  "PE-BLACK-10139": {
+    "quantity": "395.500 kgs",
+    "rate": "60.00",
+    "value": "23730"
+  },
+  "PE-BLACK-10140": {
+    "quantity": "70.000 kgs",
+    "rate": "60.00",
+    "value": "4200"
+  },
+  "PE-BLACK -10141": {
+    "quantity": "147.800 kgs",
+    "rate": "60.00",
+    "value": "8868"
+  },
+  "PE-BLACK-10142": {
+    "quantity": "1832.200 kgs",
+    "rate": "135.32",
+    "value": "247933.3"
+  },
+  "PE-BLACK-10143": {
+    "quantity": "168.000 kgs",
+    "rate": "60.00",
+    "value": "10080"
+  },
+  "PE-BLACK-10144": {
+    "quantity": "8439.300 kgs",
+    "rate": "58.64",
+    "value": "494887.86"
+  },
+  "PE-BLACK-10146": {
+    "quantity": "38.000 kgs",
+    "rate": "60.00",
+    "value": "2280"
+  },
+  "PE-BLACK-10148": {
+    "quantity": "122.400 kgs",
+    "rate": "60.00",
+    "value": "7344"
+  },
+  "PE-BLACK-10164": {
+    "quantity": "925.000 kgs",
+    "rate": "60.80",
+    "value": "56239.57"
+  },
+  "PE-BLACK-10241": {
+    "quantity": "4525.000 kgs",
+    "rate": "60.83",
+    "value": "275267"
+  },
+  "PE-BLACK-10301": {
+    "quantity": "10.500 kgs",
+    "rate": "52.00",
+    "value": "546"
+  },
+  "PE-BLUE-60000": {
+    "quantity": "166.700 kgs",
+    "rate": "51.50",
+    "value": "8585.21"
+  },
+  "PE-BLUE-60007": {
+    "quantity": "9.800 kgs",
+    "rate": "60.00",
+    "value": "588"
+  },
+  "PE-BLUE-60013": {
+    "quantity": "41.500 kgs",
+    "rate": "60.00",
+    "value": "2490"
+  },
+  "PE-BLUE-60014": {
+    "quantity": "477.900 kgs",
+    "rate": "60.00",
+    "value": "28674"
+  },
+  "PE-BLUE-60025": {
+    "quantity": "150.000 kgs",
+    "rate": "83.02",
+    "value": "12453"
+  },
+  "PE-BLUE-60051": {
+    "quantity": "19.500 kgs",
+    "rate": "60.00",
+    "value": "1170"
+  },
+  "PE-BLUE-60057": {
+    "quantity": "4.600 kgs",
+    "rate": "384.21",
+    "value": "1767.37"
+  },
+  "PE-BLUE-60060": {
+    "quantity": "15.900 kgs",
+    "rate": "83.02",
+    "value": "1320.02"
+  },
+  "PE-BLUE-60065": {
+    "quantity": "35.900 kgs",
+    "rate": "88.00",
+    "value": "3159.2"
+  },
+  "PE-BLUE-60066": {
+    "quantity": "215.700 kgs",
+    "rate": "83.02",
+    "value": "17907.41"
+  },
+  "PE-BLUE-60067": {
+    "quantity": "905.500 kgs",
+    "rate": "316.07",
+    "value": "286205.26"
+  },
+  "PE-BLUE-60069": {
+    "quantity": "45.700 kgs",
+    "rate": "88.00",
+    "value": "4021.6"
+  },
+  "PE-BLUE-60094": {
+    "quantity": "15.000 kgs",
+    "rate": "82.00",
+    "value": "1230"
+  },
+  "PE-BLUE-60101": {
+    "quantity": "400.000 kgs",
+    "rate": "40.00",
+    "value": "16000"
+  },
+  "PE-BLUE-60103": {
+    "quantity": "123.000 kgs",
+    "rate": "83.02",
+    "value": "10211.46"
+  },
+  "PE-BLUE-60105": {
+    "quantity": "16.000 kgs",
+    "rate": "78.39",
+    "value": "1254.24"
+  },
+  "PE-BLUE-60119": {
+    "quantity": "361.500 kgs",
+    "rate": "83.25",
+    "value": "30096.28"
+  },
+  "PE-BLUE-60132": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PE-BLUE-60141": {
+    "quantity": "461.300 kgs",
+    "rate": "63.69",
+    "value": "29380.06"
+  },
+  "PE-BLUE-60144": {
+    "quantity": "15.300 kgs",
+    "rate": "83.02",
+    "value": "1270.21"
+  },
+  "PE-BLUE-60147": {
+    "quantity": "17.000 kgs",
+    "rate": "60.00",
+    "value": "1020"
+  },
+  "PE-BLUE-60152": {
+    "quantity": "87.300 kgs",
+    "rate": "83.02",
+    "value": "7247.65"
+  },
+  "PE-BLUE-60155": {
+    "quantity": "225.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PE-BLUE-60161": {
+    "quantity": "118.200 kgs",
+    "rate": "45.00",
+    "value": "5319"
+  },
+  "PE-BLUE-60165": {
+    "quantity": "590.700 kgs",
+    "rate": "58.59",
+    "value": "34609.11"
+  },
+  "PE-BLUE-60167": {
+    "quantity": "50.000 kgs",
+    "rate": "50.00",
+    "value": "2500"
+  },
+  "PE-BLUE-60186": {
+    "quantity": "2.700 kgs",
+    "rate": "70.00",
+    "value": "189"
+  },
+  "PE-BLUE-60196": {
+    "quantity": "339.500 kgs",
+    "rate": "60.00",
+    "value": "20370"
+  },
+  "PE-BLUE-60197": {
+    "quantity": "91.000 kgs",
+    "rate": "40.00",
+    "value": "3640"
+  },
+  "PE-BLUE-60198": {
+    "quantity": "44.700 kgs",
+    "rate": "78.79",
+    "value": "3521.91"
+  },
+  "PE-BLUE-60199": {
+    "quantity": "7.300 kgs",
+    "rate": "60.00",
+    "value": "438"
+  },
+  "PE-BLUE-60201": {
+    "quantity": "160.000 kgs",
+    "rate": "51.33",
+    "value": "8212.8"
+  },
+  "PE-BROWN-90000": {
+    "quantity": "290.000 kgs",
+    "rate": "49.85",
+    "value": "14456"
+  },
+  "PE-BROWN-90011": {
+    "quantity": "44.800 kgs",
+    "rate": "42.28",
+    "value": "1894.14"
+  },
+  "PE-BROWN-90020": {
+    "quantity": "1.800 kgs",
+    "rate": "88.00",
+    "value": "158.4"
+  },
+  "PE-BROWN-90023": {
+    "quantity": "799.900 kgs",
+    "rate": "81.14",
+    "value": "64903.89"
+  },
+  "PE-BROWN-90025": {
+    "quantity": "785.200 kgs",
+    "rate": "50.00",
+    "value": "39260"
+  },
+  "PE-BROWN-90067": {
+    "quantity": "13.900 kgs",
+    "rate": "52.00",
+    "value": "722.8"
+  },
+  "PE-BROWN-90124": {
+    "quantity": "-90.000 kgs",
+    "rate": "52.00",
+    "value": "4680"
+  },
+  "PE-CREAMWHITE -20701": {
+    "quantity": "74.500 kgs",
+    "rate": "60.00",
+    "value": "4470"
+  },
+  "PE-FILLER-0054": {
+    "quantity": "3.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PE-GREEN-40000": {
+    "quantity": "347.000 kgs",
+    "rate": "128.01",
+    "value": "44420.48"
+  },
+  "PE-GREEN-40004": {
+    "quantity": "1.200 kgs",
+    "rate": "35.00",
+    "value": "42"
+  },
+  "PE-GREEN-40011": {
+    "quantity": "161.100 kgs",
+    "rate": "10.62",
+    "value": "1710.87"
+  },
+  "PE-GREEN-40025": {
+    "quantity": "700.000 kgs",
+    "rate": "60.00",
+    "value": "42000"
+  },
+  "PE-GREEN-40034": {
+    "quantity": "128.600 kgs",
+    "rate": "34.00",
+    "value": "4372.4"
+  },
+  "PE-GREEN-40038": {
+    "quantity": "238.000 kgs",
+    "rate": "60.00",
+    "value": "14280"
+  },
+  "PE-GREEN-40040": {
+    "quantity": "15.500 kgs",
+    "rate": "99.00",
+    "value": "1534.5"
+  },
+  "PE-GREEN-40084": {
+    "quantity": "11.600 kgs",
+    "rate": "85.00",
+    "value": "986"
+  },
+  "PE-GREEN-40094": {
+    "quantity": "1167.000 kgs",
+    "rate": "66.46",
+    "value": "77558.82"
+  },
+  "PE-GREEN-40095": {
+    "quantity": "69.500 kgs",
+    "rate": "190.00",
+    "value": "13205"
+  },
+  "PE-GREEN-40112": {
+    "quantity": "194.400 kgs",
+    "rate": "84.36",
+    "value": "16399.58"
+  },
+  "PE-GREEN-40125": {
+    "quantity": "24.500 kgs",
+    "rate": "70.00",
+    "value": "1715"
+  },
+  "PE-GREEN-40131": {
+    "quantity": "427.000 kgs",
+    "rate": "190.00",
+    "value": "81130"
+  },
+  "PE-GREEN-40134": {
+    "quantity": "3.200 kgs",
+    "rate": "60.00",
+    "value": "192"
+  },
+  "PE-GREEN-40135": {
+    "quantity": "647.000 kgs",
+    "rate": "95.00",
+    "value": "61465"
+  },
+  "PE-GREEN-40143": {
+    "quantity": "60.000 kgs",
+    "rate": "55.72",
+    "value": "3343.2"
+  },
+  "PE-GREEN-40146": {
+    "quantity": "10.600 kgs",
+    "rate": "55.00",
+    "value": "583"
+  },
+  "PE-GREEN-40150": {
+    "quantity": "99.200 kgs",
+    "rate": "65.00",
+    "value": "6448"
+  },
+  "PE-GREEN-40156": {
+    "quantity": "150.000 kgs",
+    "rate": "65.00",
+    "value": "9750"
+  },
+  "PE-GREEN-40169": {
+    "quantity": "34.000 kgs",
+    "rate": "40.00",
+    "value": "1360"
+  },
+  "PE-GREEN-40176": {
+    "quantity": "50.000 kgs",
+    "rate": "35.00",
+    "value": "1750"
+  },
+  "PE-GREEN-MT4005": {
+    "quantity": "41.000 kgs",
+    "rate": "20.00",
+    "value": "820"
+  },
+  "PE-GREY-15000": {
+    "quantity": "108.000 kgs",
+    "rate": "60.00",
+    "value": "6480"
+  },
+  "PE-GREY-15018": {
+    "quantity": "16.000 kgs",
+    "rate": "30.00",
+    "value": "480"
+  },
+  "PE-GREY-15048": {
+    "quantity": "113.000 kgs",
+    "rate": "84.20",
+    "value": "9514.6"
+  },
+  "PE-GREY-15062": {
+    "quantity": "151.500 kgs",
+    "rate": "83.02",
+    "value": "12577.53"
+  },
+  "PE-GREY-15064": {
+    "quantity": "798.500 kgs",
+    "rate": "60.00",
+    "value": "47910"
+  },
+  "PE-GREY-15070": {
+    "quantity": "45.000 kgs",
+    "rate": "83.02",
+    "value": "3735.9"
+  },
+  "PE-GREY-15071": {
+    "quantity": "185.900 kgs",
+    "rate": "58.16",
+    "value": "10811.94"
+  },
+  "PE-GREY-15081": {
+    "quantity": "138.000 kgs",
+    "rate": "33.30",
+    "value": "4594.86"
+  },
+  "PE-GREY-15082": {
+    "quantity": "374.500 kgs",
+    "rate": "34.52",
+    "value": "12927.74"
+  },
+  "PE-GREY-15083": {
+    "quantity": "358.900 kgs",
+    "rate": "45.24",
+    "value": "16235.45"
+  },
+  "PE-GREY-17007": {
+    "quantity": "118.900 kgs",
+    "rate": "83.02",
+    "value": "9871.08"
+  },
+  "PE-GREY-17013": {
+    "quantity": "125.000 kgs",
+    "rate": "60.00",
+    "value": "7500"
+  },
+  "PE-IVORY-80006": {
+    "quantity": "139.500 kgs",
+    "rate": "83.02",
+    "value": "11581.29"
+  },
+  "PE-Metallic-Gold-14046": {
+    "quantity": "65.400 kgs",
+    "rate": "60.00",
+    "value": "3924"
+  },
+  "PE-Metallic-Green-14005": {
+    "quantity": "181.000 kgs",
+    "rate": "52.00",
+    "value": "9412"
+  },
+  "PE-Metallic-Pink-14003": {
+    "quantity": "171.000 kgs",
+    "rate": "52.00",
+    "value": "8892"
+  },
+  "PE-ORANGE-70017": {
+    "quantity": "112.900 kgs",
+    "rate": "73.25",
+    "value": "8270.2"
+  },
+  "PE-ORANGE-70096": {
+    "quantity": "325.000 kgs",
+    "rate": "60.00",
+    "value": "19500"
+  },
+  "PE-ORANGE-72004": {
+    "quantity": "8.500 kgs",
+    "rate": "60.00",
+    "value": "510"
+  },
+  "PE-PEARLBLUE-60091": {
+    "quantity": "46.000 kgs",
+    "rate": "52.00",
+    "value": "2392"
+  },
+  "PE-PINK-85006": {
+    "quantity": "113.600 kgs",
+    "rate": "60.00",
+    "value": "6816"
+  },
+  "PE-PINK-85009": {
+    "quantity": "36.300 kgs",
+    "rate": "60.00",
+    "value": "2178"
+  },
+  "PE-PINK-85014": {
+    "quantity": "70.000 kgs",
+    "rate": "30.00",
+    "value": "2100"
+  },
+  "PE-PINK-85037": {
+    "quantity": "650.000 kgs",
+    "rate": "52.00",
+    "value": "33800"
+  },
+  "PE-PINK-85048": {
+    "quantity": "184.000 kgs",
+    "rate": "85.00",
+    "value": "15640"
+  },
+  "PE-PINK-FL-85039": {
+    "quantity": "122.300 kgs",
+    "rate": "88.13",
+    "value": "10778.3"
+  },
+  "PE-PINK-FL-85055": {
+    "quantity": "22.000 kgs",
+    "rate": "60.00",
+    "value": "1320"
+  },
+  "PE-RED-30013": {
+    "quantity": "367.800 kgs",
+    "rate": "58.00",
+    "value": "21333.16"
+  },
+  "PE-RED-30071": {
+    "quantity": "126.000 kgs",
+    "rate": "55.00",
+    "value": "6930"
+  },
+  "PE-RED-30114": {
+    "quantity": "0.700 kgs",
+    "rate": "60.00",
+    "value": "42"
+  },
+  "PE-RED-30136": {
+    "quantity": "247.000 kgs",
+    "rate": "0.42",
+    "value": "103.73"
+  },
+  "PE-RED-30137": {
+    "quantity": "9.300 kgs",
+    "rate": "60.00",
+    "value": "558"
+  },
+  "PET-BEIGE-94501": {
+    "quantity": "14.000 kgs",
+    "rate": "46.13",
+    "value": "645.82"
+  },
+  "PET-Black-12401": {
+    "quantity": "276.500 kgs",
+    "rate": "60.00",
+    "value": "16590"
+  },
+  "PET-RED-34001": {
+    "quantity": "56.400 kgs",
+    "rate": "59.48",
+    "value": "3354.78"
+  },
+  "PET-RED-34010": {
+    "quantity": "106.200 kgs",
+    "rate": "52.00",
+    "value": "5522.4"
+  },
+  "PE-Universal-Anti Rodent-ADV-0230": {
+    "quantity": "28.000 kgs",
+    "rate": "60.00",
+    "value": "1680"
+  },
+  "PE-VIOLET-80015": {
+    "quantity": "631.100 kgs",
+    "rate": "52.21",
+    "value": "32951.1"
+  },
+  "PE-VOILET-80000": {
+    "quantity": "98.000 kgs",
+    "rate": "60.00",
+    "value": "5880"
+  },
+  "PE-VOILET-80008": {
+    "quantity": "24.500 kgs",
+    "rate": "31.00",
+    "value": "759.5"
+  },
+  "PE-WHITE-20000": {
+    "quantity": "525.000 kgs",
+    "rate": "52.00",
+    "value": "27300"
+  },
+  "PE-WHITE-20014": {
+    "quantity": "2250.000 kgs",
+    "rate": "41.39",
+    "value": "93136.5"
+  },
+  "PE-WHITE-20037": {
+    "quantity": "4.500 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PE-WHITE-20043": {
+    "quantity": "37.000 kgs",
+    "rate": "99.00",
+    "value": "3663"
+  },
+  "PE-WHITE-20049": {
+    "quantity": "100.000 kgs",
+    "rate": "52.00",
+    "value": "5200"
+  },
+  "PE-WHITE-20110": {
+    "quantity": "36.000 kgs",
+    "rate": "66.97",
+    "value": "2410.92"
+  },
+  "PE-WHITE-20126": {
+    "quantity": "300.000 kgs",
+    "rate": "83.03",
+    "value": "24909"
+  },
+  "PE-WHITE-20151": {
+    "quantity": "142.900 kgs",
+    "rate": "60.00",
+    "value": "8574"
+  },
+  "PE-WHITE-20199": {
+    "quantity": "158.000 kgs",
+    "rate": "96.91",
+    "value": "15311"
+  },
+  "PE-WHITE-20203": {
+    "quantity": "9.800 kgs",
+    "rate": "56.00",
+    "value": "548.8"
+  },
+  "PE-WHITE-20208": {
+    "quantity": "3022.900 kgs",
+    "rate": "61.15",
+    "value": "184861.72"
+  },
+  "PE-WHITE-20209": {
+    "quantity": "100.000 kgs",
+    "rate": "18.87",
+    "value": "1887"
+  },
+  "PE-WHITE-20210": {
+    "quantity": "629.000 kgs",
+    "rate": "60.00",
+    "value": "37740"
+  },
+  "PE-WHITE-20211": {
+    "quantity": "37.200 kgs",
+    "rate": "60.00",
+    "value": "2232"
+  },
+  "PE-WHITE-20213": {
+    "quantity": "611.000 kgs",
+    "rate": "67.18",
+    "value": "41046.98"
+  },
+  "PE-WHITE-20370": {
+    "quantity": "31.200 kgs",
+    "rate": "66.00",
+    "value": "2059.2"
+  },
+  "PE-WHITE-20411": {
+    "quantity": "70.500 kgs",
+    "rate": "60.00",
+    "value": "4230"
+  },
+  "PE-WHITE-20412": {
+    "quantity": "24.000 kgs",
+    "rate": "35.00",
+    "value": "840"
+  },
+  "PE-YELLOW-50000": {
+    "quantity": "30.000 kgs",
+    "rate": "165.00",
+    "value": "4950"
+  },
+  "PE-YELLOW-50004": {
+    "quantity": "3.200 kgs",
+    "rate": "60.00",
+    "value": "192"
+  },
+  "PE-YELLOW-50014": {
+    "quantity": "75.000 kgs",
+    "rate": "60.00",
+    "value": "4500"
+  },
+  "PE-YELLOW-50015": {
+    "quantity": "26.000 kgs",
+    "rate": "60.00",
+    "value": "1560"
+  },
+  "PE-YELLOW-50028": {
+    "quantity": "1027.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PE-YELLOW-50035": {
+    "quantity": "44.500 kgs",
+    "rate": "83.02",
+    "value": "3694.39"
+  },
+  "PE-YELLOW-50124": {
+    "quantity": "1045.500 kgs",
+    "rate": "76.50",
+    "value": "79979.87"
+  },
+  "PE-YELLOW-50126": {
+    "quantity": "246.900 kgs",
+    "rate": "32.05",
+    "value": "7913.15"
+  },
+  "PE-YELLOW-50127": {
+    "quantity": "1.500 kgs",
+    "rate": "60.00",
+    "value": "90"
+  },
+  "PE-YELLOW-50129": {
+    "quantity": "525.000 kgs",
+    "rate": "83.02",
+    "value": "43585.5"
+  },
+  "PE-YELLOW-50131": {
+    "quantity": "178.700 kgs",
+    "rate": "60.00",
+    "value": "10722"
+  },
+  "PE-YELLOW-50132": {
+    "quantity": "539.500 kgs",
+    "rate": "79.10",
+    "value": "42674.45"
+  },
+  "PE-YELLOW-50133": {
+    "quantity": "57.300 kgs",
+    "rate": "60.00",
+    "value": "3438"
+  },
+  "PE-YELLOW-50136": {
+    "quantity": "325.000 kgs",
+    "rate": "60.00",
+    "value": "19500"
+  },
+  "PE-YELLOW-50154": {
+    "quantity": "29.000 kgs",
+    "rate": "160.00",
+    "value": "4640"
+  },
+  "PE-YELLOW-50158": {
+    "quantity": "2.500 kgs",
+    "rate": "185.00",
+    "value": "462.5"
+  },
+  "PE-YELLOW-50168": {
+    "quantity": "15.500 kgs",
+    "rate": "77.08",
+    "value": "1194.73"
+  },
+  "PE-YELLOW-50175": {
+    "quantity": "117.000 kgs",
+    "rate": "82.02",
+    "value": "9596.34"
+  },
+  "PE-YELLOW-50180": {
+    "quantity": "38.200 kgs",
+    "rate": "60.00",
+    "value": "2292"
+  },
+  "PE-YELLOW-50200": {
+    "quantity": "100.000 kgs",
+    "rate": "83.02",
+    "value": "8302"
+  },
+  "PE-YELLOW-50206": {
+    "quantity": "512.700 kgs",
+    "rate": "57.66",
+    "value": "29562"
+  },
+  "PE-YELLOW-50207": {
+    "quantity": "0.100 kgs",
+    "rate": "52.00",
+    "value": "5.2"
+  },
+  "Pigment-Black-CC BKT 4601": {
+    "quantity": "25.000 kgs",
+    "rate": "330.00",
+    "value": "8250"
+  },
+  "Pigment-Black-CC BKT 4751": {
+    "quantity": "40.000 kgs",
+    "rate": "145.00",
+    "value": "5800"
+  },
+  "Pigment-Black-CC�BKT�3701": {
+    "quantity": "20.000 kgs",
+    "rate": "390.00",
+    "value": "7800"
+  },
+  "Pigment-Blue-PB15:1-MZD BU": {
+    "quantity": "25.000 kgs",
+    "rate": "705.00",
+    "value": "17625"
+  },
+  "Pigment-Blue-PB15:1-SD BU 2749": {
+    "quantity": "888.300 kgs",
+    "rate": "745.09",
+    "value": "661860.28"
+  },
+  "Pigment-Blue-PB15-SD BU2633": {
+    "quantity": "597.700 kgs",
+    "rate": "692.04",
+    "value": "413631.36"
+  },
+  "Pigment-Blue-PB29-TR UMB": {
+    "quantity": "374.550 kgs",
+    "rate": "129.20",
+    "value": "48392.5"
+  },
+  "Pigment-Dyes-Dhani": {
+    "quantity": "20.600 kgs",
+    "rate": "5792.04",
+    "value": "119315.95"
+  },
+  "Pigment-Dyes-Rhodamine": {
+    "quantity": "1.300 kgs",
+    "rate": "220.00",
+    "value": "286"
+  },
+  "Pigment-Dyes-Solvent Red 135": {
+    "quantity": "305.000 kgs",
+    "rate": "959.94",
+    "value": "292781.6"
+  },
+  "Pigment-Flourescent-Green-RD Green (S3) Sr Conc- BN": {
+    "quantity": "10.000 kgs",
+    "rate": "552.05",
+    "value": "5520.53"
+  },
+  "Pigment-Flourescent-Orange-RD Golden (S) SR Conc-BN": {
+    "quantity": "10.000 kgs",
+    "rate": "60.00",
+    "value": "600"
+  },
+  "Pigment-Flourescent-Orange-RD Super Orange (R.)": {
+    "quantity": "75.000 kgs",
+    "rate": "405.00",
+    "value": "30375"
+  },
+  "Pigment-Flourescent-Pink-RD Magenta B (Pl)": {
+    "quantity": "53.500 kgs",
+    "rate": "404.70",
+    "value": "21651.21"
+  },
+  "Pigment-Flourescent-Pink-RD Pink 2R": {
+    "quantity": "3.500 kgs",
+    "rate": "368.60",
+    "value": "1290.1"
+  },
+  "Pigment-Flourescent-Pink-RD Pink 5B (Pl)": {
+    "quantity": "25.000 kgs",
+    "rate": "357.20",
+    "value": "8930"
+  },
+  "Pigment-Flourescent-Red-RD Fire Red": {
+    "quantity": "13.000 kgs",
+    "rate": "437.00",
+    "value": "5681"
+  },
+  "Pigment-Flourescent-Yellow-DV Fl Chrome 2103": {
+    "quantity": "80.000 kgs",
+    "rate": "470.00",
+    "value": "37600"
+  },
+  "Pigment-Flourescent-Yellow-DV Fl Yellow 2101": {
+    "quantity": "100.000 kgs",
+    "rate": "430.00",
+    "value": "43000"
+  },
+  "Pigment-Flourescent-Yellow-RD Brill Yellow (Pl)": {
+    "quantity": "20.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "Pigment-Flourescent-Yellow-RD Golden Yellow 2Y": {
+    "quantity": "1.500 kgs",
+    "rate": "418.00",
+    "value": "627"
+  },
+  "Pigment-Flourescent-Yellow-RD M Yellow (Sr Conc)- BN": {
+    "quantity": "15.000 kgs",
+    "rate": "504.00",
+    "value": "7560"
+  },
+  "Pigment-Green-PG7-MG GR": {
+    "quantity": "583.200 kgs",
+    "rate": "626.56",
+    "value": "365409.08"
+  },
+  "Pigment-Orange-PO13-SD OR203": {
+    "quantity": "184.700 kgs",
+    "rate": "698.05",
+    "value": "128929.78"
+  },
+  "Pigment-Orange-PO34-SD OR212": {
+    "quantity": "270.000 kgs",
+    "rate": "1125.00",
+    "value": "303750"
+  },
+  "Pigment-Orange-PO64-SD OR2917": {
+    "quantity": "44.000 kgs",
+    "rate": "2525.85",
+    "value": "111137.4"
+  },
+  "Pigment-Orange-PR104-SD OR1475": {
+    "quantity": "90.000 kgs",
+    "rate": "493.34",
+    "value": "44400.76"
+  },
+  "Pigment-Oxides-PR101-TT RW RD T446 Oxide": {
+    "quantity": "1350.000 kgs",
+    "rate": "104.07",
+    "value": "140500"
+  },
+  "Pigment-Pearls-Aluminium Paste-7535(Silver) Rv": {
+    "quantity": "7.500 kgs",
+    "rate": "373.19",
+    "value": "2798.93"
+  },
+  "Pigment-Pearls-Pearl Brown 4964": {
+    "quantity": "6.000 kgs",
+    "rate": "530.00",
+    "value": "3180"
+  },
+  "Pigment-Pearls-Pearl Golden 4199": {
+    "quantity": "1.000 kgs",
+    "rate": "606.00",
+    "value": "606"
+  },
+  "Pigment-Pearls-Pearl White 4192/1000": {
+    "quantity": "57.200 kgs",
+    "rate": "376.77",
+    "value": "21551.31"
+  },
+  "Pigment-Red-PR122-SD RD 2991": {
+    "quantity": "20.000 kgs",
+    "rate": "2950.00",
+    "value": "59000"
+  },
+  "Pigment-Red-PR170-SD RD 2963": {
+    "quantity": "65.200 kgs",
+    "rate": "864.98",
+    "value": "56396.49"
+  },
+  "Pigment-Red-PR170-SD RD 2967": {
+    "quantity": "61.000 kgs",
+    "rate": "883.84",
+    "value": "53914.4"
+  },
+  "Pigment-Red-PR254-SD RD 2957": {
+    "quantity": "26.000 kgs",
+    "rate": "1400.00",
+    "value": "36400"
+  },
+  "Pigment-Red-PR48:2-SD RD 565": {
+    "quantity": "190.000 kgs",
+    "rate": "539.85",
+    "value": "102571.5"
+  },
+  "Pigment-Red-PR48:3-SD RD 570": {
+    "quantity": "26.700 kgs",
+    "rate": "718.86",
+    "value": "19193.5"
+  },
+  "Pigment-Red-PR53:1-SD RD 5016": {
+    "quantity": "30.000 kgs",
+    "rate": "620.00",
+    "value": "18600"
+  },
+  "Pigment-Red-PR53:1-SD RD 507": {
+    "quantity": "1950.800 kgs",
+    "rate": "470.54",
+    "value": "917933.93"
+  },
+  "Pigment-Red-PR57:1-SD RD 587": {
+    "quantity": "30.000 kgs",
+    "rate": "503.80",
+    "value": "15113.85"
+  },
+  "Pigment-Red-PR57:1-SD RD 635": {
+    "quantity": "30.000 kgs",
+    "rate": "620.00",
+    "value": "18600"
+  },
+  "Pigment-Violet-PV23- PD VLKBLB": {
+    "quantity": "13.000 kgs",
+    "rate": "3411.86",
+    "value": "44354.16"
+  },
+  "Pigment-Violet-PV23- PD VLKBLR": {
+    "quantity": "16.000 kgs",
+    "rate": "3081.94",
+    "value": "49311.03"
+  },
+  "Pigment-Violet-PV23- SD VL2945": {
+    "quantity": "27.000 kgs",
+    "rate": "3046.27",
+    "value": "82249.31"
+  },
+  "Pigment-White-Anatese-TiO2 SilverStar B101": {
+    "quantity": "350.000 kgs",
+    "rate": "181.17",
+    "value": "63409.5"
+  },
+  "Pigment-White-Fillers-BASO4": {
+    "quantity": "210.000 kgs",
+    "rate": "50.83",
+    "value": "10674.3"
+  },
+  "Pigment-White-Optical Brightner-OB-1": {
+    "quantity": "10.000 kgs",
+    "rate": "932.50",
+    "value": "9325"
+  },
+  "Pigment-White-Optical Brightner-OB-2": {
+    "quantity": "16.000 kgs",
+    "rate": "2000.00",
+    "value": "32000"
+  },
+  "Pigment-White-Optical Brightner-OB WHITE": {
+    "quantity": "28.000 kgs",
+    "rate": "2230.00",
+    "value": "62440"
+  },
+  "Pigment-White-Rutile-TiO2 Lomon LR108": {
+    "quantity": "2449.000 kgs",
+    "rate": "274.00",
+    "value": "671026"
+  },
+  "Pigment-White-Rutile-TiO2 Lomon LR886": {
+    "quantity": "25.000 kgs",
+    "rate": "232.00",
+    "value": "5800"
+  },
+  "Pigment-White-Rutile-TiO2 YBY 666": {
+    "quantity": "18425.000 kgs",
+    "rate": "218.62",
+    "value": "4028018.25"
+  },
+  "Pigment-Yellow-PY12- SD YL 143": {
+    "quantity": "150.800 kgs",
+    "rate": "435.00",
+    "value": "65598"
+  },
+  "Pigment-Yellow-PY12- SD YL 150": {
+    "quantity": "40.000 kgs",
+    "rate": "515.00",
+    "value": "20600"
+  },
+  "Pigment-Yellow-PY13- SD YL 165": {
+    "quantity": "628.300 kgs",
+    "rate": "621.12",
+    "value": "390250.38"
+  },
+  "Pigment-Yellow-PY191- SD YL 132": {
+    "quantity": "248.300 kgs",
+    "rate": "755.14",
+    "value": "187500.5"
+  },
+  "Pigment-Yellow-PY34- SD YL 1222": {
+    "quantity": "616.300 kgs",
+    "rate": "313.30",
+    "value": "193087.33"
+  },
+  "Pigment-Yellow-PY34- SD YL 1322": {
+    "quantity": "1539.500 kgs",
+    "rate": "305.64",
+    "value": "470533.8"
+  },
+  "Pigment-Yellow-PY62- SD YL 113/114": {
+    "quantity": "30.000 kgs",
+    "rate": "630.00",
+    "value": "18900"
+  },
+  "Plasticizer-Primary-DBP": {
+    "quantity": "492.600 kgs",
+    "rate": "159.85",
+    "value": "78743.63"
+  },
+  "Plasticizer-Primary-DOTP": {
+    "quantity": "2153.380 kgs",
+    "rate": "148.68",
+    "value": "320173.33"
+  },
+  "Plasticizer-Primary-TOTM": {
+    "quantity": "175.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "Plasticizer-Secondary-CPW 1300": {
+    "quantity": "106.000 kgs",
+    "rate": "61.00",
+    "value": "6466"
+  },
+  "Plasticizer-Secondary-CPW 1400": {
+    "quantity": "1660.000 kgs",
+    "rate": "68.50",
+    "value": "113710"
+  },
+  "Plasticizer-TERITARY-M-150": {
+    "quantity": "200.000 kgs",
+    "rate": "103.53",
+    "value": "20706"
+  },
+  "Plasticizer-Tertiary-Epoxy": {
+    "quantity": "4.000 kgs",
+    "rate": "146.00",
+    "value": "584"
+  },
+  "Plasticizer-Tertiary-Fynol 40": {
+    "quantity": "150.000 kgs",
+    "rate": "175.00",
+    "value": "26250"
+  },
+  "Plasticizer-Tertiary-Tin Oil": {
+    "quantity": "2.300 kgs",
+    "rate": "60.00",
+    "value": "138"
+  },
+  "Plasticizer-Tertiary-Vintrol Oil W245": {
+    "quantity": "597.000 kgs",
+    "rate": "154.30",
+    "value": "92115"
+  },
+  "Polymer 1": {
+    "quantity": "45890.000 kgs",
+    "rate": "84.90",
+    "value": "3896260"
+  },
+  "Polymer-ABS920": {
+    "quantity": "25.000 kgs",
+    "rate": "175.00",
+    "value": "4375"
+  },
+  "Polymer-EVA-EVA18": {
+    "quantity": "57.300 kgs",
+    "rate": "142.66",
+    "value": "8174.49"
+  },
+  "Polymer-EVA-EVA28": {
+    "quantity": "126.800 kgs",
+    "rate": "170.00",
+    "value": "21556"
+  },
+  "Polymer-EVA-EVA OG": {
+    "quantity": "3992.000 kgs",
+    "rate": "82.97",
+    "value": "331227.6"
+  },
+  "Polymer-GPPS-GPPS 06MFI": {
+    "quantity": "426.500 kgs",
+    "rate": "141.38",
+    "value": "60297.09"
+  },
+  "Polymer-HDPE-HD 20MFI": {
+    "quantity": "4295.000 kgs",
+    "rate": "134.98",
+    "value": "579735.05"
+  },
+  "Polymer-LDPE-LD 30MFI 16MA400": {
+    "quantity": "784.000 kgs",
+    "rate": "123.27",
+    "value": "96644.15"
+  },
+  "Polymer-LDPE-LD 4MFI 24FS040": {
+    "quantity": "1575.000 kgs",
+    "rate": "129.41",
+    "value": "203825"
+  },
+  "Polymer-LLDPE-LL 50MFI": {
+    "quantity": "1465.250 kgs",
+    "rate": "152.93",
+    "value": "224084.53"
+  },
+  "Polymer-LLDPE-LL 50MFI 26500 Reliance": {
+    "quantity": "24.000 kgs",
+    "rate": "60.00",
+    "value": "1440"
+  },
+  "Polymer-LLDPE-LL 50MFI OG": {
+    "quantity": "602.800 kgs",
+    "rate": "73.67",
+    "value": "44410.83"
+  },
+  "Polymer-Pet-Wankai Wk801": {
+    "quantity": "2275.000 kgs",
+    "rate": "102.46",
+    "value": "233099.71"
+  },
+  "Polymer-PP-Injection-PP 11MFI H110MA": {
+    "quantity": "800.000 kgs",
+    "rate": "120.38",
+    "value": "96300"
+  },
+  "Polymer-PP-Injection-PP 70MFI B650MN": {
+    "quantity": "365.000 kgs",
+    "rate": "140.00",
+    "value": "51100"
+  },
+  "Polymer-PP-Perfomance Polymer-Vistamaxx 6202": {
+    "quantity": "349.300 kgs",
+    "rate": "200.48",
+    "value": "70026.27"
+  },
+  "Polymer-PP-SRM100NC": {
+    "quantity": "25.000 kgs",
+    "rate": "154.00",
+    "value": "3850"
+  },
+  "Polymer-PVC-PVC K67": {
+    "quantity": "6226.490 kgs",
+    "rate": "86.93",
+    "value": "541291.92"
+  },
+  "Polymer-PVC-PVC K70": {
+    "quantity": "550.000 kgs",
+    "rate": "84.98",
+    "value": "46739"
+  },
+  "Polymer-SAN-SAN 24MFI": {
+    "quantity": "134.400 kgs",
+    "rate": "192.48",
+    "value": "25869.95"
+  },
+  "PPA 1": {
+    "quantity": "6453.800 kgs",
+    "rate": "450.63",
+    "value": "2908267.8"
+  },
+  "PPA-Common-Waxes-DT500": {
+    "quantity": "487.800 kgs",
+    "rate": "242.62",
+    "value": "118352.19"
+  },
+  "PPA-Common-Waxes-LicoWax PE520": {
+    "quantity": "367.330 kgs",
+    "rate": "211.07",
+    "value": "77531.89"
+  },
+  "PPA-PE-Oils-Residue Wax": {
+    "quantity": "783.200 kgs",
+    "rate": "128.55",
+    "value": "100681.57"
+  },
+  "PPA-PE-Waxes-Finalux G-1812": {
+    "quantity": "72.000 kgs",
+    "rate": "345.83",
+    "value": "24899.85"
+  },
+  "PPA-PE-Waxes-Finawax C": {
+    "quantity": "358.000 kgs",
+    "rate": "220.81",
+    "value": "79049.35"
+  },
+  "PPA-PE-Waxes-Finawax E": {
+    "quantity": "323.200 kgs",
+    "rate": "580.12",
+    "value": "187494.37"
+  },
+  "PPA-PE-Waxes-Finawax O": {
+    "quantity": "166.350 kgs",
+    "rate": "374.30",
+    "value": "62265.12"
+  },
+  "PPA-PE-Waxes-Flakes Wax": {
+    "quantity": "267.500 kgs",
+    "rate": "165.34",
+    "value": "44227.95"
+  },
+  "PPA-PE-Waxes-Plastaid 440": {
+    "quantity": "40.000 kgs",
+    "rate": "325.00",
+    "value": "13000"
+  },
+  "PPA-PE-Waxes-Plastaid DA75": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PPA-PE-Waxes-Plastaid PYN": {
+    "quantity": "52.500 kgs",
+    "rate": "408.42",
+    "value": "21442.05"
+  },
+  "PPA-PE-Waxes-Zinc Stearate": {
+    "quantity": "839.590 kgs",
+    "rate": "151.95",
+    "value": "127577.69"
+  },
+  "PPA-PVC-Stabilizers-Bis Phenol": {
+    "quantity": "16.000 kgs",
+    "rate": "66.08",
+    "value": "1057.26"
+  },
+  "PPA-PVC-Stabilizers-CPE": {
+    "quantity": "681.500 kgs",
+    "rate": "132.88",
+    "value": "90558.41"
+  },
+  "PPA-PVC-Stabilizers-CS": {
+    "quantity": "453.000 kgs",
+    "rate": "112.62",
+    "value": "51017.79"
+  },
+  "PPA-PVC-Stabilizers-GCC 10": {
+    "quantity": "420.200 kgs",
+    "rate": "296.50",
+    "value": "124589.42"
+  },
+  "PPA-PVC-Stabilizers-Stearic": {
+    "quantity": "1267.140 kgs",
+    "rate": "131.96",
+    "value": "167217.27"
+  },
+  "PPA-PVC-Thermal-CZ 815": {
+    "quantity": "1130.400 kgs",
+    "rate": "59.86",
+    "value": "67671.31"
+  },
+  "PP-BLUE-64001": {
+    "quantity": "2625.000 kgs",
+    "rate": "68.40",
+    "value": "179541"
+  },
+  "PP-BLUE-64006": {
+    "quantity": "577.000 kgs",
+    "rate": "9.00",
+    "value": "5193"
+  },
+  "PP-COMPOUND-BEIGE-SMPP40202": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PVC-ADDITIVE-Adv-101": {
+    "quantity": "75.000 kgs",
+    "rate": "60.00",
+    "value": "4500"
+  },
+  "PVC-ADDITIVE-ATAR-0105": {
+    "quantity": "100.000 kgs",
+    "rate": "60.00",
+    "value": "6000"
+  },
+  "PVC-ADDITIVE-UV-GREY-16142": {
+    "quantity": "5.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-ADV-0110": {
+    "quantity": "23.000 kgs",
+    "rate": "60.00",
+    "value": "1380"
+  },
+  "PVC-BEIGE-91000": {
+    "quantity": "225.000 kgs",
+    "rate": "60.00",
+    "value": "13500"
+  },
+  "PVC-BEIGE-91020": {
+    "quantity": "60.000 kgs",
+    "rate": "71.38",
+    "value": "4282.75"
+  },
+  "PVC-BEIGE-91034": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PVC-BEIGE-91040": {
+    "quantity": "47.000 kgs",
+    "rate": "75.27",
+    "value": "3537.69"
+  },
+  "PVC-BEIGE-91041": {
+    "quantity": "99.000 kgs",
+    "rate": "78.90",
+    "value": "7811.59"
+  },
+  "PVC-BEIGE-91043": {
+    "quantity": "93.000 kgs",
+    "rate": "83.03",
+    "value": "7721.79"
+  },
+  "PVC-BEIGE-91084": {
+    "quantity": "50.000 kgs",
+    "rate": "82.85",
+    "value": "4142.29"
+  },
+  "PVC-BEIGE-91087": {
+    "quantity": "22.000 kgs",
+    "rate": "60.00",
+    "value": "1320"
+  },
+  "PVC-BEIGE-91094": {
+    "quantity": "118.000 kgs",
+    "rate": "84.00",
+    "value": "9912"
+  },
+  "PVC-BEIGE-91097": {
+    "quantity": "134.500 kgs",
+    "rate": "60.00",
+    "value": "8070"
+  },
+  "PVC-BLACK-11190": {
+    "quantity": "2540.000 kgs",
+    "rate": "55.93",
+    "value": "142060"
+  },
+  "PVC-BLACK-11200": {
+    "quantity": "397.000 kgs",
+    "rate": "85.60",
+    "value": "33983.2"
+  },
+  "PVC-BLACK-11201": {
+    "quantity": "643.000 kgs",
+    "rate": "35.56",
+    "value": "22865.08"
+  },
+  "PVC-BLACK-11203": {
+    "quantity": "292.750 kgs",
+    "rate": "26.86",
+    "value": "7863.27"
+  },
+  "PVC-BLACK-11204": {
+    "quantity": "740.000 kgs",
+    "rate": "62.15",
+    "value": "45993.99"
+  },
+  "PVC-BLACK-11206": {
+    "quantity": "525.000 kgs",
+    "rate": "92.97",
+    "value": "48809.25"
+  },
+  "PVC-BLACK-11210": {
+    "quantity": "150.000 kgs",
+    "rate": "78.83",
+    "value": "11824.81"
+  },
+  "PVC-BLACK-11213": {
+    "quantity": "120.000 kgs",
+    "rate": "63.70",
+    "value": "7644.1"
+  },
+  "PVC-BLACK-11220": {
+    "quantity": "880.000 kgs",
+    "rate": "40.08",
+    "value": "35267.9"
+  },
+  "PVC-BLACK-11502": {
+    "quantity": "475.000 kgs",
+    "rate": "72.54",
+    "value": "34456.5"
+  },
+  "PVC-BLACK-11506": {
+    "quantity": "17.800 kgs",
+    "rate": "60.00",
+    "value": "1068"
+  },
+  "PVC-BLACK-11509": {
+    "quantity": "5600.000 kgs",
+    "rate": "89.21",
+    "value": "499561.89"
+  },
+  "PVC-BLACK-11510": {
+    "quantity": "545.000 kgs",
+    "rate": "60.00",
+    "value": "32700"
+  },
+  "PVC-BLACK-11515": {
+    "quantity": "6399.000 kgs",
+    "rate": "54.40",
+    "value": "348105.6"
+  },
+  "PVC-BLACK-11522": {
+    "quantity": "54.800 kgs",
+    "rate": "83.00",
+    "value": "4548.4"
+  },
+  "PVC-BLACK-11545": {
+    "quantity": "147.500 kgs",
+    "rate": "60.07",
+    "value": "8860.43"
+  },
+  "PVC-BLACK-11551": {
+    "quantity": "36.000 kgs",
+    "rate": "99.00",
+    "value": "3564"
+  },
+  "PVC-BLUE-61000": {
+    "quantity": "25.000 kgs",
+    "rate": "61.91",
+    "value": "1547.75"
+  },
+  "PVC-BLUE-61007": {
+    "quantity": "235.500 kgs",
+    "rate": "76.38",
+    "value": "17988.48"
+  },
+  "PVC-BLUE-61016": {
+    "quantity": "1382.500 kgs",
+    "rate": "77.24",
+    "value": "106781.95"
+  },
+  "PVC-BLUE-61019": {
+    "quantity": "239.000 kgs",
+    "rate": "67.23",
+    "value": "16068.68"
+  },
+  "PVC-BLUE-61222": {
+    "quantity": "574.650 kgs",
+    "rate": "27.01",
+    "value": "15523.93"
+  },
+  "PVC-BLUE-61224": {
+    "quantity": "712.600 kgs",
+    "rate": "82.48",
+    "value": "58774.47"
+  },
+  "PVC-BLUE-61225": {
+    "quantity": "144.000 kgs",
+    "rate": "60.00",
+    "value": "8640"
+  },
+  "PVC-BLUE-61226": {
+    "quantity": "122.600 kgs",
+    "rate": "83.02",
+    "value": "10178.25"
+  },
+  "PVC-BLUE-61230": {
+    "quantity": "75.000 kgs",
+    "rate": "83.02",
+    "value": "6226.5"
+  },
+  "PVC-BLUE-61242": {
+    "quantity": "120.800 kgs",
+    "rate": "60.00",
+    "value": "7248"
+  },
+  "PVC-BLUE-61243": {
+    "quantity": "88.300 kgs",
+    "rate": "60.00",
+    "value": "5298"
+  },
+  "PVC-BLUE-61244": {
+    "quantity": "227.000 kgs",
+    "rate": "83.02",
+    "value": "18845.54"
+  },
+  "PVC-BLUE-61401": {
+    "quantity": "111.500 kgs",
+    "rate": "85.00",
+    "value": "9477.5"
+  },
+  "PVC-BLUE-61501": {
+    "quantity": "-965.900 kgs",
+    "rate": "45.27",
+    "value": "43725.7"
+  },
+  "PVC-BLUE-61502": {
+    "quantity": "663.800 kgs",
+    "rate": "61.78",
+    "value": "41009.56"
+  },
+  "PVC-BLUE-61507": {
+    "quantity": "71.000 kgs",
+    "rate": "60.00",
+    "value": "4260"
+  },
+  "PVC-BLUE-61533": {
+    "quantity": "865.400 kgs",
+    "rate": "82.95",
+    "value": "71784.94"
+  },
+  "PVC-BLUE-61552": {
+    "quantity": "222.500 kgs",
+    "rate": "59.79",
+    "value": "13303.28"
+  },
+  "PVC-BLUE-61555": {
+    "quantity": "19.000 kgs",
+    "rate": "83.02",
+    "value": "1577.38"
+  },
+  "PVC-BLUE-61562": {
+    "quantity": "25.000 kgs",
+    "rate": "88.86",
+    "value": "2221.5"
+  },
+  "PVC-BLUE-61563": {
+    "quantity": "30.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-BLUE -61567": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PVC-BLUE-61601": {
+    "quantity": "401.200 kgs",
+    "rate": "58.23",
+    "value": "23360.23"
+  },
+  "PVC-BLUE-61628": {
+    "quantity": "232.000 kgs",
+    "rate": "70.57",
+    "value": "16372.23"
+  },
+  "PVC-BLUE-61630": {
+    "quantity": "200.000 kgs",
+    "rate": "78.49",
+    "value": "15697.78"
+  },
+  "PVC-BLUE-61633": {
+    "quantity": "119.700 kgs",
+    "rate": "59.63",
+    "value": "7137.6"
+  },
+  "PVC-BLUE-61634": {
+    "quantity": "132.500 kgs",
+    "rate": "80.11",
+    "value": "10614.1"
+  },
+  "PVC-BLUE-61635": {
+    "quantity": "105.100 kgs",
+    "rate": "108.99",
+    "value": "11454.85"
+  },
+  "PVC-BLUE-61637": {
+    "quantity": "221.200 kgs",
+    "rate": "75.85",
+    "value": "16777.75"
+  },
+  "PVC-BLUE-61638": {
+    "quantity": "145.400 kgs",
+    "rate": "83.02",
+    "value": "12071.11"
+  },
+  "PVC-BLUE-61640": {
+    "quantity": "44.700 kgs",
+    "rate": "83.02",
+    "value": "3710.99"
+  },
+  "PVC-BLUE-61641": {
+    "quantity": "317.400 kgs",
+    "rate": "60.00",
+    "value": "19044"
+  },
+  "PVC-BLUE-61645": {
+    "quantity": "44.000 kgs",
+    "rate": "83.02",
+    "value": "3652.88"
+  },
+  "PVC-BLUE-61667": {
+    "quantity": "25.000 kgs",
+    "rate": "7.79",
+    "value": "194.75"
+  },
+  "PVC-BLUE-61703": {
+    "quantity": "25.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-BLUE-61704": {
+    "quantity": "26.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-BLUE-61708": {
+    "quantity": "25.000 kgs",
+    "rate": "30.00",
+    "value": "750"
+  },
+  "PVC-BLUE-61709": {
+    "quantity": "122.500 kgs",
+    "rate": "60.00",
+    "value": "7350"
+  },
+  "PVC-BLUE-61710": {
+    "quantity": "0.100 kgs",
+    "rate": "52.00",
+    "value": "5.2"
+  },
+  "PVC-BLUE-61711": {
+    "quantity": "55.300 kgs",
+    "rate": "16.19",
+    "value": "895.31"
+  },
+  "PVC-BLUE-61717": {
+    "quantity": "50.000 kgs",
+    "rate": "180.00",
+    "value": "9000"
+  },
+  "PVC-BLUE-61726": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PVC-BLUE-61745": {
+    "quantity": "44.000 kgs",
+    "rate": "95.00",
+    "value": "4180"
+  },
+  "PVC-BLUE-61773": {
+    "quantity": "11.300 kgs",
+    "rate": "60.00",
+    "value": "678"
+  },
+  "PVC-BLUE-61781": {
+    "quantity": "86.000 kgs",
+    "rate": "30.00",
+    "value": "2580"
+  },
+  "PVC-BLUE-61783": {
+    "quantity": "24.000 kgs",
+    "rate": "60.00",
+    "value": "1440"
+  },
+  "PVC-BLUE-61785": {
+    "quantity": "96.800 kgs",
+    "rate": "60.00",
+    "value": "5808"
+  },
+  "PVC-BLUE-61786": {
+    "quantity": "46.600 kgs",
+    "rate": "60.00",
+    "value": "2796"
+  },
+  "PVC-BLUE-61787": {
+    "quantity": "39.000 kgs",
+    "rate": "39.92",
+    "value": "1557"
+  },
+  "PVC-BROWN-91001": {
+    "quantity": "6.800 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-BROWN-91004": {
+    "quantity": "80.400 kgs",
+    "rate": "30.03",
+    "value": "2414.41"
+  },
+  "PVC-BROWN-91009": {
+    "quantity": "39.000 kgs",
+    "rate": "60.00",
+    "value": "2340"
+  },
+  "PVC-BROWN-91017": {
+    "quantity": "98.000 kgs",
+    "rate": "60.00",
+    "value": "5880"
+  },
+  "PVC-BROWN-91048": {
+    "quantity": "101.000 kgs",
+    "rate": "83.02",
+    "value": "8385.02"
+  },
+  "PVC-BROWN-91057": {
+    "quantity": "37.000 kgs",
+    "rate": "59.90",
+    "value": "2216.3"
+  },
+  "Pvc-Brown-91095": {
+    "quantity": "11.000 kgs",
+    "rate": "60.00",
+    "value": "660"
+  },
+  "PVC-BROWN-91275": {
+    "quantity": "52.800 kgs",
+    "rate": "63.51",
+    "value": "3353.33"
+  },
+  "PVC-BROWN-91280": {
+    "quantity": "87.500 kgs",
+    "rate": "77.21",
+    "value": "6755.95"
+  },
+  "PVC-BROWN-91281": {
+    "quantity": "212.300 kgs",
+    "rate": "63.25",
+    "value": "13428.34"
+  },
+  "PVC-BROWN-91401": {
+    "quantity": "75.000 kgs",
+    "rate": "83.02",
+    "value": "6226.5"
+  },
+  "PVC-BROWN-91402": {
+    "quantity": "250.000 kgs",
+    "rate": "83.02",
+    "value": "20755"
+  },
+  "PVC-BROWN-91411": {
+    "quantity": "16.300 kgs",
+    "rate": "60.00",
+    "value": "978"
+  },
+  "PVC-BROWN-91501": {
+    "quantity": "100.000 kgs",
+    "rate": "83.02",
+    "value": "8302"
+  },
+  "PVC-BROWN-91502": {
+    "quantity": "38.500 kgs",
+    "rate": "83.02",
+    "value": "3196.27"
+  },
+  "PVC-BROWN-91503": {
+    "quantity": "15.500 kgs",
+    "rate": "76.43",
+    "value": "1184.67"
+  },
+  "PVC-BROWN-91504": {
+    "quantity": "10.000 kgs",
+    "rate": "83.02",
+    "value": "830.2"
+  },
+  "PVC-BROWN-91510": {
+    "quantity": "149.000 kgs",
+    "rate": "83.02",
+    "value": "12369.98"
+  },
+  "PVC-BROWN-91517": {
+    "quantity": "130.000 kgs",
+    "rate": "60.00",
+    "value": "7800"
+  },
+  "PVC-BROWN-91519": {
+    "quantity": "40.000 kgs",
+    "rate": "88.10",
+    "value": "3524"
+  },
+  "PVC-BROWN-91522": {
+    "quantity": "63.500 kgs",
+    "rate": "55.00",
+    "value": "3492.5"
+  },
+  "PVC-BROWN-91523": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "Pvc-Brown-91526": {
+    "quantity": "117.500 kgs",
+    "rate": "23.00",
+    "value": "2702.5"
+  },
+  "PVC-BROWN-91596": {
+    "quantity": "2.400 kgs",
+    "rate": "60.00",
+    "value": "144"
+  },
+  "PVC-BROWN-91705": {
+    "quantity": "76.600 kgs",
+    "rate": "60.00",
+    "value": "4596"
+  },
+  "PVC-BROWN-91707": {
+    "quantity": "101.900 kgs",
+    "rate": "66.03",
+    "value": "6728.46"
+  },
+  "PVC-BROWN-91712": {
+    "quantity": "144.700 kgs",
+    "rate": "60.00",
+    "value": "8682"
+  },
+  "PVC-BROWN-91715": {
+    "quantity": "24.300 kgs",
+    "rate": "51.86",
+    "value": "1260.21"
+  },
+  "PVC-BROWN-91720": {
+    "quantity": "9.000 kgs",
+    "rate": "50.00",
+    "value": "450"
+  },
+  "PVC-BROWN-91725": {
+    "quantity": "51.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-CMYK-86601": {
+    "quantity": "62.000 kgs",
+    "rate": "152.00",
+    "value": "9424"
+  },
+  "PVC COMPOUND- (HSN-390422)": {
+    "quantity": "127.700 kgs",
+    "rate": "127.47",
+    "value": "16278"
+  },
+  "PVC-CREAM-21183": {
+    "quantity": "70.500 kgs",
+    "rate": "83.02",
+    "value": "5852.91"
+  },
+  "PVC-FEEROZE-61648": {
+    "quantity": "67.300 kgs",
+    "rate": "73.60",
+    "value": "4953.28"
+  },
+  "PVC-FEEROZE-61650": {
+    "quantity": "141.800 kgs",
+    "rate": "83.02",
+    "value": "11772.24"
+  },
+  "PVC-FEEROZE-61652": {
+    "quantity": "84.100 kgs",
+    "rate": "83.02",
+    "value": "6981.98"
+  },
+  "PVC-FLOROGREEN-41245": {
+    "quantity": "66.700 kgs",
+    "rate": "60.39",
+    "value": "4028.04"
+  },
+  "PVC-GREEN-41001": {
+    "quantity": "7.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-GREEN-41002A": {
+    "quantity": "92.900 kgs",
+    "rate": "60.00",
+    "value": "5574"
+  },
+  "PVC-GREEN-41013": {
+    "quantity": "70.800 kgs",
+    "rate": "30.00",
+    "value": "2124"
+  },
+  "PVC-GREEN-41018": {
+    "quantity": "14.700 kgs",
+    "rate": "52.00",
+    "value": "764.4"
+  },
+  "PVC-GREEN-41243": {
+    "quantity": "75.000 kgs",
+    "rate": "84.08",
+    "value": "6306"
+  },
+  "PVC-GREEN-41246": {
+    "quantity": "142.900 kgs",
+    "rate": "821.50",
+    "value": "117393.05"
+  },
+  "PVC-GREEN-41248": {
+    "quantity": "205.900 kgs",
+    "rate": "50.15",
+    "value": "10325.89"
+  },
+  "PVC-GREEN-41255": {
+    "quantity": "330.000 kgs",
+    "rate": "83.17",
+    "value": "27446.1"
+  },
+  "PVC-GREEN-41256": {
+    "quantity": "341.000 kgs",
+    "rate": "19.69",
+    "value": "6713.94"
+  },
+  "PVC-GREEN-41307": {
+    "quantity": "171.300 kgs",
+    "rate": "61.46",
+    "value": "10527.74"
+  },
+  "PVC-GREEN-41311": {
+    "quantity": "25.000 kgs",
+    "rate": "0.02",
+    "value": "0.5"
+  },
+  "PVC-GREEN-41313": {
+    "quantity": "5.000 kgs",
+    "rate": "45.00",
+    "value": "225"
+  },
+  "PVC-GREEN-41392": {
+    "quantity": "25.000 kgs",
+    "rate": "50.00",
+    "value": "1250"
+  },
+  "PVC-GREEN-41396": {
+    "quantity": "25.000 kgs",
+    "rate": "40.00",
+    "value": "1000"
+  },
+  "PVC-GREEN-41403": {
+    "quantity": "50.000 kgs",
+    "rate": "60.00",
+    "value": "3000"
+  },
+  "PVC-GREEN-41410": {
+    "quantity": "67.000 kgs",
+    "rate": "150.00",
+    "value": "10050"
+  },
+  "PVC-GREEN-41411": {
+    "quantity": "153.800 kgs",
+    "rate": "60.00",
+    "value": "9228"
+  },
+  "PVC-GREEN-41414": {
+    "quantity": "76.000 kgs",
+    "rate": "38.30",
+    "value": "2910.8"
+  },
+  "PVC-GREEN-41415": {
+    "quantity": "241.200 kgs",
+    "rate": "83.02",
+    "value": "20024.42"
+  },
+  "PVC-GREEN-41425": {
+    "quantity": "149.500 kgs",
+    "rate": "88.39",
+    "value": "13214.14"
+  },
+  "PVC-GREEN-41426": {
+    "quantity": "75.000 kgs",
+    "rate": "94.00",
+    "value": "7050"
+  },
+  "PVC-GREEN-41430": {
+    "quantity": "1.500 kgs",
+    "rate": "83.02",
+    "value": "124.53"
+  },
+  "PVC-GREEN-41448": {
+    "quantity": "138.800 kgs",
+    "rate": "73.58",
+    "value": "10213.24"
+  },
+  "PVC-GREEN-41449": {
+    "quantity": "317.500 kgs",
+    "rate": "53.10",
+    "value": "16859.25"
+  },
+  "PVC-GREEN-41451": {
+    "quantity": "25.000 kgs",
+    "rate": "85.30",
+    "value": "2132.5"
+  },
+  "PVC-GREEN-41453": {
+    "quantity": "109.600 kgs",
+    "rate": "75.73",
+    "value": "8300.01"
+  },
+  "PVC-GREEN-41461": {
+    "quantity": "394.450 kgs",
+    "rate": "60.00",
+    "value": "23667"
+  },
+  "PVC-GREEN-41463": {
+    "quantity": "139.200 kgs",
+    "rate": "60.00",
+    "value": "8352"
+  },
+  "PVC-GREEN-41495": {
+    "quantity": "15.000 kgs",
+    "rate": "60.00",
+    "value": "900"
+  },
+  "PVC-GREEN-41496": {
+    "quantity": "35.000 kgs",
+    "rate": "83.02",
+    "value": "2905.7"
+  },
+  "PVC-GREEN-41501": {
+    "quantity": "524.600 kgs",
+    "rate": "92.03",
+    "value": "48278.94"
+  },
+  "PVC-GREEN-41502": {
+    "quantity": "1239.100 kgs",
+    "rate": "55.24",
+    "value": "68447.88"
+  },
+  "PVC-GREEN-41503": {
+    "quantity": "50.000 kgs",
+    "rate": "83.02",
+    "value": "4151"
+  },
+  "PVC-GREEN-41504": {
+    "quantity": "389.100 kgs",
+    "rate": "78.18",
+    "value": "30419.84"
+  },
+  "PVC-GREEN-41510": {
+    "quantity": "18.400 kgs",
+    "rate": "60.00",
+    "value": "1104"
+  },
+  "PVC-GREEN-41517": {
+    "quantity": "18.500 kgs",
+    "rate": "60.00",
+    "value": "1110"
+  },
+  "PVC-GREEN-41518": {
+    "quantity": "74.800 kgs",
+    "rate": "60.00",
+    "value": "4488"
+  },
+  "PVC-GREEN-41521": {
+    "quantity": "-3803.000 kgs",
+    "rate": "279.66",
+    "value": "1063533.75"
+  },
+  "PVC-GREEN-41581": {
+    "quantity": "242.500 kgs",
+    "rate": "65.00",
+    "value": "15762.5"
+  },
+  "PVC-GREEN-41598": {
+    "quantity": "152.000 kgs",
+    "rate": "83.02",
+    "value": "12619.04"
+  },
+  "PVC-GREEN-41701": {
+    "quantity": "9.700 kgs",
+    "rate": "60.00",
+    "value": "582"
+  },
+  "PVC-GREEN-41702": {
+    "quantity": "64.300 kgs",
+    "rate": "52.44",
+    "value": "3372"
+  },
+  "PVC-GREEN-41704": {
+    "quantity": "73.000 kgs",
+    "rate": "31.18",
+    "value": "2276.14"
+  },
+  "PVC-GREEN-41710": {
+    "quantity": "47.000 kgs",
+    "rate": "38.00",
+    "value": "1786"
+  },
+  "PVC-GREEN-41711": {
+    "quantity": "48.300 kgs",
+    "rate": "60.00",
+    "value": "2898"
+  },
+  "PVC-GREEN-41712": {
+    "quantity": "45.000 kgs",
+    "rate": "60.00",
+    "value": "2700"
+  },
+  "PVC-GREEN-41716": {
+    "quantity": "5.000 kgs",
+    "rate": "42.50",
+    "value": "212.5"
+  },
+  "PVC-GREEN-41724": {
+    "quantity": "72.900 kgs",
+    "rate": "52.00",
+    "value": "3790.8"
+  },
+  "PVC-GREEN-41725": {
+    "quantity": "122.300 kgs",
+    "rate": "12.27",
+    "value": "1500.34"
+  },
+  "PVC-GREEN-41726": {
+    "quantity": "21.900 kgs",
+    "rate": "52.00",
+    "value": "1138.8"
+  },
+  "PVC-GREY-16000": {
+    "quantity": "41.500 kgs",
+    "rate": "117.00",
+    "value": "4855.5"
+  },
+  "PVC-GREY-16006": {
+    "quantity": "138.000 kgs",
+    "rate": "30.00",
+    "value": "4140"
+  },
+  "PVC-GREY-16007": {
+    "quantity": "75.100 kgs",
+    "rate": "25.53",
+    "value": "1917.5"
+  },
+  "PVC-GREY-16117": {
+    "quantity": "4.500 kgs",
+    "rate": "82.98",
+    "value": "373.4"
+  },
+  "PVC-GREY-16120": {
+    "quantity": "272.200 kgs",
+    "rate": "78.47",
+    "value": "21359.53"
+  },
+  "PVC-GREY-16128": {
+    "quantity": "64.500 kgs",
+    "rate": "65.00",
+    "value": "4192.5"
+  },
+  "PVC-GREY-16163": {
+    "quantity": "26.500 kgs",
+    "rate": "9.21",
+    "value": "244.07"
+  },
+  "PVC-GREY-16501": {
+    "quantity": "324.800 kgs",
+    "rate": "91.42",
+    "value": "29693.22"
+  },
+  "PVC-GREY-16502": {
+    "quantity": "592.300 kgs",
+    "rate": "83.02",
+    "value": "49172.75"
+  },
+  "PVC-GREY-16503": {
+    "quantity": "583.000 kgs",
+    "rate": "60.00",
+    "value": "34980"
+  },
+  "PVC-GREY-16506": {
+    "quantity": "73.700 kgs",
+    "rate": "60.00",
+    "value": "4422"
+  },
+  "PVC-GREY-16507": {
+    "quantity": "1094.200 kgs",
+    "rate": "54.42",
+    "value": "59546.36"
+  },
+  "PVC-GREY-16508": {
+    "quantity": "211.300 kgs",
+    "rate": "60.00",
+    "value": "12678"
+  },
+  "PVC-GREY-16509": {
+    "quantity": "205.700 kgs",
+    "rate": "83.05",
+    "value": "17083.4"
+  },
+  "PVC-GREY-16512": {
+    "quantity": "60.000 kgs",
+    "rate": "60.00",
+    "value": "3600"
+  },
+  "PVC-GREY-16514": {
+    "quantity": "36.500 kgs",
+    "rate": "60.00",
+    "value": "2190"
+  },
+  "PVC-GREY-16515": {
+    "quantity": "14.000 kgs",
+    "rate": "60.00",
+    "value": "840"
+  },
+  "PVC-GREY-16548": {
+    "quantity": "249.600 kgs",
+    "rate": "55.69",
+    "value": "13900.22"
+  },
+  "PVC-GREY-16704": {
+    "quantity": "5.700 kgs",
+    "rate": "44.00",
+    "value": "250.8"
+  },
+  "PVC-GREY-16710": {
+    "quantity": "211.500 kgs",
+    "rate": "60.02",
+    "value": "12694.23"
+  },
+  "PVC-GREY-16713": {
+    "quantity": "47.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-GREY-16735": {
+    "quantity": "75.000 kgs",
+    "rate": "52.00",
+    "value": "3900"
+  },
+  "PVC-GREY-16740": {
+    "quantity": "89.000 kgs",
+    "rate": "65.00",
+    "value": "5785"
+  },
+  "Pvc-Grey-16744": {
+    "quantity": "18.000 kgs",
+    "rate": "60.00",
+    "value": "1080"
+  },
+  "PVC-GREY-LT-16112": {
+    "quantity": "66.000 kgs",
+    "rate": "85.68",
+    "value": "5654.88"
+  },
+  "PVC-GREY-LT-16141": {
+    "quantity": "500.000 kgs",
+    "rate": "83.02",
+    "value": "41510"
+  },
+  "PVC-GREY-LT-16160": {
+    "quantity": "45.000 kgs",
+    "rate": "65.00",
+    "value": "2925"
+  },
+  "PVC-METALIC-BLUE-61600": {
+    "quantity": "40.100 kgs",
+    "rate": "5.61",
+    "value": "225"
+  },
+  "PVC-ORANGE-71022": {
+    "quantity": "17.800 kgs",
+    "rate": "82.84",
+    "value": "1474.55"
+  },
+  "Pvc-Orange-71034": {
+    "quantity": "23.000 kgs",
+    "rate": "60.00",
+    "value": "1380"
+  },
+  "PVC-ORANGE-71039": {
+    "quantity": "61.700 kgs",
+    "rate": "60.00",
+    "value": "3702"
+  },
+  "PVC-ORANGE-71257": {
+    "quantity": "81.000 kgs",
+    "rate": "55.41",
+    "value": "4488.12"
+  },
+  "PVC-ORANGE-71261": {
+    "quantity": "310.000 kgs",
+    "rate": "80.99",
+    "value": "25106.9"
+  },
+  "PVC-ORANGE-71286": {
+    "quantity": "565.800 kgs",
+    "rate": "60.00",
+    "value": "33948"
+  },
+  "PVC-ORANGE-71301": {
+    "quantity": "838.700 kgs",
+    "rate": "60.00",
+    "value": "50322"
+  },
+  "PVC-ORANGE-71501": {
+    "quantity": "18.000 kgs",
+    "rate": "88.45",
+    "value": "1592.1"
+  },
+  "PVC-ORANGE-71503": {
+    "quantity": "274.000 kgs",
+    "rate": "83.02",
+    "value": "22747.48"
+  },
+  "PVC-ORANGE-71508": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PVC-ORANGE-71524": {
+    "quantity": "50.000 kgs",
+    "rate": "50.39",
+    "value": "2519.5"
+  },
+  "PVC-ORANGE-71575": {
+    "quantity": "642.500 kgs",
+    "rate": "76.78",
+    "value": "49329.46"
+  },
+  "PVC-PINK-86000": {
+    "quantity": "65.000 kgs",
+    "rate": "60.00",
+    "value": "3900"
+  },
+  "PVC-PINK-86002": {
+    "quantity": "4.500 kgs",
+    "rate": "60.00",
+    "value": "270"
+  },
+  "PVC-PINK-86010": {
+    "quantity": "141.400 kgs",
+    "rate": "61.59",
+    "value": "8709.18"
+  },
+  "PVC-PINK-86014": {
+    "quantity": "13.500 kgs",
+    "rate": "83.02",
+    "value": "1120.77"
+  },
+  "PVC-PINK-86016": {
+    "quantity": "133.900 kgs",
+    "rate": "60.00",
+    "value": "8034"
+  },
+  "PVC-PINK-86213": {
+    "quantity": "62.500 kgs",
+    "rate": "83.02",
+    "value": "5188.75"
+  },
+  "PVC-PINK-86226": {
+    "quantity": "204.800 kgs",
+    "rate": "62.60",
+    "value": "12819.93"
+  },
+  "PVC-PINK-86228": {
+    "quantity": "135.600 kgs",
+    "rate": "61.85",
+    "value": "8387.02"
+  },
+  "PVC-PINK-86231": {
+    "quantity": "121.500 kgs",
+    "rate": "60.00",
+    "value": "7290"
+  },
+  "PVC-PINK-86402": {
+    "quantity": "149.300 kgs",
+    "rate": "58.52",
+    "value": "8737.04"
+  },
+  "PVC-PINK-86502": {
+    "quantity": "308.700 kgs",
+    "rate": "79.12",
+    "value": "24424.34"
+  },
+  "PVC-PINK-86515": {
+    "quantity": "305.200 kgs",
+    "rate": "51.59",
+    "value": "15745.27"
+  },
+  "PVC-PINK-86516": {
+    "quantity": "1417.300 kgs",
+    "rate": "68.52",
+    "value": "97113.4"
+  },
+  "PVC-PINK-86701": {
+    "quantity": "40.500 kgs",
+    "rate": "60.00",
+    "value": "2430"
+  },
+  "PVC-PINK-86705": {
+    "quantity": "58.000 kgs",
+    "rate": "51.38",
+    "value": "2980"
+  },
+  "PVC-PINK-86725": {
+    "quantity": "1.000 kgs",
+    "rate": "60.00",
+    "value": "60"
+  },
+  "PVC-PINK-86727": {
+    "quantity": "58.000 kgs",
+    "rate": "52.00",
+    "value": "3016"
+  },
+  "PVC-RED-31000": {
+    "quantity": "68.000 kgs",
+    "rate": "83.02",
+    "value": "5645.36"
+  },
+  "PVC-RED-31001": {
+    "quantity": "119.000 kgs",
+    "rate": "54.72",
+    "value": "6511.74"
+  },
+  "PVC-RED-31002": {
+    "quantity": "209.000 kgs",
+    "rate": "62.89",
+    "value": "13144.18"
+  },
+  "PVC-RED-31003": {
+    "quantity": "217.000 kgs",
+    "rate": "35.00",
+    "value": "7595"
+  },
+  "PVC-RED-31004": {
+    "quantity": "184.000 kgs",
+    "rate": "95.00",
+    "value": "17480"
+  },
+  "PVC-RED-31009": {
+    "quantity": "45.700 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-RED -31014": {
+    "quantity": "33.000 kgs",
+    "rate": "55.45",
+    "value": "1830"
+  },
+  "PVC-RED-31033": {
+    "quantity": "62.300 kgs",
+    "rate": "84.00",
+    "value": "5233.2"
+  },
+  "PVC-RED -31043": {
+    "quantity": "45.700 kgs",
+    "rate": "81.63",
+    "value": "3730.62"
+  },
+  "PVC-RED-31046": {
+    "quantity": "12.700 kgs",
+    "rate": "32.81",
+    "value": "416.69"
+  },
+  "PVC-RED-31207": {
+    "quantity": "7.500 kgs",
+    "rate": "60.00",
+    "value": "450"
+  },
+  "PVC-RED-31209": {
+    "quantity": "676.600 kgs",
+    "rate": "108.99",
+    "value": "73742.63"
+  },
+  "PVC-RED-31211": {
+    "quantity": "343.000 kgs",
+    "rate": "93.44",
+    "value": "32050"
+  },
+  "PVC-RED-31229": {
+    "quantity": "426.700 kgs",
+    "rate": "75.73",
+    "value": "32313.99"
+  },
+  "PVC-RED-31230": {
+    "quantity": "49.200 kgs",
+    "rate": "60.00",
+    "value": "2952"
+  },
+  "PVC-RED-31403": {
+    "quantity": "25.000 kgs",
+    "rate": "40.00",
+    "value": "1000"
+  },
+  "PVC-RED-31501": {
+    "quantity": "50.000 kgs",
+    "rate": "81.82",
+    "value": "4091"
+  },
+  "PVC-RED-31502": {
+    "quantity": "275.000 kgs",
+    "rate": "83.02",
+    "value": "22830.5"
+  },
+  "PVC-RED-31503": {
+    "quantity": "300.400 kgs",
+    "rate": "72.20",
+    "value": "21688.88"
+  },
+  "PVC-RED-31504": {
+    "quantity": "300.000 kgs",
+    "rate": "85.60",
+    "value": "25680"
+  },
+  "PVC-RED-31513": {
+    "quantity": "2715.200 kgs",
+    "rate": "28.12",
+    "value": "76351.42"
+  },
+  "PVC-RED-31515": {
+    "quantity": "3.800 kgs",
+    "rate": "60.00",
+    "value": "228"
+  },
+  "PVC-RED-31516": {
+    "quantity": "13.000 kgs",
+    "rate": "55.10",
+    "value": "716.3"
+  },
+  "PVC-RED-31519": {
+    "quantity": "14.400 kgs",
+    "rate": "33.08",
+    "value": "476.35"
+  },
+  "PVC-RED-31520": {
+    "quantity": "11.500 kgs",
+    "rate": "60.00",
+    "value": "690"
+  },
+  "PVC-RED -31550": {
+    "quantity": "76.700 kgs",
+    "rate": "82.21",
+    "value": "6305.52"
+  },
+  "PVC-RED-31562": {
+    "quantity": "129.400 kgs",
+    "rate": "59.78",
+    "value": "7735.53"
+  },
+  "PVC-RED-31564": {
+    "quantity": "83.700 kgs",
+    "rate": "95.00",
+    "value": "7951.5"
+  },
+  "PVC-RED-31565": {
+    "quantity": "27.300 kgs",
+    "rate": "39.64",
+    "value": "1082.24"
+  },
+  "PVC-RED-31601": {
+    "quantity": "64.000 kgs",
+    "rate": "185.00",
+    "value": "11840"
+  },
+  "PVC-RED-31701": {
+    "quantity": "34.000 kgs",
+    "rate": "60.00",
+    "value": "2040"
+  },
+  "PVC-RED-31705": {
+    "quantity": "90.000 kgs",
+    "rate": "60.00",
+    "value": "5400"
+  },
+  "PVC-RED-31706": {
+    "quantity": "312.000 kgs",
+    "rate": "50.00",
+    "value": "15600"
+  },
+  "PVC-RED-31727": {
+    "quantity": "142.000 kgs",
+    "rate": "83.02",
+    "value": "11788.84"
+  },
+  "PVC-RED-31728": {
+    "quantity": "29.600 kgs",
+    "rate": "60.00",
+    "value": "1776"
+  },
+  "PVC-RED-35140": {
+    "quantity": "143.750 kgs",
+    "rate": "83.02",
+    "value": "11934.13"
+  },
+  "PVC-RED -35141": {
+    "quantity": "475.000 kgs",
+    "rate": "64.44",
+    "value": "30609"
+  },
+  "PVC-RED-MEHROON-31510": {
+    "quantity": "291.700 kgs",
+    "rate": "82.89",
+    "value": "24177.8"
+  },
+  "PVC-RED-SH-31511": {
+    "quantity": "233.300 kgs",
+    "rate": "83.02",
+    "value": "19368.57"
+  },
+  "PVC-SILVER-16124": {
+    "quantity": "39.500 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-SILVER-16700": {
+    "quantity": "8.800 kgs",
+    "rate": "60.00",
+    "value": "528"
+  },
+  "PVC-TP-BLUE-6001": {
+    "quantity": "29.000 kgs",
+    "rate": "83.02",
+    "value": "2407.58"
+  },
+  "PVC-TP-BLUE-6002": {
+    "quantity": "71.000 kgs",
+    "rate": "83.02",
+    "value": "5894.42"
+  },
+  "PVC-TP-ORANGE-5201": {
+    "quantity": "50.000 kgs",
+    "rate": "60.00",
+    "value": "3000"
+  },
+  "PVC-TP-RED-5001": {
+    "quantity": "36.000 kgs",
+    "rate": "60.00",
+    "value": "2160"
+  },
+  "PVC-TP-VOILET-1001": {
+    "quantity": "72.700 kgs",
+    "rate": "83.02",
+    "value": "6035.55"
+  },
+  "PVC-UV-ADDITIVE-00120": {
+    "quantity": "41.300 kgs",
+    "rate": "60.00",
+    "value": "2478"
+  },
+  "PVC-VIOLET-81009": {
+    "quantity": "32.300 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-VIOLET-81010": {
+    "quantity": "53.000 kgs",
+    "rate": "60.00",
+    "value": "3180"
+  },
+  "PVC-VIOLET-81013": {
+    "quantity": "17.900 kgs",
+    "rate": "53.41",
+    "value": "956.07"
+  },
+  "PVC-VIOLET-81015": {
+    "quantity": "26.200 kgs",
+    "rate": "50.00",
+    "value": "1310"
+  },
+  "PVC-VIOLET-81016": {
+    "quantity": "128.000 kgs",
+    "rate": "59.29",
+    "value": "7589.62"
+  },
+  "PVC-VIOLET-81033": {
+    "quantity": "17.500 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-VIOLET-81302": {
+    "quantity": "71.800 kgs",
+    "rate": "77.75",
+    "value": "5582.46"
+  },
+  "PVC-VIOLET-81303": {
+    "quantity": "11.800 kgs",
+    "rate": "83.02",
+    "value": "979.64"
+  },
+  "PVC-VIOLET-81501": {
+    "quantity": "73.400 kgs",
+    "rate": "85.60",
+    "value": "6283.04"
+  },
+  "PVC-VIOLET-81503": {
+    "quantity": "40.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "PVC-VIOLET-81513": {
+    "quantity": "272.900 kgs",
+    "rate": "66.04",
+    "value": "18022.32"
+  },
+  "PVC-VIOLET-81518": {
+    "quantity": "34.200 kgs",
+    "rate": "40.00",
+    "value": "1368"
+  },
+  "PVC-VIOLET-81526": {
+    "quantity": "6.400 kgs",
+    "rate": "60.00",
+    "value": "384"
+  },
+  "PVC-VIOLET-81708": {
+    "quantity": "24.300 kgs",
+    "rate": "30.00",
+    "value": "729"
+  },
+  "PVC-VOILET-81000": {
+    "quantity": "264.000 kgs",
+    "rate": "60.00",
+    "value": "15840"
+  },
+  "PVC-VOILET-81706": {
+    "quantity": "162.000 kgs",
+    "rate": "49.26",
+    "value": "7980"
+  },
+  "PVC-WHITE-21105": {
+    "quantity": "151.000 kgs",
+    "rate": "80.38",
+    "value": "12137.38"
+  },
+  "PVC-WHITE-21106": {
+    "quantity": "1017.500 kgs",
+    "rate": "33.71",
+    "value": "34298.13"
+  },
+  "PVC-WHITE-21107": {
+    "quantity": "152.600 kgs",
+    "rate": "79.37",
+    "value": "12112.54"
+  },
+  "PVC-WHITE-21311": {
+    "quantity": "62.100 kgs",
+    "rate": "96.55",
+    "value": "5995.76"
+  },
+  "PVC-WHITE-21314": {
+    "quantity": "200.000 kgs",
+    "rate": "83.02",
+    "value": "16604"
+  },
+  "PVC-WHITE-21501": {
+    "quantity": "-4043.100 kgs",
+    "rate": "151.44",
+    "value": "612280.35"
+  },
+  "PVC-WHITE-21516": {
+    "quantity": "4260.500 kgs",
+    "rate": "65.64",
+    "value": "279659.22"
+  },
+  "PVC-WHITE-21517": {
+    "quantity": "255.700 kgs",
+    "rate": "60.00",
+    "value": "15342"
+  },
+  "PVC-WHITE-21518": {
+    "quantity": "45.900 kgs",
+    "rate": "83.02",
+    "value": "3810.62"
+  },
+  "PVC-WHITE-21523": {
+    "quantity": "168.400 kgs",
+    "rate": "39.24",
+    "value": "6608.01"
+  },
+  "PVC-WHITE-21524": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "PVC-WHITE-21525": {
+    "quantity": "319.300 kgs",
+    "rate": "68.50",
+    "value": "21872.05"
+  },
+  "PVC-WHITE-21529": {
+    "quantity": "-50.000 kgs",
+    "rate": "60.00",
+    "value": "3000"
+  },
+  "PVC-YELLOW-51007": {
+    "quantity": "275.000 kgs",
+    "rate": "82.37",
+    "value": "22651.75"
+  },
+  "PVC-YELLOW-51008": {
+    "quantity": "60.000 kgs",
+    "rate": "71.73",
+    "value": "4303.55"
+  },
+  "PVC-YELLOW-51009": {
+    "quantity": "43.800 kgs",
+    "rate": "55.60",
+    "value": "2435.48"
+  },
+  "PVC-YELLOW-51231": {
+    "quantity": "501.300 kgs",
+    "rate": "32.10",
+    "value": "16091.73"
+  },
+  "PVC-YELLOW-51232": {
+    "quantity": "796.100 kgs",
+    "rate": "83.02",
+    "value": "66092.22"
+  },
+  "PVC-YELLOW-51243": {
+    "quantity": "207.400 kgs",
+    "rate": "95.00",
+    "value": "19703"
+  },
+  "PVC-YELLOW-51341": {
+    "quantity": "8.750 kgs",
+    "rate": "79.10",
+    "value": "692.13"
+  },
+  "PVC-YELLOW-51352": {
+    "quantity": "50.000 kgs",
+    "rate": "94.98",
+    "value": "4749"
+  },
+  "PVC-YELLOW-51357": {
+    "quantity": "39.000 kgs",
+    "rate": "83.02",
+    "value": "3237.78"
+  },
+  "PVC-YELLOW-51361": {
+    "quantity": "6.200 kgs",
+    "rate": "60.00",
+    "value": "372"
+  },
+  "PVC-YELLOW-51441": {
+    "quantity": "25.000 kgs",
+    "rate": "83.02",
+    "value": "2075.5"
+  },
+  "PVC-YELLOW-51501": {
+    "quantity": "371.900 kgs",
+    "rate": "88.00",
+    "value": "32727.2"
+  },
+  "PVC-YELLOW-51503": {
+    "quantity": "1006.800 kgs",
+    "rate": "73.84",
+    "value": "74342.11"
+  },
+  "PVC-YELLOW-51507": {
+    "quantity": "166.200 kgs",
+    "rate": "81.14",
+    "value": "13485.47"
+  },
+  "PVC-YELLOW-51508": {
+    "quantity": "73.000 kgs",
+    "rate": "69.00",
+    "value": "5037"
+  },
+  "PVC-YELLOW-51513": {
+    "quantity": "11.500 kgs",
+    "rate": "60.00",
+    "value": "690"
+  },
+  "PVC-YELLOW-51706": {
+    "quantity": "99.200 kgs",
+    "rate": "60.00",
+    "value": "5952"
+  },
+  "Reprocess": {
+    "quantity": "0.100 kgs",
+    "rate": "435.00",
+    "value": "43.5"
+  },
+  "Reprocess-LDPE-Film": {
+    "quantity": "32.800 kgs",
+    "rate": "1.46",
+    "value": "48.01"
+  },
+  "Reprocess-PE-HD Black": {
+    "quantity": "5593.050 kgs",
+    "rate": "68.71",
+    "value": "384273.38"
+  },
+  "Reprocess-PP-PPCP Natural 01F08M": {
+    "quantity": "1299.000 kgs",
+    "rate": "85.00",
+    "value": "110415.9"
+  },
+  "Reprocess-Pvcscrap-GULLA": {
+    "quantity": "400.176 kgs",
+    "rate": "10.00",
+    "value": "4001.76"
+  },
+  "Sample-Carbon 339": {
+    "quantity": "42.000 kgs",
+    "rate": "133.00",
+    "value": "5586"
+  },
+  "SAMPLE-COMPOUND-ZHSH02": {
+    "quantity": "36.200 kgs",
+    "rate": "60.00",
+    "value": "2172"
+  },
+  "SAMPLE-COMPOUN-ZHSH01": {
+    "quantity": "77.400 kgs",
+    "rate": "60.00",
+    "value": "4644"
+  },
+  "Sample-Dyes-Solvent-Black-27": {
+    "quantity": "9.000 kgs",
+    "rate": "980.00",
+    "value": "8820"
+  },
+  "Sample-Dyes-Solvent-Blue-122": {
+    "quantity": "1.000 kgs",
+    "rate": "1650.00",
+    "value": "1650"
+  },
+  "Sample-LLDPE-F0118LM": {
+    "quantity": "10.000 kgs",
+    "rate": "107.00",
+    "value": "1070"
+  },
+  "Sample-Makrolon 2407": {
+    "quantity": "25.000 kgs",
+    "rate": "60.00",
+    "value": "1500"
+  },
+  "Sample-PE-Brown-90093": {
+    "quantity": "103.500 kgs",
+    "rate": "30.00",
+    "value": "3105"
+  },
+  "Sample-Pigment-DHG-Yellow": {
+    "quantity": "24.000 kgs",
+    "rate": "426.00",
+    "value": "10224"
+  },
+  "Sample-Pigment-Red2BQ": {
+    "quantity": "10.000 kgs",
+    "rate": "60.00",
+    "value": "600"
+  },
+  "Sample-PPA-9300": {
+    "quantity": "24.600 kgs",
+    "rate": "1350.00",
+    "value": "33210"
+  },
+  "Sample-Solvent Blue 45": {
+    "quantity": "0.500 kgs",
+    "rate": "6180.00",
+    "value": "3090"
+  },
+  "Sample-Solvent Yellow 3033K": {
+    "quantity": "16.000 kgs",
+    "rate": "2900.00",
+    "value": "46400"
+  },
+  "Sample-Solvent Yellow 93": {
+    "quantity": "215.700 kgs",
+    "rate": "678.44",
+    "value": "146338.89"
+  },
+  "Sample-Sudasol Orange 6601": {
+    "quantity": "35.000 kgs",
+    "rate": "1600.00",
+    "value": "56000"
+  },
+  "Sample-Titanium Dioxide-103": {
+    "quantity": "935.000 kgs",
+    "rate": "188.10",
+    "value": "175870.94"
+  },
+  "Sample-Wacker DM SILICONE FLUID 5000": {
+    "quantity": "0.500 kgs",
+    "rate": "295.00",
+    "value": "147.5"
+  },
+  "Sample-Yellow 2001 PY 35 cadmium": {
+    "quantity": "17.000 kgs",
+    "rate": "1151.35",
+    "value": "19572.95"
+  },
+  "Silica": {
+    "quantity": "23.000 kgs",
+    "rate": "107.51",
+    "value": "2472.73"
+  },
+  "Silicon Gum 110-0": {
+    "quantity": "50.000 kgs",
+    "rate": "245.00",
+    "value": "12250"
+  },
+  "TPU-BROWN-90112": {
+    "quantity": "25.000 kgs",
+    "rate": "45.30",
+    "value": "1132.5"
+  },
+  "Wastage": {
+    "quantity": "600.000 kgs",
+    "rate": "60.00",
+    "value": "36000"
+  },
+  "XLPE-BLUE-60062": {
+    "quantity": "118.700 kgs",
+    "rate": "75.32",
+    "value": "8940.48"
+  },
+  "ZHFR-BLACK-10225": {
+    "quantity": "13.000 kgs",
+    "rate": "202.00",
+    "value": "2626"
+  },
+  "ZHFR-GREEN-40071": {
+    "quantity": "98.000 kgs",
+    "rate": "343.00",
+    "value": "33614"
+  },
+  "ZHFR-GREY-15070": {
+    "quantity": "45.000 kgs",
+    "rate": null,
+    "value": null
+  },
+  "ZHFR-IN-02": {
+    "quantity": "36.000 kgs",
+    "rate": "32.78",
+    "value": "1180"
+  },
+  "ZHFR-SH-01": {
+    "quantity": "68.000 kgs",
+    "rate": "37.35",
+    "value": "2540"
+  },
+  "ZHFR-YELLOW-50099": {
+    "quantity": "90.500 kgs",
+    "rate": "60.00",
+    "value": "5430"
+  }
+}

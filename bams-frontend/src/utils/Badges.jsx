@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { EllipsisVertical, ExternalLink, FileText, TriangleAlert } from "lucide-react";
+import { BookOpen, EllipsisVertical, ExternalLink, FileText, TriangleAlert } from "lucide-react";
 import { formatAmount } from "../lib/helper";
 import CustomPopover from "../components/ui/CustomPopover";
 import ActionList from "../components/ui/ActionList";
@@ -79,6 +79,14 @@ const StatementFileBadge = ({ sourceFilePath, fileName, className }) => {
 // storage existed, or the upload failed) keep the static icon.
 export const SourceBadge = ({ source, email_metadata, parser_metadata, gmail_msg_id, className }) => {
   const [open, setOpen] = useState(false);
+
+  if (source === "tally") {
+    return (
+      <span className="flex items-center justify-center w-full" title="Imported from Tally">
+        <BookOpen className={`text-green-600 w-5 h-5 ${className}`} />
+      </span>
+    );
+  }
 
   if (source !== "email") {
     const sourceFilePath = parser_metadata?.source_file_path;
