@@ -28,7 +28,7 @@ const Sidebar = ({ picture, name, userName, onClose, lastSyncAt }) => {
   }, [lastSyncAt]);
   
   return ( 
-    <main className="flex flex-col items-center w-56 px-3 py-4 sticky top-0 h-screen shadow-md bg-blue-50/10">
+    <main className="flex flex-col items-center w-60 px-3 py-4 sticky top-0 h-screen shadow-md bg-blue-50/10">
       <div className="flex items-center justify-center pt-4 gap-2">
         <Landmark width={40} height={40} className="text-blue-800" />
         <div className="flex flex-col gap-1">
@@ -39,7 +39,7 @@ const Sidebar = ({ picture, name, userName, onClose, lastSyncAt }) => {
         </div>
       </div>
 
-      <div className="flex flex-col mt-6 gap-1.5 w-full">
+      <div className="flex flex-col my-6 gap-1.5 w-full overflow-auto">
         {visibleLinks.map((item) => (
           <Link
             to={item.route}
@@ -48,7 +48,7 @@ const Sidebar = ({ picture, name, userName, onClose, lastSyncAt }) => {
             className={`${pathname === item.route ? "bg-blue-600/90 text-white" : ""} flex items-center font-medium gap-2 px-4 py-2.5 hover:bg-blue-600/90 hover:text-white transition-all duration-200 rounded-md`}
           >
             {item.icon}
-            <span className="text-[13px]">{item.name}</span>
+            <span className="text-mid">{item.name}</span>
           </Link>
         ))}
       </div>

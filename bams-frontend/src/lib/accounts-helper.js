@@ -90,52 +90,59 @@ const isStaleFeed = (account, asOfDate, staleDays) => {
   return elapsedDays >= staleDays;
 };
 
+// Shared with the "Reconciled" / "Needs review" summary cards -- same
+// predicate backs both the count shown and the table filter a card applies,
+// so they can never disagree. An account with no balance data at all (no
+// current_balance AND no statement_balance -> delta is null) is neither:
+// there's nothing to reconcile, so it shouldn't silently count as "ok".
+export const isAccountReconciled = (account, tolerance = ACCOUNT_RECONCILIATION_TOLERANCE) =>
+  account?.delta != null && Math.abs(toNumber(account.delta)) <= tolerance;
+
+export const isAccountNeedsReview = (account, tolerance = ACCOUNT_RECONCILIATION_TOLERANCE) =>
+  account?.delta != null && Math.abs(toNumber(account.delta)) > tolerance;
+
+export const isAccountStale = (account, asOfDate, staleDays = ACCOUNT_STALE_FEED_DAYS) =>
+  isStaleFeed(account, asOfDate, staleDays);
+
 export const getAccountSummaryCards = (
   accounts = [],
   {
     asOfDate,
     tolerance = ACCOUNT_RECONCILIATION_TOLERANCE,
     staleDays = ACCOUNT_STALE_FEED_DAYS,
+    configuredBankCount = null,
   } = {},
 ) => {
   const safeAccounts = Array.isArray(accounts) ? accounts : [];
-  const bankCount = new Set(
-    safeAccounts
-      .map((account) => String(account?.bank_name || "").trim().toLowerCase())
-      .filter(Boolean),
-  ).size;
 
   const consolidatedBalance = safeAccounts.reduce(
     (total, account) => total + toNumber(account?.statement_balance),
     0,
   );
 
-  const reconciledCount = safeAccounts.filter(
-    (account) => Math.abs(toNumber(account?.delta)) <= tolerance,
-  ).length;
-
-  const needsReviewCount = safeAccounts.filter(
-    (account) => Math.abs(toNumber(account?.delta)) > tolerance,
-  ).length;
-
-  const staleFeedCount = safeAccounts.filter(
-    (account) => isStaleFeed(account, asOfDate, staleDays),
-  ).length;
+  const reconciledCount = safeAccounts.filter((account) => isAccountReconciled(account, tolerance)).length;
+  const needsReviewCount = safeAccounts.filter((account) => isAccountNeedsReview(account, tolerance)).length;
+  const staleFeedCount = safeAccounts.filter((account) => isAccountStale(account, asOfDate, staleDays)).length;
 
   return [
     {
+      key: "total",
       title: "Total accounts",
       value: safeAccounts.length,
       color: "purple",
-      description: `across ${bankCount} ${bankCount === 1 ? "bank" : "banks"}`,
+      description: configuredBankCount
+        ? `across ${configuredBankCount} ${configuredBankCount === 1 ? "bank" : "banks"}`
+        : "",
     },
     {
+      key: "balance",
       title: "Consolidated balance",
       value: formatCompactINR(consolidatedBalance),
       color: "green",
       description: "as per statements",
     },
     {
+      key: "reconciled",
       title: "Reconciled",
       value: reconciledCount,
       color: "green",
@@ -143,6 +150,7 @@ export const getAccountSummaryCards = (
       description: `delta within ₹${formatAmount(tolerance)}`,
     },
     {
+      key: "needsReview",
       title: "Needs review",
       value: needsReviewCount,
       color: "orange",
@@ -150,6 +158,7 @@ export const getAccountSummaryCards = (
       description: "delta above tolerance",
     },
     {
+      key: "stale",
       title: "Stale feed",
       value: staleFeedCount,
       color: "red",

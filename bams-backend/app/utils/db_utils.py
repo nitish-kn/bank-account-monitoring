@@ -875,6 +875,8 @@ def transaction_to_schema_dict(transaction: Transactions) -> dict:
     result["is_flag"] = bool(transaction.is_flag)
     result["created_at"] = transaction.created_at.isoformat() if transaction.created_at else None
     result["updated_at"] = transaction.updated_at.isoformat() if transaction.updated_at else None
+    result["tally_synced_at"] = transaction.tally_synced_at.isoformat() if transaction.tally_synced_at else None
+    result["tally_voucher"] = transaction.tally_voucher
     return result
 
 

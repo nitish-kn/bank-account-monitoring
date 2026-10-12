@@ -2,12 +2,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import init_database, check_connection
 from . import models
-from .routes import accounts, auth, chat, export, family, gmail, invites, roles, sheets, setup, statements, transactions, users
+from .routes import accounts, auth, chat, export, family, gmail, invites, roles, sheets, setup, statements, tally, transactions, users
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi import status
 from .core.constants import FRONTEND_DIST_DIR, FRONTEND_INDEX_FILE, PROJECT_ROOT
 from contextlib import asynccontextmanager
 from .scheduler import scheduler, start_scheduler
+from .services.tally_service import start_bridge
 
 check_connection()
 init_database()
@@ -17,10 +18,13 @@ init_database()
 async def lifespan(app: FastAPI):
     # Startup
     start_scheduler()
+    bridge_proc = start_bridge()
 
     yield
     # Shutdown
     scheduler.shutdown()
+    if bridge_proc:
+        bridge_proc.terminate()
 
 
 app = FastAPI(lifespan=lifespan, title="BAMS Backend API")
@@ -45,6 +49,7 @@ app.include_router(transactions.router)
 app.include_router(accounts.router)
 app.include_router(chat.router)
 app.include_router(export.router)
+app.include_router(tally.router)
 app.include_router(users.router)
 app.include_router(roles.router)
 

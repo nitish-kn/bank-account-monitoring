@@ -1,0 +1,94 @@
+# Tally Full Automation API — Walkthrough
+
+## Final Project Structure
+
+```
+Tally_tools/
+├── index.js                       ← Entry point (mounts 18 route modules)
+├── tallyClient.js                 ← Tally HTTP communication
+├── postman_collection.json        ← 67+ Postman requests
+├── helpers/
+│   └── tallyHelper.js             ← Shared response parser
+└── routes/
+    ├── accounting.js              ← Groups, Ledgers, Vouchers (CRUD)
+    ├── inventory.js               ← Units, Stock Items (CRUD)
+    ├── costCentres.js             ← Cost Centres (CRUD)
+    ├── invoices.js                ← Sales Invoices
+    ├── purchaseInvoices.js        ← Purchase Invoices
+    ├── creditDebitNotes.js        ← Credit/Debit Notes
+    ├── transactions.js            ← Payments, Receipts, Contra, Journals
+    ├── orders.js                  ← Sales/Purchase Orders
+    ├── stockMovements.js          ← Delivery Notes, Receipt Notes, Stock Journals
+    ├── stockGroups.js             ← Stock Groups (CRUD)
+    ├── stockCategories.js         ← Stock Categories (CRUD)
+    ├── godowns.js                 ← Godowns/Warehouses (CRUD)
+    ├── masters.js                 ← Currencies, Voucher Types, Budgets, Cost Categories
+    ├── reports.js                 ← Generic report extraction
+    ├── parsedReports.js           ← Parsed: Trial Balance, Balance Sheet, P&L, etc.
+    ├── gst.js                     ← GSTR-1, GSTR-2, GSTR-3B, E-Invoice, E-Way Bill
+    ├── payroll.js                 ← Employees, Pay Heads, Attendance, Payroll Vouchers
+    └── system.js                  ← Company Info, Health Check, Bulk Sync
+```
+
+## All Endpoints (66+)
+
+| Category | Method | Endpoint | Description |
+|----------|--------|----------|-------------|
+| **System** | GET | `/health` | Tally connection check |
+| | GET | `/company` | Company details |
+| | POST | `/sync` | Bulk import masters + vouchers |
+| **Groups** | GET/POST/PUT/DELETE | `/groups` | Full CRUD |
+| **Ledgers** | GET/POST/PUT/DELETE | `/ledgers` | Full CRUD |
+| **Vouchers** | GET/POST/PUT/DELETE | `/vouchers` | Generic vouchers |
+| **Units** | GET/POST/PUT/DELETE | `/units` | Full CRUD |
+| **Stock Items** | GET/POST/PUT/DELETE | `/stock-items` | Full CRUD |
+| **Stock Groups** | GET/POST/PUT/DELETE | `/stock-groups` | Full CRUD |
+| **Stock Categories** | GET/POST/PUT/DELETE | `/stock-categories` | Full CRUD |
+| **Godowns** | GET/POST/PUT/DELETE | `/godowns` | Full CRUD |
+| **Cost Centres** | GET/POST/PUT/DELETE | `/cost-centres` | Full CRUD |
+| **Cost Categories** | GET/POST | `/cost-categories` | List & create |
+| **Currencies** | GET/POST | `/currencies` | List & create |
+| **Voucher Types** | GET/POST | `/voucher-types` | List & create |
+| **Budgets** | GET/POST | `/budgets` | List & create |
+| **Sales Invoices** | GET/POST | `/invoices` | With inventory items |
+| **Purchase Invoices** | GET/POST | `/purchase-invoices` | With inventory items |
+| **Credit Notes** | GET/POST | `/credit-notes` | Sales returns |
+| **Debit Notes** | GET/POST | `/debit-notes` | Purchase returns |
+| **Payments** | GET/POST | `/payments` | Payment vouchers |
+| **Receipts** | GET/POST | `/receipts` | Receipt vouchers |
+| **Contra** | GET/POST | `/contra` | Bank ↔ Cash |
+| **Journals** | GET/POST | `/journals` | Journal entries |
+| **Sales Orders** | GET/POST | `/sales-orders` | With inventory |
+| **Purchase Orders** | GET/POST | `/purchase-orders` | With inventory |
+| **Delivery Notes** | GET/POST | `/delivery-notes` | Dispatch tracking |
+| **Receipt Notes** | GET/POST | `/receipt-notes` | Goods inward |
+| **Stock Journals** | GET/POST | `/stock-journals` | Godown transfers |
+| **Reports** | POST | `/report` | Generic raw report |
+| | GET | `/reports/trial-balance` | Parsed |
+| | GET | `/reports/balance-sheet` | Parsed |
+| | GET | `/reports/profit-loss` | Parsed |
+| | GET | `/reports/cash-flow` | Parsed |
+| | GET | `/reports/stock-summary` | Parsed |
+| | GET | `/reports/day-book` | Parsed |
+| | GET | `/reports/outstanding/receivables` | Aging |
+| | GET | `/reports/outstanding/payables` | Aging |
+| | GET | `/reports/ledger/:name` | Ledger statement |
+| **GST** | GET | `/gst/gstr1` | Sales data |
+| | GET | `/gst/gstr2` | Purchase data |
+| | GET | `/gst/gstr3b` | Tax summary |
+| | POST | `/gst/e-invoice` | E-Invoice data |
+| | POST | `/gst/e-waybill` | E-Way Bill data |
+| **Payroll** | GET/POST | `/employees` | Employee masters |
+| | GET/POST | `/pay-heads` | Salary components |
+| | GET/POST | `/attendance` | Attendance |
+| | POST | `/payroll-vouchers` | Salary processing |
+
+## Verification
+
+Server starts successfully on port 5001 with all 18 route modules loaded. Tested via `node index.js`.
+
+## Postman Import
+
+1. Open Postman → **Import** → Select [postman_collection.json](file:///c:/Workspace/Office/Dev-Resources/Tally_tools/postman_collection.json)
+2. All requests use `{{baseUrl}}` variable (defaults to `http://localhost:5001`)
+3. **67+ requests** organized into **22 folders**

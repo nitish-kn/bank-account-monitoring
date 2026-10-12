@@ -214,6 +214,17 @@ def apply_transaction_filters(query, filters: dict):
     elif tab_val == "transactions":
         query = query.filter(~_txn_via_is("Credit Card", "FASTag"))
 
+    if filters.get("excludeFlagged"):
+        query = query.filter(Transactions.is_flag.is_(False))
+
+    # Rows imported from Tally have tally_synced_at set too, but get their own tab.
+    if filters.get("tallyStatus") == "pushed":
+        query = query.filter(Transactions.tally_synced_at.is_not(None), Transactions.source != "tally")
+    elif filters.get("tallyStatus") == "imported":
+        query = query.filter(Transactions.source == "tally")
+    elif filters.get("tallyStatus") == "pending":
+        query = query.filter(Transactions.tally_synced_at.is_(None))
+
     # Ensure org_id is already applied by the caller
     
     # Text Search (search)

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Spinner, Table } from "@radix-ui/themes";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, Filter, Plus, RotateCcw, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, Filter, Plus, RotateCcw, Search, X } from "lucide-react";
 
 import { accountsApi } from "../api/accounts";
 import { transactionApi } from "../api/transactions";
@@ -12,7 +12,14 @@ import CustomTable from "../components/ui/CustomTable";
 import DataCard from "../components/ui/DataCard";
 import Pagination from "../components/Pagination";
 import { cleanText, formatAmount, formatDate, formatDateAndTime, formatINR } from "../lib/helper";
-import { getAccountBalanceTotals, getAccountSummaryCards, getIndividualAccountFilterValue } from "../lib/accounts-helper";
+import {
+  getAccountBalanceTotals,
+  getAccountSummaryCards,
+  getIndividualAccountFilterValue,
+  isAccountNeedsReview,
+  isAccountReconciled,
+  isAccountStale,
+} from "../lib/accounts-helper";
 import { getAccountFilterOptionsFromBackend } from "../lib/transactional-helper";
 import AddAcounts from "../components/AddAcounts";
 import { useExportContextStore } from "../store/exportContextStore";
@@ -175,6 +182,14 @@ const Accounts = () => {
   const [openFilter, setOpenFilter] = useState(false);
   const [openDraw, setOpenDraw] = useState(false);
   const [timelineAccount, setTimelineAccount] = useState(null);
+  // Which summary card is "active" and narrowing the table below, if any --
+  // clicking the same one again clears it.
+  const [statusFilter, setStatusFilter] = useState(null);
+
+  const toggleStatusFilter = (key) => {
+    setStatusFilter((current) => (current === key ? null : key));
+    setPage(1);
+  };
 
   const openAccountTimeline = (account) => {
     setTimelineAccount(account);
@@ -300,19 +315,39 @@ const Accounts = () => {
     setExportContext("accounts", { filters });
   }, [filters, setExportContext]);
 
-  const paginatedAccounts = useMemo(() => {
-    const startIndex = (page - 1) * pageSize;
-    return accounts.slice(startIndex, startIndex + pageSize);
-  }, [accounts, page, pageSize]);
+  const STATUS_PREDICATES = {
+    reconciled: (account) => isAccountReconciled(account),
+    needsReview: (account) => isAccountNeedsReview(account),
+    stale: (account) => isAccountStale(account, filters.date),
+  };
 
-  const summaryCards = useMemo(
-    () => getAccountSummaryCards(accounts, { asOfDate: filters.date }),
-    [accounts, filters.date],
-  );
+  // Same predicates the cards above are counted with, so a card's number and
+  // what clicking it shows in the table always agree.
+  const visibleAccounts = useMemo(() => {
+    const predicate = statusFilter && STATUS_PREDICATES[statusFilter];
+    return predicate ? accounts.filter(predicate) : accounts;
+  }, [accounts, statusFilter, filters.date]);
+  
+  
   const balanceTotals = useMemo(
     () => getAccountBalanceTotals(accounts),
     [accounts],
   );
+
+  const paginatedAccounts = useMemo(() => {
+    const startIndex = (page - 1) * pageSize;
+    return visibleAccounts.slice(startIndex, startIndex + pageSize);
+  }, [visibleAccounts, page, pageSize]);
+
+  const configuredBankCount = Math.max((filterOptions.banks?.length || 1) - 1, 0);
+  const summaryCards = useMemo(
+    () => getAccountSummaryCards(accounts, {
+      asOfDate: filters.date,
+      configuredBankCount,
+    }),
+    [accounts, filters.date, configuredBankCount],
+  );
+
 
   const columns = useMemo(
     () => [
@@ -603,19 +638,32 @@ const Accounts = () => {
         {/* Page Header */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-950">All Accounts</h1>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <h1 className="text-2xl font-bold text-slate-950">All Accounts</h1>
+            </div>
             <p className="mt-1 text-xs font-medium text-slate-500"> Every account in one view — balances, reconciliation health, and last activity </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <Badge
+            {statusFilter && (
+              <CustomButton
+                variant="outline"
+                color="red"
+                onClick={() => toggleStatusFilter(statusFilter)}
+                className="text-xs! font-semibold! p-1.5! text-blue-600 hover:underline"
+              >
+                <X className="h-4 w-4 -mr-1" strokeWidth="3" /> {summaryCards.find((card) => card.key === statusFilter)?.title}
+              </CustomButton>
+            )}
+
+            {/* <Badge
               color={hasActiveFilters ? "blue" : "gray"}
               variant="soft"
               radius="full"
               className="w-fit px-3 py-1 font-semibold"
             >
               {totalCount} Accounts
-            </Badge>
+            </Badge> */}
 
             {/* Filter Button */}
             <CustomButton
@@ -810,10 +858,13 @@ const Accounts = () => {
             key={card.title}
             compact
             title={card.title}
-            value={card.value}
+            value={card.key === "total" ? totalCount : card.value}
             color={card.color}
             description={card.description}
             indicatorColor={card.indicatorColor}
+            active={Boolean(card.key) && statusFilter === card.key}
+            isLink={Boolean(STATUS_PREDICATES[card.key])}
+            onClick={STATUS_PREDICATES[card.key] ? () => toggleStatusFilter(card.key) : undefined}
           />
         ))}
       </div>
@@ -858,7 +909,7 @@ const Accounts = () => {
 
             <Pagination
               currentPage={page}
-              totalItems={totalCount}
+              totalItems={visibleAccounts.length}
               pageSize={pageSize}
               itemLabel="accounts"
               onPageChange={setPage}

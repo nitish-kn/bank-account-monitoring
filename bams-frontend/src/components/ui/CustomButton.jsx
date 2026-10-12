@@ -19,7 +19,7 @@ const CustomButton = ({
       size={size}
       color={color}
       radius={radius}
-      className={className}
+      className={`text-mid! ${className}`}
       onClick={onClick}
       disabled={disabled}
       {...props}

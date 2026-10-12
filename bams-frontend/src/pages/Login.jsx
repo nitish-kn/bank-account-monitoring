@@ -16,8 +16,7 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
-  // Email/password sign-in for sub-users an admin created. The org owner has
-  // no password and signs in with the Google button below instead.
+  // Handle users who sign-in using credentials, sub-users or users created by an admin.
   const handlePasswordSubmit = async (event) => {
     event.preventDefault();
     setError("");
@@ -32,6 +31,7 @@ const Login = () => {
     }
   };
 
+  // Handle Google OAuth login for org owners or super admins.
   const handleLogin = useGoogleLogin({
     flow: "auth-code",
     onSuccess: async (codeResponse) => {

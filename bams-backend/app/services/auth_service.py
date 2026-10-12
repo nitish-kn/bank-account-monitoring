@@ -15,8 +15,7 @@ from ..utils.serializers import serialize_auth_org as serialize_org, serialize_u
 
 
 def build_session_payload(db: Session, user: User) -> dict:
-    """The shape every authenticating endpoint returns: a token plus enough
-    identity/permission context for the frontend to render the right UI."""
+    """The shape every authenticating endpoint returns: a token plus enough identity/permission context for the frontend to render the right UI."""
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(user)
@@ -151,6 +150,7 @@ def create_or_update_org_from_google(code: str, db: Session) -> dict:
     return build_session_payload(db, user)
 
 
+# Login for sub-users created by an admin, using email/password.
 def login_with_password(email: str, password: str, db: Session) -> dict:
     """Email/password sign-in for sub-users an admin created."""
     credentials_exception = HTTPException(status_code=401, detail="Incorrect email or password.")

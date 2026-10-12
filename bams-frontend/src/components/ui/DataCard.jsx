@@ -1,4 +1,5 @@
 import { colorClasses } from "../../utils/constants";
+import { ExternalLink } from "lucide-react";
 
 const indicatorClasses = {
   green: "bg-green-500",
@@ -19,18 +20,35 @@ const DataCard = ({
   compact = false,
   indicatorColor,
   className = "",
+  onClick,
+  active = false,
+  isLink = false,
 }) => {
   const classes = colorClasses[color] || colorClasses.gray;
 
   if (compact) {
+    const clickableClasses = onClick
+      ? `group cursor-pointer ${active ? "border-blue-400 bg-blue-50 ring-1 ring-blue-400" : "hover:border-gray-300"}`
+      : "";
     return (
-      <div className={`min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md ${className}`}>
+      <div
+        role={onClick ? "button" : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        onClick={onClick}
+        onKeyDown={onClick ? (event) => (event.key === "Enter" || event.key === " ") && onClick(event) : undefined}
+        className={`relative min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md ${clickableClasses} ${className}`}
+      >
         <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex min-w-0 items-center gap-2">
-            {indicatorColor ? (
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${indicatorClasses[indicatorColor] || indicatorClasses.gray}`} />
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {indicatorColor ? (
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${indicatorClasses[indicatorColor] || indicatorClasses.gray}`} />
+              ) : null}
+              <p className="truncate text-xs font-medium text-slate-700">{title}</p>
+            </div>
+            {isLink ? (
+              <ExternalLink className="h-4 w-4 shrink-0 text-blue-600 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
             ) : null}
-            <p className="truncate text-xs font-medium text-slate-700">{title}</p>
           </div>
           <p className={`truncate text-2xl font-bold leading-tight ${classes?.value}`}>
             {value ?? "-"}

@@ -13,14 +13,9 @@ const Layout = () => {
   const { org, user, accessToken, setOrg, setIdentity } = useAuthStore();
 
   // Google setup/permission granting belongs to the org's Google-linked owner.
-  // Sub-users sign in with a password and have no Google account to grant from,
-  // so they must never see the setup overlay or auto-trigger the setup run.
+  // Sub-users sign in with a password and have no Google account to grant from, so they must never see the setup overlay or auto-trigger the setup run.
   const isOwner = Boolean(user?.is_owner);
-  const {
-    isSyncing, lastSyncAt, syncDashboard, startSyncStatusPolling,
-    initializeSetup, isLoading, error: setupError, message, stepHistory,
-    isSetupComplete, hasDismissedSetup, dismissSetupSuccess, retrySetup
-  } = useSetupStore();
+  const { isSyncing, lastSyncAt, syncDashboard, startSyncStatusPolling, initializeSetup, isLoading, error: setupError, message, stepHistory, isSetupComplete, hasDismissedSetup, dismissSetupSuccess, retrySetup } = useSetupStore();
 
   const [showMenu, setShowMenu] = useState(false);
   const effectiveLastSyncAt = lastSyncAt || org?.last_synced_at;
@@ -38,12 +33,12 @@ const Layout = () => {
   const needsSheets = !hasSheetsPermissions;
   const permissionsMissing = needsEmail || needsSheets;
 
-  // Re-read identity/permissions on load: the persisted copy can be stale if
-  // an admin changed this user's role since the token was issued.
+  // Re-read identity/permissions on load: the persisted copy can be stale if an admin changed this user's role since the token was issued.
   useEffect(() => {
     if (!accessToken) return;
     rbacApi.getMe().then(setIdentity).catch(() => {});
   }, [accessToken, setIdentity]);
+
 
   // For the first time login - Auto-start setup when permissions are granted and the org has not completed setup yet
   useEffect(() => {
@@ -51,6 +46,7 @@ const Layout = () => {
       initializeSetup();
     }
   }, [ isOwner, org, hasCompletedSetup, permissionsMissing, isSetupComplete, isLoading, setupError, initializeSetup, ]);
+
 
   // Keep progress polling alive for setup/manual syncs that are already running.
   // Returning users should sync only when they click the refresh button.
@@ -61,6 +57,7 @@ const Layout = () => {
 
     startSyncStatusPolling();
   }, [accessToken, hasCompletedSetup, startSyncStatusPolling, orgSyncStatus]);
+
 
   // For users who haven't given permissions on login, Handle permission grant with both email and sheets scopes
   const handlePermissionGrant = async (code) => {
@@ -79,6 +76,7 @@ const Layout = () => {
     }
   };
 
+
   // For users who may have given half permissions on login, Request missing permissions
   const requestMissingPermissions = useGoogleLogin({
     flow: "auth-code",
@@ -90,10 +88,12 @@ const Layout = () => {
       "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets",
   });
 
+
   // Check if org is new or hasn't completed setup yet
   const showSetupOverlay = Boolean(
     isOwner && org && (!hasCompletedSetup || (isSetupComplete && !hasDismissedSetup)),
   );
+
 
   // For sidebar to close in small screens, when user touches out of sidebar
   useEffect(() => {
@@ -122,6 +122,8 @@ const Layout = () => {
           <Sidebar picture={org?.picture} name={org?.name} userName={user?.name} lastSyncAt={effectiveLastSyncAt}/>
         </div>
 
+
+        {/* Sidebar handling for small screens */}
         {showMenu && (
           <>
             {/* Dark overlay backdrop */}
@@ -133,6 +135,8 @@ const Layout = () => {
             </div>
           </>
         )}
+
+
         <div className="flex-1 flex flex-col h-screen bg-gray-200/50 overflow-hidden">
           <Headers
             isSyncing={isSyncing}
@@ -141,13 +145,13 @@ const Layout = () => {
             setShowMenu={setShowMenu}
           />
 
-          <main className="flex-1 min-h-0 p-3.5 overflow-y-auto">
-            <Outlet />
-          </main>
+          {/* Main content area where child routes will be rendered and everything will be shown from here*/}
+          <main className="flex-1 min-h-0 p-3.5 overflow-y-auto"> <Outlet /> </main>
           
         </div>
       </div>
-      
+
+      {/* Overlay for setup flow, when user is new */}
       {showSetupOverlay && (
         <SetupFlowOverlay
           org={org}

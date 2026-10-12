@@ -8,10 +8,7 @@ let lastRefreshTime = Date.now();
 const TOKEN_REFRESH_INTERVAL = 270 * 60 * 1000; // Refresh every 4.5 hours (token expires in 5 hours)
 let refreshPromise = null;
 
-/**
- * Process queued API requests after token refresh completes.
- * Resolves or rejects all promises waiting for a new token.
- */
+/* Process queued API requests after token refresh completes. Resolves or rejects all promises waiting for a new token.  */
 const processQueue = (error, token = null) => {
   failedQueue.forEach((promise) => {
     if (error) {
@@ -28,10 +25,7 @@ const isRefreshRequest = (config = {}) => {
   return url.includes("/auth/refresh") || url.includes("/api/auth/refresh");
 };
 
-/**
- * Proactively refresh the access token before expiry.
- * Uses stored credentials to get a new JWT token from the backend.
- */
+/* Proactively refresh the access token before expiry. Uses stored credentials to get a new JWT token from the backend.  */
 const performTokenRefresh = async (axiosInstance) => {
   const expiredToken = useAuthStore.getState().accessToken;
   if (!expiredToken) {
@@ -64,10 +58,11 @@ const performTokenRefresh = async (axiosInstance) => {
   }
 };
 
-/**
- * Request interceptor for proactive token refresh.
- * Checks if token should be refreshed before making API calls.
- */
+
+
+//  ========================================= Main interceptors =========================================
+
+/* Request interceptor for proactive token refresh, runs before a request leaves (checks the stopwatch). Checks if token should be refreshed before making API calls. */
 const createRequestInterceptor = (axiosInstance) => async (config) => {
   // Skip interceptor if marked
   if (config._skipInterceptor) {
@@ -110,10 +105,7 @@ const createRequestInterceptor = (axiosInstance) => async (config) => {
   return config;
 };
 
-/**
- * Response interceptor for handling 401 Unauthorized errors.
- * Attempts token refresh and retries failed requests.
- */
+/* Response interceptor for handling 401 Unauthorized errors, runs after a response comes back (checks for 401). Attempts token refresh and retries failed requests. */
 const createResponseInterceptor = (axiosInstance) => async (error) => {
   const originalRequest = error.config;
 
@@ -201,10 +193,9 @@ const createResponseInterceptor = (axiosInstance) => async (error) => {
   return Promise.reject(error);
 };
 
-/**
- * Setup axios interceptors for authentication and token refresh.
- * Should be called once during app initialization.
- */
+
+/** ---------------------------- Main code ----------------------------
+ Setup axios interceptors for authentication and token refresh. Should be called once during app initialization. */
 export const setupAxiosInterceptors = (axiosInstance = axios) => {
   // Add request interceptor for proactive token refresh
   axiosInstance.interceptors.request.use(
