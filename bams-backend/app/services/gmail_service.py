@@ -9,6 +9,7 @@ from html import unescape
 import time
 
 from google.auth.transport.requests import Request
+from ..utils.date_utils import ist_day, ist_today
 import requests
 from ..core.constants import (
     BASE_RETRY_DELAY_SECONDS,
@@ -94,8 +95,9 @@ def _build_date_window_query(
 ) -> str:
     """Extends the search syntax by attaching time constraints using after:YYYY/MM/DD and before:YYYY/MM/DD filters."""
 
-    end_day = (end_date or datetime.utcnow()).date() + timedelta(days=1)
-    start_day = start_date.date() if start_date else end_day - timedelta(days=days or GMAIL_BACKFILL_DAYS)
+    end_day = ist_day(end_date) if end_date else ist_today()
+    end_day = end_day + timedelta(days=1)
+    start_day = ist_day(start_date) if start_date else end_day - timedelta(days=days or GMAIL_BACKFILL_DAYS)
 
     return (
         f"{_build_sender_query()} "

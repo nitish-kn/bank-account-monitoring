@@ -123,7 +123,7 @@ const AuditLog = () => {
       {
         key: "changed_by",
         header: "OPERATOR",
-        columnWidth: "100px",
+        columnWidth: "180px",
         render: (row) => (
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600 shrink-0">
@@ -187,7 +187,7 @@ const AuditLog = () => {
       {
         key: "reason",
         header: "REASON",
-        columnWidth: "180px",
+        columnWidth: "150px",
         render: (row) => (
           <div className="text-xs text-gray-600 max-w-[170px] truncate" title={row.reason || ""}>
             {row.reason || <span className="text-gray-400 italic">No reason</span>}

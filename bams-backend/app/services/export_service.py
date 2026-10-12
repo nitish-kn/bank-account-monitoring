@@ -17,6 +17,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from sqlalchemy.orm import Session
 
 from ..models.organization import Organization
+from ..utils.date_utils import ist_today
 from .accounts_service import get_paginated_accounts
 from .transaction_service import get_paginated_transactions, query_audit_logs
 
@@ -223,7 +224,7 @@ DEFAULT_DATE_RANGE_DAYS = 30
 
 
 def _default_date_bounds(days: int = DEFAULT_DATE_RANGE_DAYS) -> tuple[str, str]:
-    end = datetime.utcnow().date()
+    end = ist_today()
     start = end - timedelta(days=days)
     return start.isoformat(), end.isoformat()
 
@@ -250,7 +251,7 @@ def _with_default_date_range(source: str, filters: dict | None) -> dict:
 
     elif source == "accounts":
         if not filters.get("date"):
-            filters["date"] = datetime.utcnow().date().isoformat()
+            filters["date"] = ist_today().isoformat()
 
     return filters
 

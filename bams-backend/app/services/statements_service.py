@@ -136,10 +136,11 @@ def _run_statement_upload_job(
 ) -> None:
     try:
         result = _process_saved_statements_sync(org_id, saved_files, uploaded_by=uploaded_by)
+        failed_files = [file for file in result.get("files", []) if file.get("status") == "failed"]
 
         _set_statement_job(
             job_id,
-            status=STATEMENT_JOB_SUCCESS,
+            status=STATEMENT_JOB_FAILED if failed_files else STATEMENT_JOB_SUCCESS,
             message=result.get("message") or "Statement parsing completed.",
             result=result,
             completed_at=_utc_now_iso(),
@@ -252,6 +253,7 @@ def _process_saved_statements_sync(
                 1 for txn in extracted_txns or []
                 if str(txn.get("txn_type") or "").strip().lower() == "carry_forward"
             )
+            parsed_statement_txns = list(extracted_txns or [])
             extracted_txns = [
                 txn for txn in extracted_txns or []
                 if str(txn.get("txn_type") or "").strip().lower() != "carry_forward"
@@ -265,6 +267,18 @@ def _process_saved_statements_sync(
 
             if not extracted_txns:
                 file_result["status"] = "no_transactions_found"
+                if parsed_statement_txns:
+                    file_result["source_file_path"] = store_and_link_statement_file(
+                        db,
+                        org.id,
+                        content=saved_path.read_bytes(),
+                        filename=original_filename,
+                        source="statement",
+                        statement_transactions=parsed_statement_txns,
+                        saved_transactions=[],
+                        uploaded_by=uploaded_by,
+                        store_without_new_transactions=True,
+                    )
                 processed_files.append(file_result)
                 continue
 

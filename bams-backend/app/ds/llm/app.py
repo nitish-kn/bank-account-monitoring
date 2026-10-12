@@ -37,7 +37,8 @@ from PIL import Image
 from pydantic import BaseModel, Field, ValidationError
 
 from ...config import settings
-from ...utils.sheets_utils import append_account_to_local_excel
+from fastapi import HTTPException
+
 from .schemas.transaction_schema import Transaction
 from .utils.account_lookup import (
     fill_missing_account_details,
@@ -745,39 +746,6 @@ def _normalize_carry_forward_transaction(tx_dict: dict) -> dict:
     return tx_dict
 
 
-def _register_unmatched_statement_account(tx_dict: dict, registered_accounts: set[str]) -> None:
-    """
-    A statement account number that doesn't match anything in Bank Accounts
-    V1 is still one of this org's own accounts -- just not on file yet (see
-    fill_missing_account_details's uppercase_when_unmatched path). Register
-    it now via the same helper the "Add Account" UI flow already uses, so
-    every later statement for this account matches on the first try instead
-    of falling through to the uppercase-LLM-values path every time.
-
-    `registered_accounts` is scoped to one extract_transactions_from_pdf()
-    run -- without it, every transaction row on this statement (all sharing
-    the same account) would append a duplicate row.
-    """
-    account_number = tx_dict.get("account_number")
-    bank_name = tx_dict.get("bank_name")
-    account_holder_name = tx_dict.get("account_holder_name")
-    account_type = tx_dict.get("account_type")
-
-    if not (account_number and bank_name and account_holder_name and account_type):
-        return
-    if account_number in registered_accounts:
-        return
-
-    registered_accounts.add(account_number)
-    if not append_account_to_local_excel(
-        bank_name=bank_name,
-        name=account_holder_name,
-        ac_type=account_type,
-        account_no=account_number,
-    ):
-        log.warning("Could not register new account %s in Bank Accounts V1.", account_number)
-
-
 def _recover_credit_card_number(tx_dict: dict) -> dict:
     """
     A vision pass that (even momentarily) treated a row as a bank
@@ -984,7 +952,6 @@ def extract_transactions_from_pdf(
     all_transactions: list[Transaction] = []
     all_log_entries: list[ExtractionLogEntry] = []
     statement_account_context: dict[str, str] = {}
-    newly_registered_accounts: set[str] = set()
 
     try:
         account_lookup_df = load_bank_accounts_data()
@@ -1057,10 +1024,17 @@ def extract_transactions_from_pdf(
                 tx_dict,
                 df=account_lookup_df,
                 use_last_four_fallback=False,
-                uppercase_when_unmatched=True,
+                uppercase_when_unmatched=False,
             )
             if not account_matched:
-                _register_unmatched_statement_account(enriched_tx, newly_registered_accounts)
+                account_number = tx_dict.get("account_number") or "unknown"
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Account {account_number} is not present in the account mapping. "
+                        "Add the account first, then try uploading the statement again."
+                    ),
+                )
             # print(f"ENRICHED - {enriched_tx}")
             enriched_tx = fill_missing_credit_card_details(enriched_tx)
             # enriched_tx = _apply_account_context(

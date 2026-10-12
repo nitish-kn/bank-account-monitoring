@@ -8,6 +8,7 @@ from sqlalchemy import String, cast, func, or_, and_
 from sqlalchemy.orm import Session
 
 from ..models.bank_accounts import BankAccounts
+from ..utils.date_utils import IST, ist_day, ist_today
 from ..models.transactions import Transactions
 from ..utils.db_utils import transaction_to_schema_dict
 from ..utils.sheets_utils import append_account_to_local_excel
@@ -77,7 +78,7 @@ def _parse_date(value):
         return None
 
     if isinstance(value, datetime):
-        return value.date()
+        return ist_day(value)
 
     try:
         return datetime.strptime(str(value).strip()[:10], "%Y-%m-%d").date()
@@ -87,7 +88,7 @@ def _parse_date(value):
 
 def _selected_account_date(filters: dict | None):
     if not filters:
-        return date.today()
+        return ist_today()
 
     return (
         _parse_date(
@@ -95,15 +96,16 @@ def _selected_account_date(filters: dict | None):
             or filters.get("selectedDate")
             or filters.get("asOfDate")
         )
-        or date.today()
+        or ist_today()
     )
 
 
 def _day_bounds(selected_date: date) -> tuple[datetime, datetime]:
+    # The selected day in IST, matching how dates are stored and shown.
     day_start = datetime.combine(
         selected_date,
         datetime.min.time(),
-        tzinfo=timezone.utc,
+        tzinfo=IST,
     )
     return day_start, day_start + timedelta(days=1)
 
@@ -127,6 +129,21 @@ def _apply_list_filter(query, column, filter_val, filter_kind: str | None = None
         return query
 
     return query.filter(or_(*conditions))
+
+
+def _apply_exact_filter(query, column, filter_val):
+    """Whole-value, case-insensitive match (surrounding spaces ignored). For
+    names, where a substring match is wrong: "Umang Gupta" must not also
+    pull in "Umang Gupta NRE" or "Umang Gupta Nro"."""
+    values = {
+        value.strip().lower()
+        for value in _active_filter_values(filter_val)
+        if value and value.strip()
+    }
+    if not values:
+        return query
+
+    return query.filter(func.trim(_lower_text(column)).in_(values))
 
 
 def _apply_category_filter(query, filter_val):
@@ -245,7 +262,12 @@ def get_account_statement_timeline(db: Session, org_id: int, account_number: str
 
     segments = sorted(
         (
-            {"from": period_from, "to": period_to, "closing_balance": _closing_balance_for(group_rows)}
+            {
+                "from": period_from,
+                "to": period_to,
+                "closing_balance": _closing_balance_for(group_rows),
+                "files": _statement_files_for(group_rows),
+            }
             for (period_from, period_to), group_rows in groups.items()
         ),
         key=lambda s: s["from"],
@@ -260,6 +282,8 @@ def get_account_statement_timeline(db: Session, org_id: int, account_number: str
                 # the merged segment's closing balance too.
                 merged[-1]["to"] = seg["to"]
                 merged[-1]["closing_balance"] = seg["closing_balance"]
+            # A merged range is backed by every statement in it.
+            merged[-1]["files"] = _merge_statement_files(merged[-1]["files"], seg["files"])
         else:
             merged.append(dict(seg))
 
@@ -272,6 +296,7 @@ def get_account_statement_timeline(db: Session, org_id: int, account_number: str
                 "from": _datetime_to_iso(seg["from"]),
                 "to": _datetime_to_iso(seg["to"]),
                 "closing_balance": _decimal_to_string(seg["closing_balance"]),
+                "files": seg["files"],
             }
         )
         next_from = merged[index + 1]["from"] if index + 1 < len(merged) else None
@@ -291,6 +316,34 @@ def get_account_statement_timeline(db: Session, org_id: int, account_number: str
             )
 
     return {"account_number": account_number, "timeline": timeline}
+
+
+def _statement_files_for(rows: list[BankAccounts]) -> list[dict]:
+    """The stored statement PDFs behind a set of bank_accounts rows -- only
+    the row a statement ended on carries its file metadata (see
+    statement_storage_service.attach_statement_metadata)."""
+    return _merge_statement_files(
+        [],
+        [
+            {
+                "storage_key": row.statement_metadata.get("storage_key"),
+                "filename": row.statement_metadata.get("filename"),
+                "uploaded_at": row.statement_metadata.get("uploaded_at"),
+                "uploaded_by": (row.statement_metadata.get("uploaded_by") or {}).get("name"),
+                "source": row.statement_metadata.get("source"),
+            }
+            for row in rows
+            if isinstance(row.statement_metadata, dict) and row.statement_metadata.get("storage_key")
+        ],
+    )
+
+
+def _merge_statement_files(existing: list[dict], incoming: list[dict]) -> list[dict]:
+    """Union by storage key, oldest upload first."""
+    by_key = {file["storage_key"]: file for file in existing}
+    for file in incoming:
+        by_key.setdefault(file["storage_key"], file)
+    return sorted(by_key.values(), key=lambda file: file.get("uploaded_at") or "")
 
 
 def _account_identity_key(account: BankAccounts) -> tuple[str, str, str]:
@@ -450,7 +503,7 @@ def apply_account_filters(query, filters: dict | None):
         filter_kind="account_type",
     )
     query = _apply_category_filter(query, filters.get("category"))
-    query = _apply_list_filter(
+    query = _apply_exact_filter(
         query,
         BankAccounts.account_holder_name,
         account_holder_filter,
@@ -472,9 +525,7 @@ def apply_account_filters(query, filters: dict | None):
                 continue
 
             conditions.append(and_(
-                _lower_text(BankAccounts.account_holder_name).like(
-                    f"%{expected_holder.lower()}%"
-                ),
+                _lower_text(BankAccounts.account_holder_name) == expected_holder.lower(),
                 or_(
                     *[
                         _lower_text(BankAccounts.bank_name).like(f"%{bank_term}%")

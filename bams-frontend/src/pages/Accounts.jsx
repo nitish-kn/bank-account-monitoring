@@ -4,6 +4,7 @@ import { Badge, Spinner, Table } from "@radix-ui/themes";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ExternalLink, Filter, Plus, RotateCcw, Search } from "lucide-react";
 
 import { accountsApi } from "../api/accounts";
+import { transactionApi } from "../api/transactions";
 import CustomButton from "../components/ui/CustomButton";
 import CustomDropDown from "../components/ui/CustomDropDown";
 import CustomInput from "../components/ui/CustomInput";
@@ -12,7 +13,7 @@ import DataCard from "../components/ui/DataCard";
 import Pagination from "../components/Pagination";
 import { cleanText, formatAmount, formatDate, formatDateAndTime, formatINR } from "../lib/helper";
 import { getAccountBalanceTotals, getAccountSummaryCards, getIndividualAccountFilterValue } from "../lib/accounts-helper";
-import { getAccountFilterOptions } from "../lib/transactional-helper";
+import { getAccountFilterOptionsFromBackend } from "../lib/transactional-helper";
 import AddAcounts from "../components/AddAcounts";
 import { useExportContextStore } from "../store/exportContextStore";
 import { AccountCategoryBadge, AmountColor, TypeBadge } from "../utils/Badges";
@@ -149,7 +150,7 @@ const DeltaBadge = ({ value }) => {
 const Accounts = () => {
   const can = usePermissions();
   const navigate = useNavigate();
-  const filterOptions = useMemo(() => getAccountFilterOptions(), []);
+  const [filterOptions, setFilterOptions] = useState(() => getAccountFilterOptionsFromBackend());
   const [accounts, setAccounts] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -163,6 +164,12 @@ const Accounts = () => {
   const [addAccounts, setAddAccounts] = useState(false);
   const [expandedAccountIds, setExpandedAccountIds] = useState({});
   const [recentTransactionsByAccountId, setRecentTransactionsByAccountId] = useState({});
+
+  useEffect(() => {
+    transactionApi.getFilterOptions()
+      .then((response) => setFilterOptions(getAccountFilterOptionsFromBackend(response)))
+      .catch(console.error);
+  }, []);
   const [recentTransactionsLoading, setRecentTransactionsLoading] = useState({});
   const [recentTransactionsError, setRecentTransactionsError] = useState({});
   const [openFilter, setOpenFilter] = useState(false);
@@ -336,9 +343,9 @@ const Accounts = () => {
               )}
             </CustomButton>
 
-            <div className="min-w-0">
-              <p className="flex gap-2 pr-2 truncate py-1 text-sm font-bold text-slate-950 w-full" title={account.account_holder_name}>
-                {account.account_holder_name || "-"}
+            <div className="min-w-0 ">
+              <div className="flex items-start gap-2 pr-2 py-0.5 text-sm font-bold text-slate-950 w-full" title={account.account_holder_name}>
+                <p className="min-w-0 wrap-break-words"> {account.account_holder_name || "-"} </p>
 
                 <CustomButton
                   variant="ghost"
@@ -349,8 +356,9 @@ const Accounts = () => {
                 >
                   <ExternalLink className="h-4 w-4" />
                 </CustomButton>
-              </p>
-              <p className="mt-1 truncate text-xs font-medium text-slate-400" title={`${account.account_number || "-"} · ${account.bank_name || "-"}`}>
+              </div>
+
+              <p className="mt-1 truncate text-xs font-medium text-slate-600" title={`${account.account_number || "-"} · ${account.bank_name || "-"}`} >
                 {account.account_number || "-"} · {account.bank_name || "-"}
               </p>
             </div>
@@ -637,7 +645,7 @@ const Accounts = () => {
         {/* Filter Bar */}
         {openFilter &&
           <>
-            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-9">
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
               <div className="xl:col-span-2">
                 <CustomInput
                   value={draftFilters.search}

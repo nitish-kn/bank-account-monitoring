@@ -81,13 +81,31 @@ def _statement_storage_key(
 ) -> str:
     """Build an org-scoped, human-readable path for the statement PDF."""
     transactions = statement_transactions or []
-    dates = [
+    period_from_values = [
+        day
+        for transaction in transactions
+        if (day := _as_day(transaction.get("period_from"))) is not None
+    ]
+    period_to_values = [
+        day
+        for transaction in transactions
+        if (day := _as_day(transaction.get("period_to"))) is not None
+    ]
+    transaction_dates = [
         day
         for transaction in transactions
         if (day := _as_day(transaction.get("txn_date"))) is not None
     ]
-    period_from = min(dates).isoformat() if dates else "unknown"
-    period_to = max(dates).isoformat() if dates else "unknown"
+    period_from = (
+        min(period_from_values).isoformat()
+        if period_from_values
+        else min(transaction_dates).isoformat() if transaction_dates else "unknown"
+    )
+    period_to = (
+        max(period_to_values).isoformat()
+        if period_to_values
+        else max(transaction_dates).isoformat() if transaction_dates else "unknown"
+    )
     original_name = PurePosixPath(str(filename or "statement.pdf").replace("\\", "/")).name
     file_name = original_name or "statement.pdf"
     bank_name = _storage_path_part(
@@ -171,9 +189,9 @@ def attach_statement_metadata(
     """Write `file_metadata` onto each account's last statement day-row.
 
     That's the row reconcile_statement_batch stamps with the statement's
-    closing balance, so the day is picked by the same rule it uses (amount,
-    account number, date and balance all present) -- a looser rule could
-    land on a different row. Caller commits. Returns how many rows got it.
+    closing balance. Carry-forward-only statements have no transaction amount,
+    so account number and date are sufficient to locate their latest day-row.
+    Caller commits. Returns how many rows got it.
     """
     last_day_per_account: dict[str, date] = {}
     for transaction in transactions or []:
@@ -182,8 +200,6 @@ def attach_statement_metadata(
         if (
             not account_number
             or txn_day is None
-            or _as_decimal(transaction.get("amount")) is None
-            or _as_decimal(transaction.get("balance_after_txn")) is None
         ):
             continue
         if account_number not in last_day_per_account or txn_day > last_day_per_account[account_number]:
@@ -219,6 +235,7 @@ def store_and_link_statement_file(
     saved_transactions: list,
     uploaded_by: dict | None = None,
     gmail_message_id: str | None = None,
+    store_without_new_transactions: bool = False,
 ) -> str | None:
     """Store a statement PDF only if it brought new transactions, then point
     those transactions (parser_metadata.source_file_path) and the statement's
@@ -236,7 +253,7 @@ def store_and_link_statement_file(
         and (model.parser_metadata or {}).get("source_file") == filename
         and (gmail_message_id is None or model.gmail_message_id == gmail_message_id)
     ]
-    if not inserted:
+    if not inserted and not store_without_new_transactions:
         logger.info("Statement file not stored, no new transactions | org=%s file=%s", org_id, filename)
         return None
 
@@ -247,10 +264,36 @@ def store_and_link_statement_file(
                 "bank_name": getattr(model, "bank_name", None),
                 "account_holder_name": getattr(model, "account_holder_name", None),
                 "txn_date": getattr(model, "txn_date", None),
+                "period_from": getattr(model, "period_from", None),
+                "period_to": getattr(model, "period_to", None),
             }
             for model in inserted
         ],
     ]
+    account_numbers = {
+        transaction.get("account_number")
+        for transaction in statement_transactions
+        if transaction.get("account_number")
+    }
+    account_rows = (
+        db.query(BankAccounts)
+        .filter(
+            BankAccounts.org_id == org_id,
+            BankAccounts.account_number.in_(account_numbers),
+        )
+        .all()
+        if account_numbers
+        else []
+    )
+    storage_transactions.extend(
+        {
+            "bank_name": row.bank_name,
+            "account_holder_name": row.account_holder_name,
+            "period_from": row.period_from,
+            "period_to": row.period_to,
+        }
+        for row in account_rows
+    )
     file_metadata = store_statement_file(
         org_id,
         content,

@@ -1,172 +1,5 @@
 import { formatAmount, formatCompactINR } from "./helper";
 
-const all_banks = [
-  { name: "Axis Bank", value: "axis bank" },
-  { name: "ICICI Bank", value: "icici bank" },
-  { name: "HDFC Bank", value: "hdfc bank" },
-  { name: "Indusind Bank", value: "indusind bank" },
-  { name: "State Bank of India", value: "state bank of india" },
-  { name: "Bank of Baroda", value: "bank of baroda" },
-];
-
-const all_account_holder_names_ = [
-  { name: "R N Gupta", value: "r n gupta" },
-  { name: "R N Gupta H", value: "r n gupta h" },
-  { name: "Bhagwati Devi", value: "bhagwati devi" },
-  { name: "Om Prakash Gupta", value: "om prakash gupta" },
-  { name: "OM Prakash Gupta HUF", value: "om prakash gupta huf" },
-  { name: "Sunita Gupta", value: "sunita gupta" },
-  { name: "Ujjwal Gupta", value: "ujjwal gupta" },
-  { name: "Ujjwal Gupta HUF", value: "ujjwal gupta huf" },
-  { name: "Arvind Kumar Gupta", value: "arvind kumar gupta" },
-  { name: "Arvind Kumar Gupta H", value: "arvind kumar gupta h" },
-  { name: "Deepali Gupta", value: "deepali gupta" },
-  { name: "Samriddhi Gupta", value: "samriddhi gupta" },
-  { name: "Umang Gupta", value: "umang gupta" },
-  { name: "Umang Gupta NRE A/c", value: "umang gupta nre a/c" },
-  { name: "Vaibhav Gupta", value: "vaibhav gupta" },
-  { name: "Ram Niwas Gupta", value: "ram niwas gupta" },
-  { name: "Ram Niwas Gupta HUF", value: "ram niwas gupta huf" },
-  { name: "Arvind Kumar Gupta HUF", value: "arvind kumar gupta huf" },
-  { name: "Umang Gupta NRO", value: "umang gupta nro" },
-  { name: "Umang Gupta NRE", value: "umang gupta nre" },
-  { name: "Arvind Gupta", value: "arvind gupta" },
-  { name: "Arivind Gupta HUF", value: "arivind gupta huf" },
-  { name: "Arvind Gupta Oorja/UG", value: "arvind gupta oorja/ug" },
-  { name: "UMANG NRO", value: "umang nro" },
-];
-
-const all_account_types = [
-  { name: "Business", value: "business" },
-  { name: "Common", value: "common" },
-  { name: "HUF", value: "huf" },
-  { name: "Personal", value: "personal" },
-  { name: "Firm", value: "firm" },
-  { name: "SBPRV", value: "sbprv" },
-  { name: "SBSPA", value: "sbspa" },
-  { name: "SBEZY", value: "sbezy" },
-  { name: "SBSPL", value: "sbspl" },
-  { name: "NRE", value: "nre" },
-  { name: "SAAQB25K", value: "saaqb25k" },
-  { name: "Savings", value: "savings" },
-  { name: "Fixed Deposit", value: "fixed deposit" },
-  { name: "Current", value: "current" },
-];
-
-const all_account_categories = [
-  { name: "Personal", value: "personal" },
-  { name: "Business", value: "business" },
-  { name: "HUF", value: "huf" },
-  { name: "Family", value: "family" },
-  { name: "Joint Business", value: "jointbusiness" },
-  { name: "Firm", value: "firm" },
-  { name: "Others", value: "others" },
-];
-
-const all_account_numbers = [
-  // From First Image
-  { name: "XX5662", value: "xx5662" },
-  { name: "XX7775", value: "xx7775" },
-  { name: "XX5671", value: "xx5671" },
-  { name: "XX7393", value: "xx7393" },
-  { name: "XX1834", value: "xx1834" },
-  { name: "XX6193", value: "xx6193" },
-  { name: "XX2006", value: "xx2006" },
-  { name: "XX5532", value: "xx5532" },
-  { name: "XX7989", value: "xx7989" },
-  { name: "XX6744", value: "xx6744" },
-  { name: "XX5644", value: "xx5644" },
-  { name: "XX1450", value: "xx1450" },
-  { name: "XX1618", value: "xx1618" },
-  { name: "XX7701", value: "xx7701" },
-  { name: "XX2994", value: "xx2994" },
-  { name: "XX4782", value: "xx4782" },
-  { name: "XX9814", value: "xx9814" },
-  { name: "XX4789", value: "xx4789" },
-  { name: "XX4784", value: "xx4784" },
-  { name: "XX9811", value: "xx9811" },
-  { name: "XX4787", value: "xx4787" },
-  { name: "XX4783", value: "xx4783" },
-  { name: "XX9810", value: "xx9810" },
-  { name: "XX4785", value: "xx4785" },
-  { name: "XX9812", value: "xx9812" },
-  { name: "XX4786", value: "xx4786" },
-  { name: "XX4788", value: "xx4788" },
-  { name: "XX7163", value: "xx7163" },
-  { name: "XX9775", value: "xx9775" },
-  { name: "XX3815", value: "xx3815" },
-  { name: "XX0290", value: "xx0290" },
-  { name: "XX5763", value: "xx5763" },
-  { name: "XX8525", value: "xx8525" },
-  { name: "XX8673", value: "xx8673" },
-  { name: "XX2021", value: "xx2021" },
-  { name: "XX7141", value: "xx7141" },
-  { name: "XX4845", value: "xx4845" },
-  { name: "XX0673", value: "xx0673" },
-  { name: "XX9252", value: "xx9252" },
-  { name: "XX3384", value: "xx3384" },
-  { name: "XX8294", value: "xx8294" },
-];
-
-const individual_account = [
-  // --- Axis Bank Section ---
-  { name: "R N Gupta - Axis Bank - XX5662", value: "r n gupta - axis bank - xx5662" },
-  { name: "R N Gupta H - Axis Bank - XX7775", value: "r n gupta h - axis bank - xx7775" },
-  { name: "Bhagwati Devi - Axis Bank - XX5671", value: "bhagwati devi - axis bank - xx5671" },
-  { name: "Om Prakash Gupta - Axis Bank - XX7393", value: "om prakash gupta - axis bank - xx7393" },
-  { name: "OM Prakash Gupta HUF - Axis Bank - XX1834", value: "om prakash gupta huf - axis bank - xx1834" },
-  { name: "Sunita Gupta - Axis Bank - XX6193", value: "sunita gupta - axis bank - xx6193" },
-  { name: "Ujjwal Gupta - Axis Bank - XX2006", value: "ujjwal gupta - axis bank - xx2006" },
-  { name: "Ujjwal Gupta HUF - Axis Bank - XX5532", value: "ujjwal gupta huf - axis bank - xx5532" },
-  { name: "Arvind Kumar Gupta - Axis Bank - XX7989", value: "arvind kumar gupta - axis bank - xx7989" },
-  { name: "Arvind Kumar Gupta H - Axis Bank - XX6744", value: "arvind kumar gupta h - axis bank - xx6744" },
-  { name: "Deepali Gupta - Axis Bank - XX5644", value: "deepali gupta - axis bank - xx5644" },
-  { name: "Samriddhi Gupta - Axis Bank - XX1450", value: "samriddhi gupta - axis bank - xx1450" },
-  { name: "Umang Gupta - Axis Bank - XX1618", value: "umang gupta - axis bank - xx1618" },
-  { name: "Umang Gupta NRE A/c - Axis Bank - XX7701", value: "umang gupta nre a/c - axis bank - xx7701" },
-  { name: "Vaibhav Gupta - Axis Bank - XX2994", value: "vaibhav gupta - axis bank - xx2994" },
-
-  // --- Bank of Baroda ---
-  { name: "Sunita Gupta - Bank of Baroda - XX0673", value: "sunita gupta - bank of baroda - xx0673" },
-
-  // --- Indusind Bank Section ---
-  { name: "Arvind Kumar Gupta - Indusind Bank - XX7208", value: "arvind kumar gupta - indusind bank - xx7208" },
-  { name: "Deepali Gupta - Indusind Bank - XX7208", value: "deepali gupta - indusind bank - xx7208" },
-  { name: "Samriddhi Gupta - Indusind Bank - XX7208", value: "samriddhi gupta - indusind bank - xx7208" },
-  { name: "Vaibhav Gupta - Indusind Bank - XX2020", value: "vaibhav gupta - indusind bank - xx2020" },
-
-  // --- ICICI Bank Section ---
-  { name: "Ram Niwas Gupta - ICICI Bank - XX4782", value: "ram niwas gupta - icici bank - xx4782" },
-  { name: "Ram Niwas Gupta HUF - ICICI Bank - XX9814", value: "ram niwas gupta huf - icici bank - xx9814" },
-  { name: "Bhagwati Devi - ICICI Bank - XX4789", value: "bhagwati devi - icici bank - xx4789" },
-  { name: "Om Prakash Gupta - ICICI Bank - XX4784", value: "om prakash gupta - icici bank - xx4784" },
-  { name: "Om Prakash Gupta HUF - ICICI Bank - XX9811", value: "om prakash gupta huf - icici bank - xx9811" },
-  { name: "Sunita Gupta - ICICI Bank - XX4787", value: "sunita gupta - icici bank - xx4787" },
-  { name: "Ujjwal Gupta - ICICI Bank - XX4783", value: "ujjwal gupta - icici bank - xx4783" },
-  { name: "Ujjwal Gupta HUF - ICICI Bank - XX9810", value: "ujjwal gupta huf - icici bank - xx9810" },
-  { name: "Arvind Kumar Gupta - ICICI Bank - XX4785", value: "arvind kumar gupta - icici bank - xx4785" },
-  { name: "Arvind Kumar Gupta HUF - ICICI Bank - XX9812", value: "arvind kumar gupta huf - icici bank - xx9812" },
-  { name: "Deepali Gupta - ICICI Bank - XX4786", value: "deepali gupta - icici bank - xx4786" },
-  { name: "Vaibhav Gupta - ICICI Bank - XX4788", value: "vaibhav gupta - icici bank - xx4788" },
-  { name: "Umang Gupta NRO - ICICI Bank - XX7163", value: "umang gupta nro - icici bank - xx7163" },
-  { name: "Umang Gupta NRE - ICICI Bank - XX9775", value: "umang gupta nre - icici bank - xx9775" },
-
-  // --- HDFC Bank Section ---
-  { name: "UMANG NRO - HDFC Bank - XX9252", value: "umang nro - hdfc bank - xx9252" },
-  { name: "UMANG NRE - HDFC Bank - XX3384", value: "umang nre - hdfc bank - xx3384" },
-  { name: "Deepali Gupta - HDFC Bank - XX3815", value: "deepali gupta - hdfc bank - xx3815" },
-  { name: "Vaibhav Gupta - HDFC Bank - XX0290", value: "vaibhav gupta - hdfc bank - xx0290" },
-  { name: "Arvind Kumar Gupta - HDFC Bank - XX5763", value: "arvind kumar gupta - hdfc bank - xx5763" },
-  { name: "Arivind Gupta HUF - HDFC Bank - XX8525", value: "arivind gupta huf - hdfc bank - xx8525" },
-  { name: "Arvind Gupta Oorja/UG - HDFC Bank - XX8673", value: "arvind gupta oorja/ug - hdfc bank - xx8673" },
-  { name: "Ujjwal Gupta - HDFC Bank - XX2021", value: "ujjwal gupta - hdfc bank - xx2021" },
-  { name: "Om Prakash Gupta - HDFC Bank - XX7141", value: "om prakash gupta - hdfc bank - xx7141" },
-  { name: "Sunita Gupta - HDFC Bank - XX4845", value: "sunita gupta - hdfc bank - xx4845" },
-
-  // --- State Bank of India ---
-  { name: "Arvind Kumar Gupta - State Bank of India - XX8294", value: "arvind kumar gupta - state bank of india - xx8294" }
-];
-
 const transactionTypes = [
   { name: "Credit", value: "credit" },
   { name: "Debit", value: "debit" },
@@ -353,6 +186,16 @@ const buildSelectOptions = (
   ];
 };
 
+const backendValuesToOptions = (values = [], allLabel) => buildSelectOptions(
+  values.map((value) => ({ name: value, value: String(value).toLowerCase() })),
+  allLabel,
+);
+
+
+const orderedBackendOptions = (values = [], allLabel) => buildSelectOptions(
+  (values || []).map((value) => ({ name: value, value: normalizeValue(value) })),
+  allLabel,
+);
 
 // ---------------------- Main function to generate filter options to show in the dropdowns ----------------------
 export const getTransactionFilterOptions = (records = []) => ({
@@ -361,8 +204,8 @@ export const getTransactionFilterOptions = (records = []) => ({
     "email_metadata.forwarded_by_name",
     "All Entities",
   ),
-  banks: buildSelectOptions(all_banks, "All Banks"),
-  accounts: buildSelectOptions(all_account_numbers, "All Accounts"),
+  banks: buildSelectOptions([], "All Banks"),
+  accounts: buildSelectOptions([], "All Accounts"),
   transactionTypes: buildSelectOptions(transactionTypes, "All Types"),
   modes: toSelectOptions(records, "mode", "All Modes"),
   categories: toSelectOptions(records, "category", "All Categories"),
@@ -372,36 +215,18 @@ export const getTransactionFilterOptions = (records = []) => ({
     "All Statuses",
   ),
   currencies: toSelectOptions(records, "currency", "All Currencies"),
-  accountHolderNames: buildSelectOptions(
-    all_account_holder_names_,
-    "All Account Holders",
-  ),
-  accountTypes: buildSelectOptions(
-    all_account_types,
-    "All Account Types",
-  ),
-  individualAccounts: buildSelectOptions(
-    individual_account,
-    "All Individual Accounts",
-  ),
+  accountHolderNames: buildSelectOptions([], "All Account Holders"),
+  accountTypes: buildSelectOptions([], "All Account Types"),
+  individualAccounts: buildSelectOptions([], "All Individual Accounts"),
 });
 
 export const getAccountFilterOptions = () => ({
-  banks: buildSelectOptions(all_banks, "All Banks"),
-  accounts: buildSelectOptions(all_account_numbers, "All Accounts"),
-  categories: buildSelectOptions(all_account_categories, "All Categories"),
-  individualAccounts: buildSelectOptions(
-    individual_account,
-    "All Individual Accounts",
-  ),
-  accountHolderNames: buildSelectOptions(
-    all_account_holder_names_,
-    "All Account Holders",
-  ),
-  accountTypes: buildSelectOptions(
-    all_account_types,
-    "All Account Types",
-  ),
+  banks: buildSelectOptions([], "All Banks"),
+  accounts: buildSelectOptions([], "All Accounts"),
+  categories: buildSelectOptions([], "All Categories"),
+  individualAccounts: buildSelectOptions([], "All Individual Accounts"),
+  accountHolderNames: buildSelectOptions([], "All Account Holders"),
+  accountTypes: buildSelectOptions([], "All Account Types"),
 });
 
 
@@ -454,7 +279,7 @@ const getFilterMatchTerms = (value, filterKind) => {
 
 // Filter matching functions to check if a record matches the active filter values for a given field
 // Function compares one record against one filter.
-const matchesSelectFilter = (recordValue, filterValue, filterKind) => {
+const matchesSelectFilter = (recordValue, filterValue, filterKind, exact = false) => {
   const activeValues = getActiveFilterValues(filterValue);
   if (!activeValues.length) return true;
 
@@ -463,6 +288,8 @@ const matchesSelectFilter = (recordValue, filterValue, filterKind) => {
   if (!normalizedRecordValue) return false;
 
   return activeValues.some((activeValue) => {
+    if (exact) return normalizedRecordValue === normalizeSearchValue(activeValue);
+
     const matchTerms = getFilterMatchTerms(activeValue, filterKind);
     return matchTerms.some((term) => {
       const compactTerm = compactSearchValue(term);
@@ -488,7 +315,7 @@ const matchesIndividualAccountFilter = (record, filterValue) => {
     const [expectedHolder, expectedBank, expectedAccount] = parts;
 
     return (
-      matchesSelectFilter(record?.account_holder_name, expectedHolder) &&
+      matchesSelectFilter(record?.account_holder_name, expectedHolder, undefined, true) &&
       matchesSelectFilter(record?.bank_name, expectedBank, "bank") &&
       matchesSelectFilter(record?.account_number, expectedAccount, "account")
     );
@@ -572,6 +399,8 @@ export const filterTransactions = (
       matchesSelectFilter(
         record?.account_holder_name,
         normalizedFilters.accountHolderName,
+        undefined,
+        true,
       ),
     );
   }
@@ -950,5 +779,27 @@ export const getTransactionFilterOptionsFromBackend = (backendOptions = {}) => {
     });
   }
 
-  return getTransactionFilterOptions(mockRecords);
+  const options = getTransactionFilterOptions(mockRecords);
+  return {
+    ...options,
+    // Kept in the backend's order (the default list first, then anything
+    // else stored) rather than re-sorted alphabetically.
+    modes: orderedBackendOptions(backendOptions.modes, "All Modes"),
+    categories: orderedBackendOptions(backendOptions.categories, "All Categories"),
+    banks: backendValuesToOptions(backendOptions.banks, "All Banks"),
+    accounts: backendValuesToOptions(backendOptions.accounts, "All Accounts"),
+    accountHolderNames: backendValuesToOptions(backendOptions.accountHolderNames, "All Account Holders"),
+    individualAccounts: backendValuesToOptions(backendOptions.individualAccounts, "All Individual Accounts"),
+    accountTypes: backendValuesToOptions(backendOptions.accountTypes, "All Account Types"),
+  };
 };
+
+export const getAccountFilterOptionsFromBackend = (backendOptions = {}) => ({
+  ...getAccountFilterOptions(),
+  banks: backendValuesToOptions(backendOptions.banks, "All Banks"),
+  accounts: backendValuesToOptions(backendOptions.accounts, "All Accounts"),
+  accountHolderNames: backendValuesToOptions(backendOptions.accountHolderNames, "All Account Holders"),
+  individualAccounts: backendValuesToOptions(backendOptions.individualAccounts, "All Individual Accounts"),
+  accountTypes: backendValuesToOptions(backendOptions.accountTypes, "All Account Types"),
+  categories: backendValuesToOptions(backendOptions.accountCategories, "All Categories"),
+});

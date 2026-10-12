@@ -6,7 +6,14 @@ def _engine_options() -> dict:
     if settings.database_url.startswith("sqlite"):
         return {"connect_args": {"check_same_thread": False}}
 
-    return {"pool_pre_ping": True}
+    # Postgres returns timestamptz values in the session's timezone, and
+    # reads naive datetimes in it too. Left to the server default that's IST
+    # locally but UTC in production, which pushed IST-midnight transaction
+    # dates back a day there. Pinning it makes both behave the same.
+    return {
+        "pool_pre_ping": True,
+        "connect_args": {"options": "-c timezone=Asia/Kolkata"},
+    }
 
 
 engine = create_engine(settings.database_url, **_engine_options())
