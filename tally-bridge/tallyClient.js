@@ -1,7 +1,9 @@
 const http = require("http");
 const xml2js = require("xml2js");
 
-function sendToTally(xml) {
+const REQUEST_TIMEOUT_MS = 60000;
+
+function send(xml, parserOptions = {}) {
   return new Promise((resolve, reject) => {
     const payload = Buffer.from(xml, "utf8");
 
@@ -67,7 +69,8 @@ function sendToTally(xml) {
 
         const parser = new xml2js.Parser({
           explicitArray: false,
-          ignoreAttrs: false
+          ignoreAttrs: false,
+          ...parserOptions
         });
 
 
@@ -86,10 +89,49 @@ function sendToTally(xml) {
       });
     });
 
+    // Without this a hung Tally would block every request queued behind it.
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error(`Tally did not respond within ${REQUEST_TIMEOUT_MS / 1000}s`)));
     req.on("error", (err) => reject(err));
     req.write(payload);
     req.end();
   });
 }
 
-module.exports = { sendToTally };
+// Tally answers one request at a time, so requests wait here in order instead of piling up on it.
+let queue = Promise.resolve();
+
+// Results of read-only requests, kept in memory by request XML (so company, report and dates are all
+// part of the key). The promise is stored, so identical requests made meanwhile share one Tally call.
+// Lost on restart; ponytail: per-process, so run a single bridge instance.
+const cache = new Map();
+
+function clearCache() {
+  cache.clear();
+}
+
+// `cacheMs` > 0 caches an Export request for that long. Import requests change Tally, so they empty the cache.
+function sendToTally(xml, parserOptions = {}, cacheMs = 0) {
+  const isExport = xml.includes("<TALLYREQUEST>Export");
+  const key = cacheMs > 0 && isExport ? `${xml}|${JSON.stringify(parserOptions)}` : null;
+
+  if (key) {
+    const hit = cache.get(key);
+    if (hit && hit.expires > Date.now()) return hit.promise;
+  }
+
+  const run = () => send(xml, parserOptions);
+  const promise = queue.then(run, run);
+  queue = promise.catch(() => {});
+
+  if (key) {
+    cache.set(key, { expires: Date.now() + cacheMs, promise });
+    promise.catch(() => cache.delete(key));
+    // Drop expired entries so the map can't grow without bound.
+    if (cache.size > 200) for (const [k, v] of cache) if (v.expires <= Date.now()) cache.delete(k);
+  } else if (!isExport) {
+    promise.finally(clearCache).catch(() => {});
+  }
+  return promise;
+}
+
+module.exports = { sendToTally, clearCache };

@@ -11,13 +11,23 @@ import Accounts from "./pages/Accounts";
 import AuditLog from "./pages/AuditLog";
 import ChatAssistant from "./pages/ChatAssistant";
 import { Bounce, ToastContainer, toast } from "react-toastify";
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { getTallyCredentials, tallyApi } from "./api/tally";
 import NeedsReview from "./pages/NeedsReview";
 import Users from "./pages/Users";
 import RolePermissions from "./pages/RolePermissions";
 import { PERMISSIONS, usePermissions } from "./lib/permissions";
 import TallyView from "./pages/TallyView";
+import StocksFunds from "./pages/StocksFunds";
+
+// Report pages load on first visit, so the main bundle doesn't carry them.
+const TrialBalance = lazy(() => import("./pages/tally-pages/TrialBalance"));
+const BalanceSheet = lazy(() => import("./pages/tally-pages/BalanceSheet"));
+const ProfitLoss = lazy(() => import("./pages/tally-pages/ProfitLoss"));
+const CashFlow = lazy(() => import("./pages/tally-pages/CashFlow"));
+const FundsFlow = lazy(() => import("./pages/tally-pages/FundsFlow"));
+const RatioAnalysis = lazy(() => import("./pages/tally-pages/RatioAnalysis"));
+const StatementOfAccounts = lazy(() => import("./pages/tally-pages/StatementOfAccounts"));
 
 function App() {
   const { isAuthenticated, accessToken } = useAuthStore();
@@ -61,6 +71,7 @@ function App() {
 
   return (
     <>
+    <Suspense fallback={<p className="p-10 text-center text-sm font-medium text-gray-400">Loading...</p>}>
     <Routes>
       <Route path="/" element={<PublicRoute><Login /></PublicRoute>} />
       
@@ -75,6 +86,14 @@ function App() {
         <Route path="/roles-permissions" element={<ProtectedRoute permission={PERMISSIONS.ROLES_VIEW}><RolePermissions /></ProtectedRoute>} />
         <Route path="/needs-review" element={<ProtectedRoute permission={PERMISSIONS.NEEDS_REVIEW_VIEW}><NeedsReview /></ProtectedRoute>} />
         <Route path="/tally-view" element={<ProtectedRoute permission={PERMISSIONS.EXPORT_DATA}><TallyView /></ProtectedRoute>} />
+        <Route path="/trial-balance" element={<ProtectedRoute permission={PERMISSIONS.EXPORT_DATA}><TrialBalance /></ProtectedRoute>} />
+        <Route path="/balance-sheet" element={<ProtectedRoute permission={PERMISSIONS.EXPORT_DATA}><BalanceSheet /></ProtectedRoute>} />
+        <Route path="/profit-loss" element={<ProtectedRoute permission={PERMISSIONS.EXPORT_DATA}><ProfitLoss /></ProtectedRoute>} />
+        <Route path="/cash-flow" element={<ProtectedRoute permission={PERMISSIONS.EXPORT_DATA}><CashFlow /></ProtectedRoute>} />
+        <Route path="/funds-flow" element={<ProtectedRoute permission={PERMISSIONS.EXPORT_DATA}><FundsFlow /></ProtectedRoute>} />
+        <Route path="/ratio-analysis" element={<ProtectedRoute permission={PERMISSIONS.EXPORT_DATA}><RatioAnalysis /></ProtectedRoute>} />
+        <Route path="/statement-of-accounts" element={<ProtectedRoute permission={PERMISSIONS.EXPORT_DATA}><StatementOfAccounts /></ProtectedRoute>} />
+        <Route path="/stocks-funds" element={<ProtectedRoute permission={PERMISSIONS.EXPORT_DATA}><StocksFunds /></ProtectedRoute>} />
       </Route>
       
       <Route
@@ -84,6 +103,7 @@ function App() {
         }
       />
     </Routes>
+    </Suspense>
 
     <ToastContainer
       position="bottom-right"

@@ -2,6 +2,7 @@ import base64
 import binascii
 from datetime import date
 from decimal import Decimal
+from urllib.parse import quote
 from xml.sax.saxutils import escape
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -108,6 +109,74 @@ def list_ledgers(auth=Depends(tally_credentials)):
 def list_companies(auth=Depends(tally_credentials)):
     try:
         return {"companies": get_companies(auth)}
+    except TallyBridgeError as err:
+        raise bridge_http_error(err)
+
+
+TALLY_REPORTS = {"trial-balance", "balance-sheet", "profit-loss", "cash-flow", "funds-flow", "ratio-analysis"}
+
+
+@router.get("/report-companies")
+def list_report_companies(auth=Depends(tally_credentials)):
+    # Unlike /companies (only the open one, for pushing), every company loaded in Tally.
+    try:
+        return _call_bridge("GET", "/reports/companies", auth=auth)
+    except TallyBridgeError as err:
+        raise bridge_http_error(err)
+
+
+def _report_params(from_date: date | None, to_date: date | None, company: str | None, refresh: bool = False) -> dict:
+    # Without dates the bridge uses the current financial year (Balance Sheet is as on `to_date`).
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(status_code=400, detail="The start date must be on or before the end date.")
+    params = {key: value.strftime("%Y%m%d") for key, value in (("from", from_date), ("to", to_date)) if value}
+    if company:
+        params["company"] = company
+    if refresh:
+        params["refresh"] = "1"  # the bridge reuses recent results; this makes it ask Tally again
+    return params
+
+
+@router.get("/report-ledgers")
+def list_report_ledgers(company: str | None = None, auth=Depends(tally_credentials)):
+    try:
+        return _call_bridge("GET", "/reports/ledgers", auth=auth, params={"company": company} if company else None)
+    except TallyBridgeError as err:
+        raise bridge_http_error(err)
+
+
+@router.get("/reports/ledger-statement")
+def get_ledger_statement(
+    ledger: str,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    company: str | None = None,
+    refresh: bool = False,
+    auth=Depends(tally_credentials),
+):
+    if not ledger.strip():
+        raise HTTPException(status_code=400, detail="Select a ledger.")
+    params = _report_params(from_date, to_date, company, refresh)
+    try:
+        return _call_bridge("GET", f"/reports/ledger/{quote(ledger, safe='')}", auth=auth, params=params)
+    except TallyBridgeError as err:
+        raise bridge_http_error(err)
+
+
+@router.get("/reports/{report}")
+def get_report(
+    report: str,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    company: str | None = None,
+    refresh: bool = False,
+    auth=Depends(tally_credentials),
+):
+    if report not in TALLY_REPORTS:
+        raise HTTPException(status_code=404, detail="Unknown Tally report.")
+    params = _report_params(from_date, to_date, company, refresh)
+    try:
+        return _call_bridge("GET", f"/reports/{report}", auth=auth, params=params)
     except TallyBridgeError as err:
         raise bridge_http_error(err)
 

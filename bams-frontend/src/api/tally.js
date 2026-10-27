@@ -51,6 +51,29 @@ export const tallyApi = {
     return response.data;
   },
 
+  getReportCompanies: async () => {
+    const response = await api.get("/tally/report-companies", requestConfig());
+    return response.data;
+  },
+
+  // `refresh` skips the bridge's short-lived cache and asks Tally again.
+  getReport: async (report, dateRange, company, { refresh } = {}) => {
+    const params = { from_date: dateRange.startDate, to_date: dateRange.endDate, company, refresh };
+    const response = await api.get(`/tally/reports/${report}`, { ...requestConfig(), params });
+    return response.data;
+  },
+
+  getReportLedgers: async (company) => {
+    const response = await api.get("/tally/report-ledgers", { ...requestConfig(), params: { company } });
+    return response.data;
+  },
+
+  getLedgerStatement: async (ledger, dateRange, company, { refresh } = {}) => {
+    const params = { ledger, from_date: dateRange.startDate, to_date: dateRange.endDate, company, refresh };
+    const response = await api.get("/tally/reports/ledger-statement", { ...requestConfig(), params });
+    return response.data;
+  },
+
   push: async (items) => {
     const response = await api.post("/tally/push", { items }, requestConfig());
     return response.data;

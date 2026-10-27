@@ -44,7 +44,7 @@ from ..utils.db_utils import (
     transaction_to_schema_dict,
     update_parsed_status_to_db,
 )
-from .credentials import build_credentials
+from .credentials import build_credentials, is_google_access_revoked
 from .gmail_service import (
     fetch_gmail_attachment_bytes,
     get_latest_gmail_message_id,
@@ -122,19 +122,37 @@ def _mark_sync_success(org: Organization, db: Session, emails: list[dict] | None
     db.refresh(org)
     return _sync_metadata_payload(org)
 
-def _mark_sync_failed(org: Organization, db: Session) -> None:
-    """ Mark the variable as failed in db, on failure of transaction """
+def _mark_sync_failed(org: Organization, db: Session, error: Exception | None = None) -> None:
+    """ Mark the variable as failed in db, on failure of transaction.
+
+    last_synced_at is deliberately left untouched -- it should keep reading
+    as "the last time a sync actually succeeded", not get bumped to now just
+    because an attempt was made and failed.
+
+    If `error` shows the org's Google authorization itself is dead (consent
+    revoked, refresh token expired -- not a rate limit or network blip, which
+    is just retried next time), reset the granted-permission flags so the
+    existing "Connect your Google workspace" screen picks it up on the
+    owner's next load. Nothing about the user's app login is touched --
+    that's a separate auth system and other users of the org are unaffected. """
+    revoked = is_google_access_revoked(error)
     try:
         db.rollback()
-        org.last_synced_at = utc_now()
         org.last_synced_status = "failed"
         org.sync_status = SYNC_STATUS_FAILED
+        if revoked:
+            logger.warning(
+                "Google access revoked, resetting granted permissions | org=%s reason=%s",
+                org.id, _safe_error_text(error)[:200],
+            )
+            org.has_email_permissions = False
+            org.has_sheets_permissions = False
         db.add(org)
         db.commit()
         db.refresh(org)
-    except Exception as error:
+    except Exception as commit_error:
         db.rollback()
-        logger.error("Failed to update sync failure metadata | error=%s", _safe_error_text(error))
+        logger.error("Failed to update sync failure metadata | error=%s", _safe_error_text(commit_error))
 
 
 def _sync_transactions_to_sheet(
@@ -773,7 +791,7 @@ def _run_backfill_sync_for_org(org_id: int) -> None:
         logger.error("Background sync failed | org=%s error=%s", org_id, _safe_error_text(error)[:300])
         org = db.query(Organization).filter(Organization.id == org_id).first()
         if org:
-            _mark_sync_failed(org, db)
+            _mark_sync_failed(org, db, error=error)
     finally:
         _active_sync_threads.pop(org_id, None)
         db.close()
@@ -1024,14 +1042,14 @@ async def setup_process_with_progress(org: Organization, db: Session):
         }
         
     except HttpError as error:
-        _mark_sync_failed(org, db)
+        _mark_sync_failed(org, db, error=error)
         yield {
             "step": "error",
             "message": f"Google API error: {str(error)}",
             "status": "failed"
         }
     except Exception as error:
-        _mark_sync_failed(org, db)
+        _mark_sync_failed(org, db, error=error)
         yield {
             "step": "error",
             "message": f"Setup error: {str(error)}",

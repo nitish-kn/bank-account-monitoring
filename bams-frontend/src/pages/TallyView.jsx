@@ -21,6 +21,12 @@ import { DEFAULT_TRANSACTION_FILTERS, getTransactionFilterOptionsFromBackend, fo
 const VOUCHER_TYPES = ["Payment", "Receipt", "Contra", "Journal"];
 
 const norm = (value) => String(value || "").trim().toLowerCase();
+// The option whose name matches `value` (ignoring case and extra spaces), or null.
+const matchOption = (options, value) => {
+  const key = norm(value).replace(/\s+/g, " ");
+  return (key && options.find((option) => norm(option).replace(/\s+/g, " ") === key)) || null;
+};
+const defaultVoucherType = (txnType) => ({ debit: "Payment", credit: "Receipt" })[norm(txnType)] || null;
 const isPushable = (row) =>
   !row.tally_synced_at && row.txn_date && Number(row.amount) !== 0 && Number.isFinite(Number(row.amount)) &&
   ["credit", "debit"].includes(norm(row.txn_type));
@@ -285,12 +291,14 @@ const TallyView = () => {
               next[txn.id] = { ...next[txn.id], ...txn };
               return;
             }
+            // Pre-select whatever clearly matches; the user can still change any of it.
+            const ledgerNames = tally.ledgers.map((ledger) => ledger.name);
             next[txn.id] = {
               ...txn,
-              company: null,
-              bankLedger: null,
-              counterpartyLedger: null,
-              voucherType: null,
+              company: matchOption(tally.companies, txn.bank_name),
+              bankLedger: matchOption(ledgerNames, txn.bank_name),
+              counterpartyLedger: matchOption(ledgerNames, txn.counterparty),
+              voucherType: defaultVoucherType(txn.txn_type),
               narration: txn.narration || "",
               error: null,
             };

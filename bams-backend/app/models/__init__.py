@@ -15,8 +15,11 @@ from .transaction_logs import TransactionLog
 from .chat_session import ChatSession
 from .chat_message import ChatMessage
 from .chat_tool_call import ChatToolCall
+from .investment_accounts import InvestmentAccount
+from .holdings import Holding
 
 __all__ = [
+    "InvestmentAccount", "Holding",
     "Family", "Invite", "Organization", "OrgSheet", "User", "Role", "Permission", "RolePermission",
     "Transactions", "Parsed", "BankAccounts", "TransactionLog", "ChatSession", "ChatMessage", "ChatToolCall",
 ]

@@ -1,10 +1,22 @@
 const express = require("express");
 const router = express.Router();
-const { sendToTally } = require("../tallyClient");
-const { getDefaultFinYearRange } = require("../helpers/tallyHelper");
+const { sendToTally, clearCache } = require("../tallyClient");
+const { getDefaultFinYearRange, getActiveCompany } = require("../helpers/tallyHelper");
+
+// How long read-only report results are reused. Lists of masters change rarely; reports can move
+// whenever someone posts a voucher in Tally, so they stay short. `?refresh=1` empties the cache first.
+const REPORT_CACHE_MS = 30 * 1000;
+const LIST_CACHE_MS = 5 * 60 * 1000;
+
+router.use((req, res, next) => {
+    if (req.query.refresh === "1") clearCache();
+    next();
+});
+
+const escapeXml = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 // Helper to fetch and parse a Tally report with clean JSON output
-async function fetchReport(reportName, from, to) {
+async function fetchReport(reportName, from, to, extraVars = "", parserOptions, company) {
     const xml = `
 <ENVELOPE>
   <HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER>
@@ -16,12 +28,51 @@ async function fetchReport(reportName, from, to) {
           <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
           ${from ? `<SVFROMDATE>${from}</SVFROMDATE>` : ''}
           ${to ? `<SVTODATE>${to}</SVTODATE>` : ''}
+          ${company ? `<SVCURRENTCOMPANY>${escapeXml(company)}</SVCURRENTCOMPANY>` : ''}
+          ${extraVars}
         </STATICVARIABLES>
       </REQUESTDESC>
     </EXPORTDATA>
   </BODY>
 </ENVELOPE>`;
-    return await sendToTally(xml);
+    const data = await sendToTally(xml, parserOptions, reportName === "List of Accounts" ? LIST_CACHE_MS : REPORT_CACHE_MS);
+    // Tally answers bad requests (e.g. a company that isn't loaded) with <RESPONSE><LINEERROR>.
+    if (data?.RESPONSE?.LINEERROR) throw Object.assign(new Error(text(data.RESPONSE.LINEERROR)), { status: 400 });
+    return data;
+}
+
+// Tally sends YYYYMMDD; anything else would make it silently fall back to its own period.
+function dateRange(query) {
+    const { from: defaultFrom, to: defaultTo } = getDefaultFinYearRange();
+    const from = query.from || defaultFrom;
+    const to = query.to || defaultTo;
+    if (!/^\d{8}$/.test(from) || !/^\d{8}$/.test(to)) throw Object.assign(new Error("from/to must be YYYYMMDD"), { status: 400 });
+    return { from, to };
+}
+
+const text = (v) => String((typeof v === "object" ? v?._ : v) ?? "").trim();
+const amount = (v) => (text(v) === "" ? null : Number(text(v)));
+
+// Balance Sheet / P&L come as flat name/amount pairs (BSNAME+BSAMT, DSPACCNAME+PLAMT) whose
+// order is the hierarchy, so they are parsed with preserveChildrenOrder. Groups carry the
+// main amount, the ledgers/sub-groups under them the sub amount. Tally amounts: Dr positive, Cr negative.
+async function fetchStatement(reportName, from, to, company) {
+    const data = await fetchReport(reportName, from, to, "<EXPLODEFLAG>Yes</EXPLODEFLAG>",
+        { explicitChildren: true, preserveChildrenOrder: true }, company);
+    const rows = [];
+    let name = null;
+    for (const node of data?.ENVELOPE?.$$ || []) {
+        if (node["#name"] === "DSPACCNAME") name = text(node.DSPDISPNAME);
+        else if (node["#name"] === "BSNAME") name = text(node.DSPACCNAME?.DSPDISPNAME);
+        else if (name && (node["#name"] === "BSAMT" || node["#name"] === "PLAMT")) {
+            const sub = amount(node.BSSUBAMT ?? node.PLSUBAMT);
+            const main = amount(node.BSMAINAMT);
+            // Lines with neither amount are empty (and can't be told apart as group or ledger).
+            if (sub !== null || main !== null) rows.push({ name, amount: sub ?? main, isGroup: sub === null });
+            name = null;
+        }
+    }
+    return rows;
 }
 
 // Helper to extract ledger rows from Tally DSPACCNAME/DSPDISPNAME format
@@ -38,59 +89,219 @@ function parseLedgerRows(messages) {
     return rows;
 }
 
-// ─── GET /reports/trial-balance ─────────────────────────────
-router.get("/reports/trial-balance", async (req, res) => {
+// ─── GET /reports/companies ─────────────────────────────────
+// Every company loaded in Tally, plus the one currently open (what reports use when no `company` is given).
+router.get("/reports/companies", async (req, res) => {
+    const xml = `
+<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST><TYPE>Collection</TYPE><ID>CmpList</ID></HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES><SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT></STATICVARIABLES>
+      <TDL><TDLMESSAGE><COLLECTION NAME="CmpList" ISMODIFY="No"><TYPE>Company</TYPE><FETCH>Name</FETCH></COLLECTION></TDLMESSAGE></TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`;
     try {
-        const data = await fetchReport("Trial Balance", req.query.from, req.query.to);
-        const body = data?.ENVELOPE?.BODY?.IMPORTDATA?.REQUESTDATA || data?.ENVELOPE?.BODY || {};
-        res.json({ report: "Trial Balance", data: body });
+        const [data, active] = await Promise.all([sendToTally(xml, {}, LIST_CACHE_MS), getActiveCompany(LIST_CACHE_MS)]);
+        const companies = [].concat(data?.ENVELOPE?.BODY?.DATA?.COLLECTION?.COMPANY || [])
+            .map((c) => text(c?.NAME) || c?.$?.NAME).filter(Boolean);
+        res.json({ companies, active: active === "Unknown Company" ? null : active });
     } catch (err) {
-        console.error("TRIAL BALANCE ERROR:", err);
+        console.error("COMPANIES ERROR:", err);
         res.status(500).json({ error: err.message });
     }
 });
 
+// Tally's XML export names its tags the opposite way round: the "...DR..." tags hold credits and the
+// "...CR..." tags hold debits (verified against the Balance Sheet and cash/bank position). Balances
+// (opening/closing/net) are Dr positive, Cr negative. These read a debit/credit pair as positive numbers.
+const debitOf = (crTag) => Math.abs(amount(crTag) || 0);
+const creditOf = (drTag) => Math.abs(amount(drTag) || 0);
+
+// Names of the primary groups (no parent) - what the Trial Balance is totalled on.
+async function fetchPrimaryGroups(company) {
+    const data = await fetchReport("List of Accounts", null, null, "", undefined, company);
+    return new Set([].concat(data?.ENVELOPE?.BODY?.IMPORTDATA?.REQUESTDATA?.TALLYMESSAGE || [])
+        .filter((msg) => msg?.GROUP && !text(msg.GROUP.PARENT))
+        .map(({ GROUP: g }) => g?.$?.NAME || text(g?.["LANGUAGENAME.LIST"]?.["NAME.LIST"]?.NAME)));
+}
+
+// Trial Balance is a flat DSPACCNAME + DSPACCINFO list: each primary group followed by what is under it.
+async function fetchTrialBalance(from, to, company) {
+    const [data, primary] = await Promise.all([
+        fetchReport("Trial Balance", from, to, "", undefined, company),
+        fetchPrimaryGroups(company),
+    ]);
+    const envelope = data?.ENVELOPE || {};
+    const names = [].concat(envelope.DSPACCNAME || []);
+    const info = [].concat(envelope.DSPACCINFO || []);
+    return names
+        .map((n, i) => {
+            const name = text(n?.DSPDISPNAME ?? n);
+            return {
+                name,
+                debit: debitOf(info[i]?.DSPCLCRAMT?.DSPCLCRAMTA),
+                credit: creditOf(info[i]?.DSPCLDRAMT?.DSPCLDRAMTA),
+                isGroup: primary.has(name),
+            };
+        })
+        .filter((row) => row.debit || row.credit);
+}
+
+// Opening/closing balance of every ledger for a period, from the Trial Balance with openings shown.
+// (The ledger collection's own $OpeningBalance/$ClosingBalance ignore the period.)
+async function fetchLedgerBalances(from, to, company) {
+    const data = await fetchReport("Trial Balance", from, to,
+        "<EXPLODEFLAG>Yes</EXPLODEFLAG><EXPLODEALLLEVELS>Yes</EXPLODEALLLEVELS><DSPSHOWTRANS>Yes</DSPSHOWTRANS><DSPSHOWOPENING>Yes</DSPSHOWOPENING>",
+        undefined, company);
+    const envelope = data?.ENVELOPE || {};
+    const names = [].concat(envelope.DSPACCNAME || []);
+    const info = [].concat(envelope.DSPACCINFO || []);
+    const balances = new Map();
+    names.forEach((n, i) => balances.set(text(n?.DSPDISPNAME ?? n), {
+        opening: amount(info[i]?.DSPOPAMT?.DSPOPAMTA) || 0,
+        closing: amount(info[i]?.DSPCLAMT?.DSPCLAMTA) || 0,
+    }));
+    return balances;
+}
+
+// ─── GET /reports/trial-balance ─────────────────────────────
+// Closing balances as on `to`; groups first, the rows under them after. Totals are the sums of the groups.
+router.get("/reports/trial-balance", async (req, res) => {
+    try {
+        const { from, to } = dateRange(req.query);
+        const rows = await fetchTrialBalance(from, to, req.query.company);
+        const groups = rows.filter((row) => row.isGroup);
+        const totalDebit = groups.reduce((sum, row) => sum + row.debit, 0);
+        const totalCredit = groups.reduce((sum, row) => sum + row.credit, 0);
+        res.json({ report: "Trial Balance", from, to, rows, totalDebit, totalCredit });
+    } catch (err) {
+        if (!err.status) console.error("TRIAL BALANCE ERROR:", err);
+        res.status(err.status || 500).json({ error: err.message });
+    }
+});
+
 // ─── GET /reports/balance-sheet ─────────────────────────────
+// Balance as on `to`; defaults to the current financial year.
 router.get("/reports/balance-sheet", async (req, res) => {
     try {
-        const data = await fetchReport("Balance Sheet", req.query.from, req.query.to);
-        const body = data?.ENVELOPE?.BODY?.IMPORTDATA?.REQUESTDATA || data?.ENVELOPE?.BODY || {};
-        res.json({ report: "Balance Sheet", data: body });
+        const { from, to } = dateRange(req.query);
+        res.json({ report: "Balance Sheet", from, to, rows: await fetchStatement("Balance Sheet", from, to, req.query.company) });
     } catch (err) {
-        console.error("BALANCE SHEET ERROR:", err);
-        res.status(500).json({ error: err.message });
+        if (!err.status) console.error("BALANCE SHEET ERROR:", err);
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
 // ─── GET /reports/profit-loss ───────────────────────────────
 router.get("/reports/profit-loss", async (req, res) => {
     try {
-        const data = await fetchReport("Profit and Loss A/c", req.query.from, req.query.to);
-        const body = data?.ENVELOPE?.BODY?.IMPORTDATA?.REQUESTDATA || data?.ENVELOPE?.BODY || {};
-        res.json({ report: "Profit and Loss", data: body });
+        const { from, to } = dateRange(req.query);
+        res.json({ report: "Profit and Loss", from, to, rows: await fetchStatement("Profit and Loss", from, to, req.query.company) });
     } catch (err) {
-        console.error("P&L ERROR:", err);
-        res.status(500).json({ error: err.message });
+        if (!err.status) console.error("P&L ERROR:", err);
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
 // ─── GET /reports/cash-flow ─────────────────────────────────
+// One row per month in the range: inflow = debits, outflow = credits, net = inflow - outflow.
 router.get("/reports/cash-flow", async (req, res) => {
     try {
-        const data = await fetchReport("Cash Flow", req.query.from, req.query.to);
-        const body = data?.ENVELOPE?.BODY?.IMPORTDATA?.REQUESTDATA || data?.ENVELOPE?.BODY || {};
-        res.json({ report: "Cash Flow", data: body });
+        const { from, to } = dateRange(req.query);
+        const envelope = (await fetchReport("Cash Flow", from, to, "", undefined, req.query.company))?.ENVELOPE || {};
+        const periods = [].concat(envelope.DSPPERIOD || []);
+        const info = [].concat(envelope.DSPACCINFO || []);
+        const rows = periods.map((period, i) => {
+            const inflow = debitOf(info[i]?.DSPCRAMT?.DSPCRAMTA);
+            const outflow = creditOf(info[i]?.DSPDRAMT?.DSPDRAMTA);
+            return { period: text(period), inflow, outflow, net: inflow - outflow };
+        });
+        res.json({ report: "Cash Flow", from, to, rows });
     } catch (err) {
-        console.error("CASH FLOW ERROR:", err);
-        res.status(500).json({ error: err.message });
+        if (!err.status) console.error("CASH FLOW ERROR:", err);
+        res.status(err.status || 500).json({ error: err.message });
+    }
+});
+
+// ─── GET /reports/funds-flow ────────────────────────────────
+// Same monthly layout as Tally's Funds Flow report: debit, credit and the net of the two.
+router.get("/reports/funds-flow", async (req, res) => {
+    try {
+        const { from, to } = dateRange(req.query);
+        const envelope = (await fetchReport("Funds Flow", from, to, "", undefined, req.query.company))?.ENVELOPE || {};
+        const periods = [].concat(envelope.DSPPERIOD || []);
+        const info = [].concat(envelope.DSPACCINFO || []);
+        const rows = periods.map((period, i) => {
+            const debit = debitOf(info[i]?.DSPCRAMT?.DSPCRAMTA);
+            const credit = creditOf(info[i]?.DSPDRAMT?.DSPDRAMTA);
+            return { period: text(period), debit, credit, net: debit - credit };
+        });
+        res.json({ report: "Funds Flow", from, to, rows });
+    } catch (err) {
+        if (!err.status) console.error("FUNDS FLOW ERROR:", err);
+        res.status(err.status || 500).json({ error: err.message });
+    }
+});
+
+// ─── GET /reports/ratio-analysis ────────────────────────────
+// RATIONAME/RATIOVALUE pairs. Values are display text ("1.53 : 1", "48.57 %", "14,74,508.00 Dr").
+// Tally's Dr/Cr suffix on the amounts is the wrong way round (Cash-in-Hand, a debit balance on the Balance
+// Sheet, comes back as "Cr"), so it is flipped here. Empty values and "(due till today)" notes are dropped.
+router.get("/reports/ratio-analysis", async (req, res) => {
+    try {
+        const { from, to } = dateRange(req.query);
+        const envelope = (await fetchReport("Ratio Analysis", from, to, "", undefined, req.query.company))?.ENVELOPE || {};
+        const names = [].concat(envelope.RATIONAME || []);
+        const values = [].concat(envelope.RATIOVALUE || []);
+        const rows = [];
+        names.forEach((n, i) => {
+            const name = text(n);
+            const value = text(values[i]);
+            if (!name || name.startsWith("(") || !value) return;
+            const isAmount = /\s(Dr|Cr)$/.test(value);
+            rows.push({
+                name,
+                kind: isAmount ? "amount" : "ratio",
+                value: isAmount ? value.replace(/(Dr|Cr)$/, (side) => (side === "Dr" ? "Cr" : "Dr")) : value,
+            });
+        });
+        res.json({ report: "Ratio Analysis", from, to, rows });
+    } catch (err) {
+        if (!err.status) console.error("RATIO ANALYSIS ERROR:", err);
+        res.status(err.status || 500).json({ error: err.message });
+    }
+});
+
+// ─── GET /reports/ledgers ───────────────────────────────────
+// Ledger names + groups of one company (for ledger pickers).
+router.get("/reports/ledgers", async (req, res) => {
+    try {
+        const data = await fetchReport("List of Accounts", null, null, "", undefined, req.query.company);
+        const ledgers = [].concat(data?.ENVELOPE?.BODY?.IMPORTDATA?.REQUESTDATA?.TALLYMESSAGE || [])
+            .filter((msg) => msg?.LEDGER)
+            .map(({ LEDGER: l }) => ({
+                name: l?.$?.NAME || text(l?.["LANGUAGENAME.LIST"]?.["NAME.LIST"]?.NAME),
+                parent: text(l.PARENT) || null,
+            }))
+            .filter((l) => l.name)
+            .sort((a, b) => a.name.localeCompare(b.name));
+        res.json({ ledgers });
+    } catch (err) {
+        if (!err.status) console.error("LEDGERS ERROR:", err);
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
 
 // ─── GET /reports/stock-summary ─────────────────────────────
 router.get("/reports/stock-summary", async (req, res) => {
-    const { from: defaultFrom, to: defaultTo } = getDefaultFinYearRange();
-    const from = req.query.from || defaultFrom;
-    const to = req.query.to || defaultTo;
+    let from, to;
+    try {
+        ({ from, to } = dateRange(req.query));
+    } catch (err) {
+        return res.status(err.status).json({ error: err.message });
+    }
 
     // Custom XML to force Item-wise explosion of Stock Summary
     const xml = `
@@ -402,151 +613,60 @@ router.get("/reports/outstanding/payables", async (req, res) => {
 });
 
 // ─── GET /reports/ledger/:name ──────────────────────────────
+// Statement of one ledger for a period. Opening/closing come from the Trial Balance (Dr positive, Cr
+// negative); each transaction carries the running balance after it.
 router.get("/reports/ledger/:name", async (req, res) => {
-    const ledgerName = decodeURIComponent(req.params.name);
-    
-    // Dynamic default date range (current Indian Financial Year)
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth() + 1; // 1-indexed
-    const currentDay = today.getDate();
-
-    let finYearStartYear = today.getMonth() >= 3 ? currentYear : currentYear - 1; // April is index 3
-    const defaultFrom = `${finYearStartYear}0401`;
-    const defaultTo = `${currentYear}${String(currentMonth).padStart(2, "0")}${String(currentDay).padStart(2, "0")}`;
-
-    const from = req.query.from || defaultFrom;
-    const to = req.query.to || defaultTo;
-
-    // 1. XML for ledger vouchers (transactions)
-    const vouchersXml = `
-<ENVELOPE>
-  <HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER>
-  <BODY>
-    <EXPORTDATA>
-      <REQUESTDESC>
-        <REPORTNAME>Ledger Vouchers</REPORTNAME>
-        <STATICVARIABLES>
-          <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-          <SVFROMDATE>${from}</SVFROMDATE>
-          <SVTODATE>${to}</SVTODATE>
-          <LEDGERNAME>${ledgerName}</LEDGERNAME>
-        </STATICVARIABLES>
-      </REQUESTDESC>
-    </EXPORTDATA>
-  </BODY>
-</ENVELOPE>`;
-
-    // 2. XML for period opening and closing balances
-    const balancesXml = `
-<ENVELOPE>
-  <HEADER>
-    <VERSION>1</VERSION>
-    <TALLYREQUEST>Export</TALLYREQUEST>
-    <TYPE>Collection</TYPE>
-    <ID>LedgerBalances</ID>
-  </HEADER>
-  <BODY>
-    <DESC>
-      <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-        <SVFROMDATE>${from}</SVFROMDATE>
-        <SVTODATE>${to}</SVTODATE>
-      </STATICVARIABLES>
-      <TDL>
-        <TDLMESSAGE>
-          <COLLECTION NAME="LedgerBalances">
-            <TYPE>Ledger</TYPE>
-            <FILTER>LedgerFilter</FILTER>
-            <COMPUTE>PeriodOpBal: $OpeningBalance</COMPUTE>
-            <COMPUTE>PeriodClBal: $ClosingBalance</COMPUTE>
-            <FETCH>Name, PeriodOpBal, PeriodClBal</FETCH>
-          </COLLECTION>
-          <SYSTEM TYPE="Formulae" NAME="LedgerFilter">$Name = "${ledgerName}"</SYSTEM>
-        </TDLMESSAGE>
-      </TDL>
-    </DESC>
-  </BODY>
-</ENVELOPE>`;
-
+    const ledgerName = req.params.name;
     try {
-        // Run both queries in parallel
-        const [vouchersData, balancesData] = await Promise.all([
-            sendToTally(vouchersXml),
-            sendToTally(balancesXml).catch(err => {
+        const { from, to } = dateRange(req.query);
+        const { company } = req.query;
+        const [vouchers, balances] = await Promise.all([
+            fetchReport("Ledger Vouchers", from, to, `<LEDGERNAME>${escapeXml(ledgerName)}</LEDGERNAME>`, undefined, company),
+            fetchLedgerBalances(from, to, company).catch((err) => {
                 console.error("Error fetching ledger balances:", err.message);
-                return null;
-            })
+                return new Map();
+            }),
         ]);
 
-        // Parse Vouchers
-        const envelope = vouchersData?.ENVELOPE || {};
-        let dates = envelope.DSPVCHDATE || [];
-        if (!Array.isArray(dates)) dates = [dates];
+        const envelope = vouchers?.ENVELOPE || {};
+        const dates = [].concat(envelope.DSPVCHDATE || []);
+        const accounts = [].concat(envelope.DSPVCHLEDACCOUNT || []);
+        const types = [].concat(envelope.DSPVCHTYPE || []);
+        const creditTags = [].concat(envelope.DSPVCHDRAMT || []);
+        const debitTags = [].concat(envelope.DSPVCHCRAMT || []);
 
-        let accounts = envelope.DSPVCHLEDACCOUNT || [];
-        if (!Array.isArray(accounts)) accounts = [accounts];
-
-        let types = envelope.DSPVCHTYPE || [];
-        if (!Array.isArray(types)) types = [types];
-
-        let drAmts = envelope.DSPVCHDRAMT || [];
-        if (!Array.isArray(drAmts)) drAmts = [drAmts];
-
-        let crAmts = envelope.DSPVCHCRAMT || [];
-        if (!Array.isArray(crAmts)) crAmts = [crAmts];
-
-        const transactions = [];
-        const length = dates.length;
-
+        const balance = balances.get(ledgerName);
+        let running = balance ? balance.opening : null;
         let totalDebit = 0;
         let totalCredit = 0;
-
-        for (let i = 0; i < length; i++) {
-            if (!dates[i]) continue;
-            
-            const dr = drAmts[i] ? String(drAmts[i]).trim() : null;
-            const cr = crAmts[i] ? String(crAmts[i]).trim() : null;
-
-            if (dr && !isNaN(Number(dr))) totalDebit += Math.abs(Number(dr));
-            if (cr && !isNaN(Number(cr))) totalCredit += Math.abs(Number(cr));
-
-            transactions.push({
-                date: dates[i],
-                particulars: accounts[i] || null,
-                voucherType: types[i] || null,
-                debit: dr,
-                credit: cr
-            });
-        }
-
-        // Parse Balances
-        const ledgerObj = balancesData?.ENVELOPE?.BODY?.DATA?.COLLECTION?.LEDGER || {};
-        
-        let opBal = ledgerObj?.PERIODOPBAL?._ || ledgerObj?.PERIODOPBAL || "0.00";
-        if (typeof opBal === "object") opBal = opBal._ || "0.00";
-        opBal = String(opBal).trim();
-
-        let clBal = ledgerObj?.PERIODCLBAL?._ || ledgerObj?.PERIODCLBAL || "0.00";
-        if (typeof clBal === "object") clBal = clBal._ || "0.00";
-        clBal = String(clBal).trim();
+        const rows = dates.map((date, i) => {
+            const debit = debitOf(debitTags[i]);
+            const credit = creditOf(creditTags[i]);
+            totalDebit += debit;
+            totalCredit += credit;
+            if (running !== null) running += debit - credit;
+            return { date: text(date), particulars: text(accounts[i]) || null, voucherType: text(types[i]) || null, debit, credit, balance: running };
+        });
 
         res.json({
+            report: "Statement of Accounts",
             ledger: ledgerName,
             from,
             to,
-            openingBalance: opBal,
-            closingBalance: clBal,
-            currentTotalDebit: totalDebit.toFixed(2),
-            currentTotalCredit: totalCredit.toFixed(2),
-            count: transactions.length,
-            transactions
+            openingBalance: balance ? balance.opening : null,
+            closingBalance: balance ? balance.closing : null,
+            totalDebit,
+            totalCredit,
+            // Non-zero when Tally's Ledger Vouchers report left out vouchers its balances include.
+            unlisted: balance ? Math.round((balance.closing - running) * 100) / 100 : 0,
+            rows,
         });
     } catch (err) {
-        console.error("LEDGER REPORT ERROR:", err);
-        res.status(500).json({ error: err.message });
+        if (!err.status) console.error("LEDGER REPORT ERROR:", err);
+        res.status(err.status || 500).json({ error: err.message });
     }
 });
+
 
 // ─── GET /reports/ledgers-summary-by-period ────────────────
 router.get("/reports/ledgers-summary-by-period", async (req, res) => {

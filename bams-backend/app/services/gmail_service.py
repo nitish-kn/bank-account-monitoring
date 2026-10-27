@@ -8,6 +8,7 @@ from email.utils import parsedate_to_datetime
 from html import unescape
 import time
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from ..utils.date_utils import ist_day, ist_today
 import requests
@@ -28,22 +29,52 @@ from ..core.constants import (
     TRACKED_EMAIL_DOMAINS,
 )
 from ..models.organization import Organization
-from .credentials import build_credentials, get_token_scopes_from_tokeninfo
+from .credentials import build_credentials, get_token_scopes_from_tokeninfo, GoogleAccessRevokedError
 
 logger = logging.getLogger(__name__)
 
+# Gmail API error reasons that mean "try again later" (rate limit / quota) --
+# not a sign the org's authorization itself is gone, so these must NOT be
+# classified as revoked access.
+_TRANSIENT_403_REASONS = {"ratelimitexceeded", "userratelimitexceeded", "quotaexceeded", "backenderror"}
+
 
 def _auth_headers_for_credentials(creds) -> dict[str, str] | None:
-    """ Given a Google credentials object, return the Authorization header for API requests. 
-    If the credentials are expired and have a refresh token, it will attempt to refresh them. 
+    """ Given a Google credentials object, return the Authorization header for API requests.
+    If the credentials are expired and have a refresh token, it will attempt to refresh them.
     If the credentials are invalid or cannot be refreshed, it returns None.
     This prevents stale-token crashes during longer syncs."""
 
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError as error:
+            raise GoogleAccessRevokedError(str(error)) from error
     if not creds.token:
         return None
     return {"Authorization": f"Bearer {creds.token}"}
+
+
+def _raise_for_gmail_response(response: requests.Response, action: str) -> None:
+    """Raise for a failed Gmail API call, classifying WHY it failed: a 401,
+    or a 403 that isn't one of the known rate-limit reasons, means the org's
+    access itself is the problem (revoked consent, missing scope) -- not
+    something a retry fixes. Any other failure stays a plain RuntimeError so
+    it's retried/logged like before, not mistaken for a lost authorization."""
+    if response.status_code == 401:
+        raise GoogleAccessRevokedError(f"{action}: HTTP 401 {response.text[:300]}")
+
+    if response.status_code == 403:
+        reason = ""
+        try:
+            errors = response.json().get("error", {}).get("errors", [])
+            reason = (errors[0].get("reason") or "").lower() if errors else ""
+        except (ValueError, KeyError, IndexError, AttributeError):
+            pass
+        if reason not in _TRANSIENT_403_REASONS:
+            raise GoogleAccessRevokedError(f"{action}: HTTP 403 {response.text[:300]}")
+
+    raise RuntimeError(f"{action}: HTTP {response.status_code}")
 
 
 
@@ -405,7 +436,7 @@ def iter_org_message_pages(
             timeout=10,
         )
         if response.status_code != 200:
-            raise RuntimeError(f"Failed to fetch Gmail message page: HTTP {response.status_code}")
+            _raise_for_gmail_response(response, "Failed to fetch Gmail message page")
 
         payload = response.json()
         messages = payload.get("messages", [])
@@ -489,7 +520,7 @@ def fetch_gmail_attachment_bytes(org: Organization, message_id: str, attachment_
     url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}/attachments/{attachment_id}"
     response = _request_get_with_backoff(url, headers=headers, timeout=15)
     if response.status_code != 200:
-        raise RuntimeError(f"Failed to fetch attachment from Gmail API: HTTP {response.status_code}")
+        _raise_for_gmail_response(response, "Failed to fetch attachment from Gmail API")
 
     attachment_data = response.json()
     raw_data = attachment_data.get("data", "")

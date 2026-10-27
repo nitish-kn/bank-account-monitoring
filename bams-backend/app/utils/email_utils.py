@@ -28,7 +28,10 @@ def email_internal_datetime(email: dict) -> datetime | None:
         internal_date = email.get("internalDate")
         if not internal_date:
             return None
-        return datetime.fromtimestamp(int(internal_date) / 1000, tz=timezone.utc).replace(tzinfo=None)
+        # Stays timezone-aware -- org.last_synced_email_date (what this is
+        # compared against in _update_latest_synced_email_date) is an aware
+        # timestamptz column; comparing it to a naive value raises TypeError.
+        return datetime.fromtimestamp(int(internal_date) / 1000, tz=timezone.utc)
     except (TypeError, ValueError, OSError, OverflowError):
         return None
 

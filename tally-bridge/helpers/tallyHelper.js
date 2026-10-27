@@ -18,7 +18,7 @@ function parseTallyImportResponse(data) {
 }
 
 // Helper: fetch active company name from Tally
-async function getActiveCompany() {
+async function getActiveCompany(cacheMs = 0) {
     const xml = `
 <ENVELOPE>
   <HEADER><TALLYREQUEST>Export Data</TALLYREQUEST></HEADER>
@@ -35,7 +35,7 @@ async function getActiveCompany() {
   </BODY>
 </ENVELOPE>`;
 
-    const data = await sendToTally(xml);
+    const data = await sendToTally(xml, {}, cacheMs);
     const body = data?.ENVELOPE?.BODY || {};
     let companyName = body?.IMPORTDATA?.REQUESTDESC?.STATICVARIABLES?.SVCURRENTCOMPANY;
     

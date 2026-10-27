@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Logout } from "./Logout";
-import { Landmark, } from "lucide-react";
+import { ChevronDown, Landmark, } from "lucide-react";
 import { formatRelativeSyncTime } from "../lib/helper";
 import { Badge } from "@radix-ui/themes";
 import { NavLinks } from "../assets/navlinks";
@@ -14,6 +14,18 @@ const Sidebar = ({ picture, name, userName, onClose, lastSyncAt }) => {
   const visibleLinks = NavLinks.filter((item) => can(item.permission));
 
   const syncLabel = formatRelativeSyncTime(lastSyncAt, now);
+
+  const renderLink = (item) => (
+    <Link
+      to={item.route}
+      key={item.name}
+      onClick={onClose}
+      className={`${pathname === item.route ? "bg-blue-600/90 text-white" : ""} flex items-center font-medium gap-2 px-4 py-2.5 hover:bg-blue-600/90 hover:text-white transition-all duration-200 rounded-md`}
+    >
+      {item.icon}
+      <span className="text-mid">{item.name}</span>
+    </Link>
+  );
 
 
   useEffect(() => {
@@ -39,18 +51,26 @@ const Sidebar = ({ picture, name, userName, onClose, lastSyncAt }) => {
         </div>
       </div>
 
-      <div className="flex flex-col my-6 gap-1.5 w-full overflow-auto">
-        {visibleLinks.map((item) => (
-          <Link
-            to={item.route}
-            key={item.name}
-            onClick={onClose}
-            className={`${pathname === item.route ? "bg-blue-600/90 text-white" : ""} flex items-center font-medium gap-2 px-4 py-2.5 hover:bg-blue-600/90 hover:text-white transition-all duration-200 rounded-md`}
-          >
-            {item.icon}
-            <span className="text-mid">{item.name}</span>
-          </Link>
-        ))}
+      <div className="flex flex-col my-6 gap-1.5 w-full overflow-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
+        {visibleLinks.map((item) => {
+          const sublinks = item.sublinks?.filter((sub) => can(sub.permission));
+          if (!sublinks) return renderLink(item);
+          if (!sublinks.length) return null;
+
+          const childActive = sublinks.some((sub) => sub.route === pathname);
+          return (
+            <details key={item.name} open={childActive} className="group">
+              <summary className={`${childActive ? "text-blue-700 group-not-open:bg-blue-600/90 group-not-open:text-white" : ""} flex items-center font-medium gap-2 px-4 py-2.5 cursor-pointer list-none hover:bg-blue-600/90 hover:text-white transition-all duration-200 rounded-md`}>
+                {item.icon}
+                <span className="text-mid">{item.name}</span>
+                <ChevronDown className="h-4 w-4 ml-auto transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="flex flex-col gap-1 mt-1 ml-5 pl-1 border-l-2 border-gray-200">
+                {sublinks.map(renderLink)}
+              </div>
+            </details>
+          );
+        })}
       </div>
 
 
